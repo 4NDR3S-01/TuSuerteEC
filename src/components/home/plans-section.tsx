@@ -4,7 +4,7 @@ type PlansSectionProps = {
 
 export function PlansSection({ plans = [] }: Readonly<PlansSectionProps>) {
   return (
-    <section id="planes" className="space-y-8 sm:space-y-10">
+    <section id="planes" className="scroll-mt-header space-y-8 sm:space-y-10">
       <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-end md:justify-between">
         <div className="space-y-2">
           <span className="text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>

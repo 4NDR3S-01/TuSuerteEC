@@ -12,7 +12,7 @@ export function RafflesShowcase({
   description,
 }: Readonly<PrizesShowcaseProps>) {
   return (
-    <section id="sorteos" className="space-y-8 sm:space-y-10">
+    <section id="sorteos" className="scroll-mt-header space-y-8 sm:space-y-10">
       <div className="space-y-2">
         <span className="text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>
           {kicker}

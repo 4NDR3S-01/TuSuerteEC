@@ -2,7 +2,7 @@ export function HeroSection() {
   return (
     <section
       id="inicio"
-      className="relative overflow-hidden rounded-3xl border border-[color:var(--border)] px-4 py-10 sm:px-8 md:px-16"
+      className="scroll-mt-header relative overflow-hidden rounded-3xl border border-[color:var(--border)] px-4 py-10 sm:px-8 md:px-16"
       style={{ background: "var(--hero-gradient)" }}
     >
       <div className="flex flex-col gap-8 md:flex-row md:items-center">
@@ -32,7 +32,7 @@ export function HeroSection() {
               Ver planes
             </a>
             <a
-              href="/login"
+              href="/iniciar-sesion"
               className="rounded-full px-5 py-3 text-sm font-semibold transition-colors sm:px-6 sm:text-base"
               style={{
                 backgroundColor: "rgba(255,255,255,0.12)",
@@ -42,12 +42,12 @@ export function HeroSection() {
               Inicia sesión
             </a>
           </div>
-          <div className="grid grid-cols-2 gap-4 text-sm sm:gap-6 md:grid-cols-4">
+          <div className="grid gap-4 text-sm sm:grid-cols-2 sm:gap-6 md:grid-cols-4">
             {[
               { value: "+120K", label: "Usuarios activos" },
+              { value: "+5K", label: "Premios entregados" },
               { value: "98%", label: "Nivel de satisfacción" },
               { value: "24/7", label: "Soporte humano" },
-              { value: "+$1.2M", label: "Premios entregados" },
             ].map((stat) => (
               <div key={stat.label}>
                 <p className="text-xl font-semibold sm:text-2xl">{stat.value}</p>

@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -17,6 +18,7 @@ export function LoginForm() {
   const [success, setSuccess] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     try {
@@ -37,28 +39,33 @@ export function LoginForm() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!supabase || configError) {
+      setError(configError ?? 'No se pudo conectar con el servicio de autenticación.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setSuccess(false);
 
-    if (!supabase) {
-      setIsLoading(false);
-      return;
-    }
-
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
+    const {
+      data,
+      error: authError,
+    } = await supabase.auth.signInWithPassword({
       email: form.email,
       password: form.password,
     });
 
     if (authError) {
-      setError(authError.message);
+      setError(mapSupabaseError(authError.message));
       setIsLoading(false);
       return;
     }
 
     if (data.session) {
       setSuccess(true);
+      router.replace('/dashboard');
+      router.refresh();
     }
 
     setIsLoading(false);
@@ -114,10 +121,22 @@ export function LoginForm() {
       <button
         type="submit"
         className="mt-2 inline-flex h-12 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-70"
-        disabled={isLoading}
+        disabled={isLoading || !!configError || !supabase}
       >
         {isLoading ? 'Iniciando...' : 'Ingresar'}
       </button>
     </form>
   );
+}
+
+function mapSupabaseError(message: string): string {
+  if (/invalid login credentials/i.test(message)) {
+    return 'Credenciales inválidas. Verifica tu correo y contraseña.';
+  }
+
+  if (/email not confirmed/i.test(message)) {
+    return 'Debes confirmar tu correo electrónico antes de ingresar.';
+  }
+
+  return 'No pudimos iniciar sesión. Intenta nuevamente en unos minutos.';
 }

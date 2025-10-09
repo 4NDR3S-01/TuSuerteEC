@@ -9,7 +9,7 @@ interface WinnersShowcaseProps {
 
 export function WinnersShowcase({ kicker, title, description, items = [] }: WinnersShowcaseProps) {
   return (
-    <section id="ganadores" className="space-y-8 sm:space-y-10">
+    <section id="ganadores" className="scroll-mt-header space-y-8 sm:space-y-10">
       <div className="space-y-2">
         <span className="text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>
           {kicker}

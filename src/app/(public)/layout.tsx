@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "../../components/theme/theme-provider";
+import { AnnouncementBar } from "../../components/home/announcement-bar";
 import "../globals.css";
 
 const geistSans = Geist({
@@ -52,10 +53,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`app-shell ${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AnnouncementBar />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

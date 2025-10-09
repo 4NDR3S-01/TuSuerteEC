@@ -10,6 +10,7 @@
   --border: rgba(16, 24, 40, 0.08);
   --hero-gradient: linear-gradient(135deg, #fff7ed 0%, #f1f5ff 100%);
   --card-gradient: linear-gradient(180deg, rgba(249, 115, 22, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
+  color-scheme: light;
 }
 
 [data-theme="dark"] {
@@ -22,6 +23,7 @@
   --border: rgba(148, 163, 184, 0.2);
   --hero-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   --card-gradient: linear-gradient(180deg, rgba(251, 146, 60, 0.12) 0%, rgba(15, 23, 42, 0.4) 100%);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -31,11 +33,64 @@
   --font-mono: var(--font-geist-mono);
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  font-family: var(--font-geist-sans, "Inter", system-ui, -apple-system, "BlinkMacSystemFont", "Segoe UI", sans-serif);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  color: var(--foreground);
+  background: var(--background);
+  scroll-padding-top: 5.5rem;
+}
+
 body {
+  margin: 0;
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans, "Inter", system-ui, -apple-system, "BlinkMacSystemFont", "Segoe UI", sans-serif);
   transition: background-color 0.3s ease, color 0.3s ease;
+  line-height: 1.6;
+}
+
+.app-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1 0 auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.scroll-mt-header {
+  scroll-margin-top: 6.5rem;
 }
 
 .scrollbar-none {
@@ -49,4 +104,17 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 640px) {
+  html {
+    scroll-padding-top: 4.5rem;
+  }
 }
