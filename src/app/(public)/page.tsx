@@ -1,56 +1,9 @@
 import { HeroSection } from "../../components/home/hero-section";
-import { PendingSection } from "../../components/home/pending-section";
 import { PlansSection } from "../../components/home/plans-section";
+import { RafflesShowcase } from "../../components/home/raffles-showcase";
+import { WinnersShowcase } from "../../components/home/winners-showcase";
 import { SiteHeader } from "../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../config/navigation";
-
-const UPCOMING_PRIZE_SLOTS = [
-  {
-    title: "Premio principal en portada",
-    subtitle: "Actualizado en el panel",
-    status: "Estado: Publicado",
-    description:
-      "Este espacio muestra el premio de mayor impacto. Se completa automáticamente con la información que cargues en el panel (foto, descripción y vigencia).",
-    actionLabel: "Gestiona desde el panel",
-  },
-  {
-    title: "Premios semanales activos",
-    subtitle: "Sincronizado con Supabase",
-    status: "Estado: En curso",
-    description:
-      "Lista dinámica de premios recurrentes. Perfecta para campañas patrocinadas o sorteos con stock limitado. Las fechas y condiciones vienen directo de tu dashboard.",
-    actionLabel: "Gestiona desde el panel",
-  },
-  {
-    title: "Premios relámpago y colaboraciones",
-    subtitle: "Automatizado",
-    status: "Estado: Programado",
-    description:
-      "Se usa para sorteos sorpresa o alianzas con marcas. Al activarlo desde el panel aparecerá aquí con cronómetro y CTA personalizado.",
-    actionLabel: "Gestiona desde el panel",
-  },
-] as const;
-
-const UPCOMING_WINNER_SLOTS = [
-  {
-    title: "Ganador más reciente",
-    status: "Estado: Validado",
-    description:
-      "Cuando cierres un sorteo, este recuadro mostrará automáticamente al ganador con nombre, ciudad, premio y fecha de entrega confirmada.",
-  },
-  {
-    title: "Ganador destacado del mes",
-    status: "Estado: En revisión",
-    description:
-      "Historias con foto, testimonio y enlaces a redes. Ideal para campañas de marca empleadora o patrocinios. Se carga desde el panel con un par de clics.",
-  },
-  {
-    title: "Ganador internacional",
-    status: "Estado: Programado",
-    description:
-      "Demuestra el alcance global de TuSuerte. Cuando apruebes un ganador fuera de tu país, se publicará aquí con bandera y zona horaria.",
-  },
-] as const;
 
 const FAQS = [
   {
@@ -94,22 +47,16 @@ export default function HomePage() {
       <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-16 px-4 pb-20 pt-14 text-base sm:px-6 sm:pb-24 sm:pt-16 md:gap-24 md:px-10">
         <HeroSection />
 
-        <PendingSection
-          id="premios"
-          kicker="Premios estrella"
-          title="Prepara tu vitrina de premios"
-          description="Estos espacios se actualizarán automáticamente cuando cargues nuevos premios en tu panel. Usa descripciones persuasivas, valor percibido y pruebas sociales."
-          badgeNote="Próximamente: sincronización directa con tu panel"
-          items={UPCOMING_PRIZE_SLOTS}
+        <RafflesShowcase
+          kicker="Sorteos disponibles"
+          title="Participa por premios increíbles"
+          description="Explora nuestros sorteos activos y participa para ganar premios emocionantes. Cada sorteo es transparente y seguro, garantizando una experiencia justa para todos los participantes. ¡No pierdas la oportunidad de ser nuestro próximo ganador! Revisa los detalles y participa ahora. ¡Buena suerte!"
         />
         <PlansSection />
-        <PendingSection
-          id="ganadores"
+        <WinnersShowcase
           kicker="Historias reales"
-          title="Ultimos ganadores"
-          description="Podran verificar en tiempo real los ultimos ganadores de los sorteos realizados. Cada ganador cuenta su experiencia y muestra su premio."
-          items={UPCOMING_WINNER_SLOTS}
-          appearance="muted"
+          title="Ganadores confirmados en TuSuerte"
+          description="Cada vez que cierres un sorteo, el panel actualizará este módulo en segundos con los datos oficiales. Los visitantes podrán revisar las historias y validar la transparencia de la plataforma."
         />
 
         <section id="ayuda" className="grid gap-12 md:grid-cols-[1.3fr_1fr]">

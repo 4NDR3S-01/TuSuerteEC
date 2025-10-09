@@ -19,7 +19,7 @@ type SiteHeaderProps = {
   cta?: HeaderCta | null;
 };
 
-export function SiteHeader({ navItems, cta }: SiteHeaderProps) {
+export function SiteHeader({ navItems, cta }: Readonly<SiteHeaderProps>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const finalCta = cta === undefined ? { href: "/iniciar-sesion", label: "Iniciar sesión" } : cta;
 
@@ -86,8 +86,26 @@ export function SiteHeader({ navItems, cta }: SiteHeaderProps) {
       </header>
 
       {isMenuOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/45" onClick={closeMenu} />
+        <dialog
+          open
+          className="fixed inset-0 z-40 md:hidden p-0 bg-transparent"
+          id="mobile-navigation-dialog"
+          aria-modal="true"
+          style={{ border: "none", padding: 0, margin: 0, maxWidth: "none", width: "100vw", height: "100vh" }}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            aria-label="Cerrar menú"
+            tabIndex={0}
+            onClick={closeMenu}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                closeMenu();
+              }
+            }}
+            style={{ cursor: "pointer", border: "none", background: "rgba(0,0,0,0.45)" }}
+          />
           <div
             id="mobile-navigation"
             className="absolute left-4 right-4 top-20 rounded-3xl border border-[color:var(--border)] bg-[color:var(--muted)] p-6 shadow-[0_25px_70px_-35px_rgba(15,23,42,0.55)]"
@@ -114,7 +132,7 @@ export function SiteHeader({ navItems, cta }: SiteHeaderProps) {
               </Link>
             ) : null}
           </div>
-        </div>
+        </dialog>
       ) : null}
     </>
   );

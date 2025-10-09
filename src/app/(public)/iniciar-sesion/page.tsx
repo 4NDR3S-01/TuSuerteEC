@@ -29,9 +29,8 @@ export default function LoginPage() {
             <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-sm text-[color:var(--muted-foreground)]">
               ¿Tienes problemas con tu acceso? Puedes pedir ayuda escribiendo a{" "}
               <a href="mailto:soporte@tusuerte.com" className="font-medium text-[color:var(--accent)]">
-                soporte@tusuerte.com
+                soporte@tusuerte.com.
               </a>
-              .
             </div>
           </div>
           <div className="flex flex-col gap-6 rounded-3xl border border-[color:var(--border)] bg-[color:var(--background)] p-6 shadow-inner">
