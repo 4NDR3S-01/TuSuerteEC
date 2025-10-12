@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 interface AuthPageLayoutProps {
-  badge: string;
-  title: string;
-  description: string;
-  highlights: string[];
-  callout?: ReactNode;
-  children: ReactNode;
-  rightColumnClassName?: string;
+  readonly badge: string;
+  readonly title: string;
+  readonly description: string;
+  readonly highlights: readonly string[];
+  readonly callout?: ReactNode;
+  readonly children: ReactNode;
+  readonly rightColumnClassName?: string;
 }
 
 export function AuthPageLayout({
