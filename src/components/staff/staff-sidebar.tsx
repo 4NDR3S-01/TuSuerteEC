@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { Logo } from '../ui/logo';
 
 type NavItem = {
   href: string;
@@ -66,13 +67,17 @@ export function StaffSidebar() {
       >
         {/* Header */}
         <div className="flex h-16 items-center justify-between border-b border-[color:var(--border)] px-4">
-          {!collapsed && (
-            <Link href="/staff" className="flex items-center gap-3">
+          {!collapsed ? (
+            <div className="flex items-center gap-3">
               <span className="text-2xl">🎰</span>
-              <div>
-                <p className="text-lg font-bold text-[color:var(--foreground)]">TuSuerte</p>
+              <div className="flex flex-col">
+                <Logo href="/staff" size="sm" showText={true} />
                 <p className="text-xs text-[color:var(--muted-foreground)]">Panel Staff</p>
               </div>
+            </div>
+          ) : (
+            <Link href="/staff" className="flex items-center justify-center">
+              <span className="text-2xl">🎰</span>
             </Link>
           )}
           <button

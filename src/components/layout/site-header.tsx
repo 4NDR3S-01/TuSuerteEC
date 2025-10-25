@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "../theme/theme-toggle";
+import { Logo } from "../ui/logo";
 
 type NavItem = {
   href: string;
@@ -97,9 +98,7 @@ export function SiteHeader({ navItems, cta }: Readonly<SiteHeaderProps>) {
           ref={headerRef}
           className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6 lg:px-10"
         >
-          <Link href="/" className="text-lg font-semibold tracking-tight sm:text-xl">
-            TuSuerte
-          </Link>
+          <Logo href="/" size="md" />
           <nav className="hidden items-center gap-6 text-sm font-medium lg:flex">
             {navItems.map((item) => (
               <Link

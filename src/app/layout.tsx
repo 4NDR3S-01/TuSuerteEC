@@ -19,6 +19,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TuSuerte",
   description: "Participa por muchos premios",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

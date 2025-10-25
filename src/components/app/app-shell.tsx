@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../hooks/use-auth';
+import { Logo } from '../ui/logo';
 
 type AppShellProps = {
   readonly children: ReactNode;
@@ -32,10 +32,8 @@ export function AppShell({ children, subtitle }: AppShellProps) {
     <div className="flex min-h-screen flex-col bg-[color:var(--background)] text-[color:var(--foreground)]">
       <header className="border-b border-[color:var(--border)] bg-[color:var(--muted)]/70 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col">
-            <Link href="/dashboard" className="text-lg font-semibold tracking-tight">
-              TuSuerte
-            </Link>
+          <div className="flex flex-col gap-1">
+            <Logo href="/dashboard" size="sm" />
             <span className="text-xs font-medium text-[color:var(--muted-foreground)]">
               {subtitle ?? 'Panel principal'}
             </span>
