@@ -58,16 +58,7 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
   const displayWinners = transformedWinners.length >= 2
     ? [...transformedWinners, ...transformedWinners]
     : transformedWinners;
-
-  // Debug: mostrar datos transformados
-  useEffect(() => {
-    console.log('🎯 Ganadores cargados:', transformedWinners.map(w => ({
-      id: w.id,
-      nombre: w.profiles?.full_name,
-      premio: w.prize_description,
-      foto: w.delivery_photo_url ? 'Sí' : 'No'
-    })));
-  }, [transformedWinners]);
+  
 
   // Calcular el ancho de cada card según pantalla
   useEffect(() => {

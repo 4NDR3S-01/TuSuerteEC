@@ -20,10 +20,13 @@ export default async function HomePage() {
     .eq('is_active', true)
     .order('price', { ascending: true });
 
-  // Obtener sorteos activos
-  const { data: activeRaffles } = await supabase
+  // Obtener sorteos activos (pedimos el count exacto para saber si debemos mostrar CTA de "ver más")
+  const { data: activeRaffles, count: totalRafflesCount } = await supabase
     .from('raffles')
-    .select('id, title, description, prize_description, prize_category, image_url, start_date, end_date, draw_date, status, entry_mode, is_trending')
+    .select(
+      'id, title, description, prize_description, prize_category, image_url, start_date, end_date, draw_date, status, entry_mode, is_trending',
+      { count: 'exact' }
+    )
     .eq('status', 'active')
     .order('is_trending', { ascending: false })
     .order('created_at', { ascending: false })
@@ -112,6 +115,8 @@ export default async function HomePage() {
           title="Participa por premios increíbles"
           description="Explora nuestros sorteos activos y participa para ganar premios emocionantes. Cada sorteo es transparente y seguro, garantizando una experiencia justa para todos los participantes. ¡No pierdas la oportunidad de ser nuestro próximo ganador! Revisa los detalles y participa ahora. ¡Buena suerte!"
           raffles={activeRaffles || []}
+          totalCount={typeof totalRafflesCount === 'number' ? totalRafflesCount : (((activeRaffles as any) || []) as any).length}
+          showLoginCtaIfMore={true}
         />
         
         <PlansSection plans={plans || []} />
