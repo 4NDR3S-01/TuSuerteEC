@@ -29,8 +29,9 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session if expired
-  await supabase.auth.getUser();
+  // IMPORTANTE: No llamar a getUser() aquí para evitar refresh duplicado
+  // El middleware lo llamará cuando sea necesario
+  // await supabase.auth.getUser();
 
   return { supabase, response: supabaseResponse };
 }

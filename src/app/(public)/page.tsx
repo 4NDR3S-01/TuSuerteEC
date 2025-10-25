@@ -1,6 +1,4 @@
 import { HeroSection } from "../../components/home/hero-section";
-import { FaqAccordion } from "../../components/home/faq-accordion";
-// SUPPORT_CHANNELS removed from home to avoid unused import
 import { PlansSection } from "../../components/home/plans-section";
 import { RafflesShowcase } from "../../components/home/raffles-showcase";
 import { RecentWinnersShowcase } from "../../components/home/recent-winners-showcase";

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
+import { getEcuadorianIdError } from '../../lib/validators/ecuador-id';
 
 type RegisterFormState = {
   fullName: string;
@@ -51,6 +52,7 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
   const [locationsError, setLocationsError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [idNumberError, setIdNumberError] = useState<string | null>(null);
   const router = useRouter();
   const { showToast } = useToast();
   const passwordStrength = useMemo(() => evaluatePasswordStrength(form.password), [form.password]);
@@ -153,6 +155,16 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
       if (field === 'idNumber') {
         const sanitized = value.replace(/\D/g, '').slice(0, 10);
         setForm((prev) => ({ ...prev, idNumber: sanitized }));
+        
+        // Validar la cédula en tiempo real solo cuando tenga 10 dígitos
+        if (sanitized.length === 10) {
+          const error = getEcuadorianIdError(sanitized);
+          setIdNumberError(error);
+        } else if (sanitized.length > 0) {
+          setIdNumberError('La cédula debe tener 10 dígitos.');
+        } else {
+          setIdNumberError(null);
+        }
         return;
       }
 
@@ -179,6 +191,12 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
     if (form.idNumber.length !== 10) {
       return 'La cédula o identificación debe tener 10 dígitos.';
+    }
+
+    // Validar cédula ecuatoriana
+    const idError = getEcuadorianIdError(form.idNumber);
+    if (idError) {
+      return idError;
     }
 
     if (form.phone.length < 9) {
@@ -483,8 +501,24 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
             value={form.idNumber}
             onChange={handleInputChange('idNumber')}
             placeholder="Ingresa 10 dígitos"
-            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
+            className={`w-full rounded-xl border ${
+              idNumberError && form.idNumber.length === 10
+                ? 'border-red-500 focus:border-red-500 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
+                : 'border-[color:var(--border)] focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]'
+            } bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow`}
           />
+          {idNumberError && form.idNumber.length > 0 && (
+            <p className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1">
+              <span>⚠️</span>
+              <span>{idNumberError}</span>
+            </p>
+          )}
+          {!idNumberError && form.idNumber.length === 10 && (
+            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <span>✓</span>
+              <span>Cédula válida</span>
+            </p>
+          )}
         </div>
 
         <div className="min-w-0 space-y-3 sm:col-span-1 md:col-span-1 lg:col-span-6">
