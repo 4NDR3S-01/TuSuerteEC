@@ -5,7 +5,18 @@ import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    redirectTo?: string;
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const redirectTo =
+    typeof params?.redirectTo === "string" && params.redirectTo.startsWith("/")
+      ? params.redirectTo
+      : undefined;
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <SiteHeader
@@ -44,7 +55,7 @@ export default function LoginPage() {
               </p>
             </div>
             <div className="mt-6">
-              <LoginForm />
+              <LoginForm redirectTo={redirectTo} />
             </div>
             <div className="mt-6 space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-xs text-[color:var(--muted-foreground)] sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
               <p>

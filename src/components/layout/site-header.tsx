@@ -97,7 +97,7 @@ export function SiteHeader({ navItems, cta }: Readonly<SiteHeaderProps>) {
           ref={headerRef}
           className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-6 lg:px-10"
         >
-          <Link href="/#inicio" className="text-lg font-semibold tracking-tight sm:text-xl">
+          <Link href="/" className="text-lg font-semibold tracking-tight sm:text-xl">
             TuSuerte
           </Link>
           <nav className="hidden items-center gap-6 text-sm font-medium lg:flex">

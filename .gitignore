@@ -33,9 +33,20 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# credentials (NEVER commit)
+CREDENCIALES-*.md
+**/credentials/**
+**/secrets/**
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#vscode
+.vscode/
+
+Archivos .md    
+*.md

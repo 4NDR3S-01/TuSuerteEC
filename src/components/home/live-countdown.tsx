@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { LIVE_EVENT, getCountdownBounds } from "../../config/live-event";
+type LiveEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  start_at: string;
+  stream_url: string | null;
+  status: string;
+  countdown_start_at: string | null;
+};
 
 type CountdownState = {
   remainingMs: number;
@@ -35,8 +43,12 @@ function formatDuration(ms: number) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
-function calculateCountdown(): CountdownState {
-  const { countdownStartTimestamp, startTimestamp } = getCountdownBounds(LIVE_EVENT);
+function calculateCountdown(event: LiveEvent): CountdownState {
+  const startTimestamp = new Date(event.start_at).getTime();
+  const countdownStartTimestamp = event.countdown_start_at 
+    ? new Date(event.countdown_start_at).getTime()
+    : startTimestamp - MS_IN_DAY; // 24 horas antes por defecto
+    
   const now = Date.now();
 
   const totalWindow = Math.max(startTimestamp - countdownStartTimestamp, 1);
@@ -53,26 +65,27 @@ function calculateCountdown(): CountdownState {
 }
 
 type LiveCountdownProps = {
+  readonly event: LiveEvent;
   readonly variant?: "default" | "compact";
 };
 
-export function LiveCountdown({ variant = "default" }: LiveCountdownProps) {
+export function LiveCountdown({ event, variant = "default" }: LiveCountdownProps) {
   const [state, setState] = useState<CountdownState | null>(null);
 
   useEffect(() => {
-    const update = () => setState(calculateCountdown());
+    const update = () => setState(calculateCountdown(event));
     update();
 
     const interval = setInterval(update, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [event]);
 
   const formattedRemaining = useMemo(
     () => (state ? formatDuration(state.remainingMs) : "—"),
     [state?.remainingMs],
   );
-  const startsAt = useMemo(() => new Date(LIVE_EVENT.startAt), []);
+  const startsAt = useMemo(() => new Date(event.start_at), [event.start_at]);
   const formattedStartDate = useMemo(
     () =>
       new Intl.DateTimeFormat("es-EC", {
@@ -113,8 +126,8 @@ export function LiveCountdown({ variant = "default" }: LiveCountdownProps) {
             {isLive ? "EN VIVO" : "PRÓXIMA TRANSMISIÓN"}
           </span>
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold sm:text-2xl">{LIVE_EVENT.title}</h2>
-            <p className="text-sm text-[color:var(--muted-foreground)]">{LIVE_EVENT.description}</p>
+            <h2 className="text-xl font-semibold sm:text-2xl">{event.title}</h2>
+            <p className="text-sm text-[color:var(--muted-foreground)]">{event.description || 'Conéctate para conocer más detalles'}</p>
             <p className="text-xs font-medium uppercase tracking-[0.25em] text-[color:var(--muted-foreground)] sm:text-sm">
               {isLive ? "Comenzó hace instantes" : `Inicio: ${formattedStartDate}`}
             </p>
@@ -128,9 +141,9 @@ export function LiveCountdown({ variant = "default" }: LiveCountdownProps) {
             </span>
             <span className="text-base font-mono">{isLive ? "00:00:00" : formattedRemaining}</span>
           </div>
-          {LIVE_EVENT.streamUrl ? (
+          {event.stream_url ? (
             <a
-              href={LIVE_EVENT.streamUrl}
+              href={event.stream_url}
               className="inline-flex items-center justify-center rounded-full bg-[color:var(--accent)] px-5 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
               target="_blank"
               rel="noreferrer"

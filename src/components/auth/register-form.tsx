@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
+import { useToast } from '../../hooks/use-toast';
 
 type RegisterFormState = {
   fullName: string;
@@ -42,14 +43,17 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
   });
   const [step, setStep] = useState<'form' | 'review' | 'completed'>('form');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [cities, setCities] = useState<CityOption[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [locationsError, setLocationsError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
+  const { showToast } = useToast();
+  const passwordStrength = useMemo(() => evaluatePasswordStrength(form.password), [form.password]);
 
   const PHONE_PREFIX = '+593';
   const baseContainerClass =
@@ -64,8 +68,12 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
       const msg =
         clientError instanceof Error ? clientError.message : 'No se pudo inicializar Supabase.';
       setConfigError(msg);
+      showToast({
+        type: 'error',
+        description: msg,
+      });
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (!supabase) {
@@ -206,12 +214,14 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
     const validationError = validateForm();
     if (validationError) {
-      setError(validationError);
+      showToast({
+        type: 'error',
+        description: validationError,
+      });
       setStep('form');
       return;
     }
 
-    setError(null);
     setMessage(null);
     setStep('review');
   };
@@ -221,24 +231,77 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
     const validationError = validateForm();
     if (validationError) {
-      setError(validationError);
+      showToast({
+        type: 'error',
+        description: validationError,
+      });
       setStep('form');
       return;
     }
 
     if (!supabase) {
-      setError('Servicio de autenticación no disponible.');
+      showToast({
+        type: 'error',
+        description: 'Servicio de autenticación no disponible.',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage(null);
+
+    // VALIDACIÓN 1: Verificar si el email ya existe
+    const { data: emailExists, error: emailCheckError } = await supabase
+      .rpc('check_email_exists', { user_email: form.email.toLowerCase().trim() });
+
+    if (emailCheckError) {
+      console.error('Error checking email:', emailCheckError);
+      showToast({
+        type: 'error',
+        description: 'Error al verificar el correo. Intenta de nuevo.',
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (emailExists) {
+      showToast({
+        type: 'error',
+        description: 'Este correo electrónico ya está registrado. Si ya tienes una cuenta, inicia sesión.',
+      });
+      setIsLoading(false);
+      setStep('form');
+      return;
+    }
+
+    // VALIDACIÓN 2: Verificar si la cédula ya existe
+    const { data: cedulaExists, error: cedulaCheckError } = await supabase
+      .rpc('check_id_number_exists', { id_num: form.idNumber });
+
+    if (cedulaCheckError) {
+      console.error('Error checking id_number:', cedulaCheckError);
+      showToast({
+        type: 'error',
+        description: 'Error al verificar la cédula. Intenta de nuevo.',
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (cedulaExists) {
+      showToast({
+        type: 'error',
+        description: 'Esta cédula ya está registrada en el sistema. Si ya tienes una cuenta, inicia sesión.',
+      });
+      setIsLoading(false);
+      setStep('form');
       return;
     }
 
     const city = selectedCity;
     const parish = city?.parishes.find((p) => p.id.toString() === form.parishId);
 
-    setIsLoading(true);
-    setError(null);
-    setMessage(null);
-
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
@@ -259,12 +322,28 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
     });
 
     if (signUpError) {
-      setError(mapSignUpError(signUpError.message));
+      console.error('SignUp error:', signUpError);
+      showToast({
+        type: 'error',
+        description: mapSignUpError(signUpError.message),
+      });
       setIsLoading(false);
+      setStep('form');
       return;
     }
 
-    setMessage('¡Registro exitoso! Revisa tu correo para confirmar la cuenta.');
+    // El perfil se creará automáticamente cuando el usuario confirme su email
+    // Esto evita conflictos de cédula duplicada durante el registro
+    if (signUpData.user) {
+      console.info('Usuario registrado exitosamente. El perfil se creará al confirmar el email.');
+      
+      setMessage(
+        signUpData.session 
+          ? '¡Registro exitoso! Tu cuenta está lista.' 
+          : '¡Registro exitoso! Revisa tu correo para confirmar tu cuenta y activarla.'
+      );
+    }
+
     setIsLoading(false);
     setStep('completed');
 
@@ -323,24 +402,12 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
             ⚠️ Ten en cuenta que con estos datos nos pondremos en contacto contigo en caso de ser un ganador.
           </p>
 
-          {error ? (
-            <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-300">
-              {error}
-            </p>
-          ) : null}
-          {configError ? (
-            <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200">
-              {configError}
-            </p>
-          ) : null}
-
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               className="inline-flex h-11 w-full items-center justify-center rounded-full border border-[color:var(--border)] px-6 text-sm font-semibold text-[color:var(--foreground)] transition-transform hover:-translate-y-0.5 sm:w-auto"
               onClick={() => {
                 setStep('form');
-                setError(null);
               }}
               disabled={isLoading}
             >
@@ -467,7 +534,7 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
             <p className="text-xs text-[color:var(--muted-foreground)]">Cargando ciudades...</p>
           ) : null}
           {locationsError ? (
-            <p className="text-xs text-red-400">{locationsError}</p>
+            <p className="text-xs text-red-600 dark:text-red-400">{locationsError}</p>
           ) : null}
         </div>
 
@@ -528,46 +595,72 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
           <label htmlFor="register-password" className="block text-sm font-semibold text-[color:var(--foreground)]">
             Contraseña
           </label>
-          <input
-            id="register-password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={form.password}
-            onChange={handleInputChange('password')}
-            placeholder="••••••••"
-            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
-          />
+          <div className="relative">
+            <input
+              id="register-password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              required
+              value={form.password}
+              onChange={handleInputChange('password')}
+              placeholder="••••••••"
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 pr-12 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-3 inline-flex items-center justify-center rounded-full p-1.5 text-lg text-[color:var(--muted-foreground)] transition-colors hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              <span aria-hidden="true">{showPassword ? '🙈' : '👁️'}</span>
+            </button>
+          </div>
+          {form.password ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span>Seguridad de la contraseña</span>
+                <span style={{ color: passwordStrength.color }}>{passwordStrength.label}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-[color:var(--muted)]">
+                <div
+                  className="h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${passwordStrength.score * 25}%`,
+                    backgroundColor: passwordStrength.color,
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="min-w-0 space-y-2 sm:col-span-1 md:col-span-1 lg:col-span-6">
           <label htmlFor="register-confirm-password" className="block text-sm font-semibold text-[color:var(--foreground)]">
             Confirmar contraseña
           </label>
-          <input
-            id="register-confirm-password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={form.confirmPassword}
-            onChange={handleInputChange('confirmPassword')}
-            placeholder="••••••••"
-            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
-          />
+          <div className="relative">
+            <input
+              id="register-confirm-password"
+              type={showConfirmPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              required
+              value={form.confirmPassword}
+              onChange={handleInputChange('confirmPassword')}
+              placeholder="••••••••"
+              className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 pr-12 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-3 inline-flex items-center justify-center rounded-full p-1.5 text-lg text-[color:var(--muted-foreground)] transition-colors hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
+              aria-label={showConfirmPassword ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
+            >
+              <span aria-hidden="true">{showConfirmPassword ? '🙈' : '👁️'}</span>
+            </button>
+          </div>
         </div>
-
-        {error ? (
-          <p className="sm:col-span-2 md:col-span-2 lg:col-span-12 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-300">
-            {error}
-          </p>
-        ) : null}
         {locationsError && !cities.length ? (
-          <p className="sm:col-span-2 md:col-span-2 lg:col-span-12 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200">
+          <p className="sm:col-span-2 md:col-span-2 lg:col-span-12 rounded-xl border border-amber-500/40 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/60 dark:text-amber-200">
             {locationsError}
-          </p>
-        ) : null}
-        {configError ? (
-          <p className="sm:col-span-2 md:col-span-2 lg:col-span-12 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200">
-            {configError}
           </p>
         ) : null}
 
@@ -585,6 +678,41 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
   );
 }
 
+type PasswordStrength = {
+  score: number;
+  label: string;
+  color: string;
+};
+
+function evaluatePasswordStrength(password: string): PasswordStrength {
+  if (!password) {
+    return {
+      score: 0,
+      label: 'Muy débil',
+      color: '#ef4444',
+    };
+  }
+
+  let score = 0;
+
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  score = Math.min(score, 4);
+
+  const labels = ['Muy débil', 'Débil', 'Intermedia', 'Fuerte', 'Muy fuerte'];
+  const colors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#0ea5e9'];
+
+  return {
+    score,
+    label: labels[score],
+    color: colors[score],
+  };
+}
+
 function mapSignUpError(message: string): string {
   if (/email rate limit/i.test(message) || /too many requests/i.test(message)) {
     return 'Demasiados intentos. Espera unos minutos e inténtalo nuevamente.';
@@ -596,6 +724,18 @@ function mapSignUpError(message: string): string {
 
   if (/user already registered/i.test(message)) {
     return 'Ya existe una cuenta con este correo.';
+  }
+
+  if (/duplicate key value violates unique constraint.*profiles_id_number_key/i.test(message)) {
+    return 'Esta cédula ya está registrada. Si ya tienes una cuenta, inicia sesión.';
+  }
+
+  if (/duplicate key/i.test(message) || /already exists/i.test(message)) {
+    return 'Este usuario ya está registrado. Verifica tu cédula o correo electrónico.';
+  }
+
+  if (/Database error/i.test(message)) {
+    return 'Error al crear el perfil. Por favor, verifica que tu cédula no esté ya registrada.';
   }
 
   return 'No pudimos crear tu cuenta. Intenta nuevamente en unos minutos.';

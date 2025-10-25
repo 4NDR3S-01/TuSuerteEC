@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { AppShell } from "../../../components/app/app-shell";
 
 type DashboardLayoutProps = {
   children: ReactNode;
 };
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  return <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">{children}</div>;
+  return <AppShell>{children}</AppShell>;
 }
