@@ -47,7 +47,7 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
   // Fetch user's entries for this raffle
   const { data: userEntries, error: entriesError } = await supabase
     .from('raffle_entries')
-    .select('id, status, ticket_number, created_at')
+    .select('id, ticket_number, is_winner, entry_source, created_at')
     .eq('raffle_id', id)
     .eq('user_id', user.id);
 

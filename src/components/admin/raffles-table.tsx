@@ -131,6 +131,29 @@ export function RafflesTable({ initialRaffles, totalCount }: RafflesTableProps) 
     setIsLoading(true);
     const supabase = getSupabaseBrowserClient();
 
+    const originalStart = new Date(raffle.start_date);
+    const now = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const oneHourMs = 60 * 60 * 1000;
+
+    const safeDiff = (target: string) => {
+      const targetDate = new Date(target);
+      if (Number.isNaN(targetDate.getTime()) || Number.isNaN(originalStart.getTime())) {
+        return null;
+      }
+      return Math.max(targetDate.getTime() - originalStart.getTime(), 0);
+    };
+
+    const endOffset = safeDiff(raffle.end_date) ?? oneDayMs;
+    let drawOffset = safeDiff(raffle.draw_date) ?? (endOffset + oneHourMs);
+    if (drawOffset <= endOffset) {
+      drawOffset = endOffset + oneHourMs;
+    }
+
+    const startDateIso = now.toISOString();
+    const endDateIso = new Date(now.getTime() + endOffset).toISOString();
+    const drawDateIso = new Date(now.getTime() + drawOffset).toISOString();
+
     const { error } = await supabase
       .from('raffles')
       .insert({
@@ -139,9 +162,9 @@ export function RafflesTable({ initialRaffles, totalCount }: RafflesTableProps) 
         prize_description: raffle.prize_description,
         prize_category: raffle.prize_category || 'other',
         image_url: raffle.image_url,
-        start_date: new Date().toISOString(),
-        end_date: raffle.end_date,
-        draw_date: raffle.draw_date,
+        start_date: startDateIso,
+        end_date: endDateIso,
+        draw_date: drawDateIso,
         status: 'draft',
         entry_mode: raffle.entry_mode,
         total_winners: raffle.total_winners,

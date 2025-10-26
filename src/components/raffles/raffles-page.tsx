@@ -19,6 +19,16 @@ type RafflesPageProps = {
   readonly raffles: Raffle[];
 };
 
+// Helper para traducir el modo de entrada
+const getEntryModeLabel = (mode: string): string => {
+  const labels: Record<string, string> = {
+    'subscribers_only': 'Solo Suscriptores',
+    'tickets_only': 'Solo Boletos',
+    'hybrid': 'Híbrido'
+  };
+  return labels[mode] || mode;
+};
+
 export function RafflesPage({ raffles }: RafflesPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'upcoming' | 'ending-soon'>('all');
@@ -169,13 +179,13 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-[color:var(--muted-foreground)]">Modo</div>
-                        <div className="font-bold text-[color:var(--foreground)] text-xs">{raffle.entry_mode}</div>
+                        <div className="font-bold text-[color:var(--foreground)] text-xs">{getEntryModeLabel(raffle.entry_mode)}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-[color:var(--muted-foreground)]">
                       <span>📅 {drawDate.toLocaleDateString('es-EC')}</span>
-                      <span>� {raffle.max_entries_per_user || '∞'} por usuario</span>
+                      <span>🎟️ {raffle.max_entries_per_user || '∞'} por usuario</span>
                     </div>
                   </div>
                 </Link>
