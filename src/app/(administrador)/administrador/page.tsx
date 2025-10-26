@@ -11,6 +11,7 @@ export default async function AdminHomePage() {
   
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const now = new Date().toISOString();
 
   // Obtener métricas del dashboard
   const [
@@ -27,7 +28,7 @@ export default async function AdminHomePage() {
   ] = await Promise.all([
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo.toISOString()),
-    supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active').gt('current_period_end', now),
     supabase.from('raffles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('raffles').select('*', { count: 'exact', head: true }),
     supabase.from('winners').select('*', { count: 'exact', head: true }).eq('status', 'pending_contact'),

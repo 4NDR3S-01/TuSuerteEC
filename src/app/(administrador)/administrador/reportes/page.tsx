@@ -61,6 +61,7 @@ export default async function AdminReportsPage() {
 
   const now = new Date();
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const nowISO = new Date().toISOString();
 
   const [
     rafflesCountResponse,
@@ -73,7 +74,7 @@ export default async function AdminReportsPage() {
     supabase.from('raffles').select('*', { count: 'exact', head: true }),
     supabase.from('raffle_entries').select('*', { count: 'exact', head: true }),
     supabase.from('winners').select('*', { count: 'exact', head: true }),
-    supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active').gt('current_period_end', nowISO),
     supabase
       .from('raffle_entries')
       .select(

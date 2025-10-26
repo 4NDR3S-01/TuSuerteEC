@@ -37,7 +37,7 @@ export function CompleteProfileForm({ user }: CompleteProfileFormProps) {
       });
 
       if (result.success) {
-        router.push('/dashboard');
+        router.push('/app');
       } else {
         setError(result.error || 'Error al crear el perfil');
       }

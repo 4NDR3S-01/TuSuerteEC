@@ -54,17 +54,17 @@ export async function middleware(request: NextRequest) {
     
     if (pathname.startsWith('/administrador')) {
       if (userRole !== 'admin') {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/app', request.url));
       }
     }
     
     if (pathname.startsWith('/staff')) {
       if (!['admin', 'staff'].includes(userRole)) {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/app', request.url));
       }
     }
     
-    if (pathname.startsWith('/dashboard')) {
+    if (pathname.startsWith('/app')) {
       if (!['admin', 'staff', 'participant'].includes(userRole)) {
         return NextResponse.redirect(new URL('/iniciar-sesion', request.url));
       }

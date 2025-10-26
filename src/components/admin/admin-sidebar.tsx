@@ -178,7 +178,7 @@ export function AdminSidebar() {
           {/* Footer */}
           <div className="mt-auto space-y-3 border-t border-[color:var(--border)] pt-4">
             <Link
-              href="/dashboard"
+              href="/app"
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--muted)]/40 hover:text-[color:var(--foreground)]"
             >
               <span className="text-xl">🏠</span>

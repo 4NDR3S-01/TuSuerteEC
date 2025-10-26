@@ -243,7 +243,7 @@ export function AdminHeader() {
                     </li>
                     <li>
                       <Link
-                        href="/dashboard"
+                        href="/administrador/mi-cuenta"
                         className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[color:var(--muted)]/40"
                         onClick={() => setShowUserMenu(false)}
                       >

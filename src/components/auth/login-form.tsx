@@ -204,7 +204,7 @@ export function LoginForm({ redirectTo }: LoginFormProps = {}) {
       }
 
       if (!destination) {
-        destination = '/dashboard';
+        destination = '/app';
       }
 
       globalThis.location.href = destination;

@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 interface Subscription {
   id: string;
   status: string;
@@ -7,6 +9,7 @@ interface Subscription {
   plans?: {
     name: string;
     price: number;
+    interval?: string;
   };
 }
 
@@ -17,59 +20,165 @@ interface SubscriptionCardProps {
 export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
   if (!subscriptions || subscriptions.length === 0) {
     return (
-      <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[color:var(--foreground)]">Mis Suscripciones</h2>
-          <span className="text-2xl">💳</span>
-        </div>
-        <div className="text-center py-8">
-          <div className="text-5xl mb-3">📦</div>
-          <p className="text-[color:var(--muted-foreground)] text-sm">No tienes suscripciones activas</p>
-          <button className="mt-4 px-4 py-2 bg-[color:var(--accent)] text-[color:var(--accent-foreground)] rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-            Ver Planes
-          </button>
+      <div className="group relative bg-[color:var(--card)] border-2 border-dashed border-[color:var(--border)] rounded-2xl p-8 hover:border-[color:var(--accent)]/50 transition-all duration-300 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
+              <span className="text-2xl">💳</span>
+              <span>Mis Suscripciones</span>
+            </h2>
+            <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">
+              0 Activas
+            </span>
+          </div>
+          
+          <div className="text-center py-8">
+            <div className="relative inline-block mb-4">
+              <div className="text-6xl animate-bounce">📦</div>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-[color:var(--accent)] rounded-full flex items-center justify-center text-white text-xs font-bold">
+                !
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-2">
+              Sin Suscripciones Activas
+            </h3>
+            <p className="text-[color:var(--muted-foreground)] text-sm mb-6 max-w-xs mx-auto">
+              Suscríbete a un plan y participa automáticamente en todos los sorteos
+            </p>
+            <Link 
+              href="/app/planes"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
+            >
+              <span>⭐</span>
+              <span>Explorar Planes</span>
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
+  const activeSub = subscriptions[0];
+  const daysUntilRenewal = Math.ceil((new Date(activeSub.current_period_end).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  const isExpiringSoon = daysUntilRenewal <= 7;
+
   return (
-    <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-[color:var(--foreground)]">Mis Suscripciones</h2>
-        <span className="text-2xl">💳</span>
+    <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
+          <span className="text-2xl">💳</span>
+          <span>Mis Suscripciones</span>
+        </h2>
+        <span className="px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-semibold rounded-full flex items-center gap-1">
+          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          {subscriptions.length} Activa{subscriptions.length > 1 ? 's' : ''}
+        </span>
       </div>
+
       <div className="space-y-4">
-        {subscriptions.map((sub) => (
-          <div
-            key={sub.id}
-            className="flex items-center justify-between p-4 bg-[color:var(--muted)] rounded-lg border border-[color:var(--border)] hover:border-[color:var(--accent)] transition-colors"
-          >
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-medium text-[color:var(--foreground)]">
-                  {sub.plans?.name || 'Plan Desconocido'}
-                </h3>
-                <span className="px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium rounded-full">
-                  Activa
-                </span>
+        {subscriptions.map((sub) => {
+          const renewalDate = new Date(sub.current_period_end);
+          const daysLeft = Math.ceil((renewalDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          const isExpiring = daysLeft <= 7;
+
+          return (
+            <div
+              key={sub.id}
+              className="relative group overflow-hidden rounded-xl border-2 border-[color:var(--border)] hover:border-[color:var(--accent)] transition-all duration-300"
+            >
+              {/* Gradiente de fondo */}
+              <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              
+              <div className="relative p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-bold text-[color:var(--foreground)] text-lg">
+                        {sub.plans?.name || 'Plan Desconocido'}
+                      </h3>
+                      {isExpiring && (
+                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-full animate-pulse">
+                          ⚠️ Próximo a renovar
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Información de renovación */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                        <span>📅</span>
+                        <span>Renueva: {renewalDate.toLocaleDateString('es-EC', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric'
+                        })}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <span>⏱️</span>
+                        <span className={isExpiring ? 'text-amber-600 dark:text-amber-400' : 'text-[color:var(--muted-foreground)]'}>
+                          {daysLeft} días restantes
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Precio */}
+                  {Boolean(sub.plans?.price) && (
+                    <div className="text-right ml-4">
+                      <p className="text-2xl font-black bg-gradient-to-br from-[color:var(--accent)] to-orange-500 bg-clip-text text-transparent">
+                        ${sub.plans.price}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted-foreground)] font-medium">
+                        /{sub.plans.interval || 'mes'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Barra de progreso del período */}
+                <div className="mt-4 pt-4 border-t border-[color:var(--border)]">
+                  <div className="flex items-center justify-between text-xs text-[color:var(--muted-foreground)] mb-2">
+                    <span>Progreso del período</span>
+                    <span className="font-semibold">{Math.max(0, Math.min(100, Math.round(((30 - daysLeft) / 30) * 100)))}%</span>
+                  </div>
+                  <div className="h-2 bg-[color:var(--muted)] rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isExpiring 
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
+                          : 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500'
+                      }`}
+                      style={{ width: `${Math.max(0, Math.min(100, ((30 - daysLeft) / 30) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Beneficios destacados */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
+                    ✅ Participación automática
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
+                    🎁 Todos los sorteos
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Renueva el: {new Date(sub.current_period_end).toLocaleDateString('es-EC', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}
-              </p>
             </div>
-            {Boolean(sub.plans?.price) && (
-              <div className="text-right">
-                <p className="text-lg font-bold text-[color:var(--accent)]">${sub.plans.price}</p>
-                <p className="text-xs text-[color:var(--muted-foreground)]">/mes</p>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* CTA para gestionar suscripción */}
+      <div className="mt-6 pt-6 border-t border-[color:var(--border)]">
+        <Link
+          href="/settings/subscriptions"
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[color:var(--muted)] hover:bg-[color:var(--accent)]/10 text-[color:var(--foreground)] font-medium text-sm rounded-lg transition-all duration-300 hover:shadow-md"
+        >
+          <span>⚙️</span>
+          <span>Gestionar Suscripciones</span>
+        </Link>
       </div>
     </div>
   );

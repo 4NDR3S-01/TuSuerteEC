@@ -27,6 +27,6 @@ export function canAccessDashboard(userRole: string | null): boolean {
 export function getRedirectPath(userRole: string | null): string {
   if (hasRole(userRole, 'admin')) return '/administrador';
   if (hasRole(userRole, 'staff')) return '/staff';
-  if (hasRole(userRole, 'participant')) return '/dashboard';
+  if (hasRole(userRole, 'participant')) return '/app';
   return '/iniciar-sesion';
 }

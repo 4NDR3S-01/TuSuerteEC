@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
 
 interface QuickAction {
   readonly title: string;
@@ -9,73 +8,119 @@ interface QuickAction {
   readonly icon: string;
   readonly href: string;
   readonly color: string;
+  readonly badge?: string;
+  readonly isNew?: boolean;
 }
 
-const QUICK_ACTIONS: QuickAction[] = [
+interface QuickActionsGridProps {
+  readonly activeRafflesCount?: number;
+}
+
+const getQuickActions = (activeRafflesCount?: number): QuickAction[] => [
   {
     title: 'Ver Sorteos',
     description: 'Explora sorteos activos',
     icon: '🎁',
-    href: '/sorteos',
-    color: 'from-blue-500 to-cyan-500'
+    href: '/app/sorteos',
+    color: 'from-blue-500 to-cyan-500',
+    badge: activeRafflesCount && activeRafflesCount > 0 ? String(activeRafflesCount) : undefined,
   },
   {
     title: 'Mis Boletos',
     description: 'Revisa tus participaciones',
     icon: '🎫',
-    href: '/dashboard/boletos',
-    color: 'from-purple-500 to-pink-500'
+    href: '/app/boletos',
+    color: 'from-purple-500 to-pink-500',
   },
   {
     title: 'Suscribirme',
     description: 'Ver planes disponibles',
     icon: '⭐',
-    href: '/planes',
-    color: 'from-orange-500 to-red-500'
+    href: '/app/planes',
+    color: 'from-orange-500 to-red-500',
+    isNew: true,
   },
   {
     title: 'Mi Perfil',
     description: 'Actualizar información',
     icon: '👤',
-    href: '/settings',
-    color: 'from-green-500 to-emerald-500'
+    href: '/app/settings',
+    color: 'from-green-500 to-emerald-500',
   },
 ];
 
-export function QuickActionsGrid() {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-
+export function QuickActionsGrid({ activeRafflesCount }: QuickActionsGridProps = {}) {
+  const quickActions = getQuickActions(activeRafflesCount);
+  
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {QUICK_ACTIONS.map((action, index) => (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {quickActions.map((action) => (
         <Link
           key={action.title}
           href={action.href}
-          onMouseEnter={() => setHoveredIndex(index)}
-          onMouseLeave={() => setHoveredIndex(null)}
-          className="group relative overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 transition-all hover:shadow-lg hover:-translate-y-1"
+          className="group relative bg-[color:var(--card)] border-2 border-[color:var(--border)] rounded-2xl p-4 sm:p-5 lg:p-6 hover:shadow-2xl hover:-translate-y-1 sm:hover:-translate-y-2 transition-all duration-300 overflow-visible min-h-[140px] sm:min-h-[160px]"
         >
-          <div className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+          {/* Fondo animado con gradiente */}
+          <div className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300 rounded-2xl`} />
           
-          <div className="relative z-10">
-            <div className="text-4xl mb-3 transform transition-transform group-hover:scale-110">
-              {action.icon}
-            </div>
-            <h3 className="font-semibold text-[color:var(--foreground)] mb-1 text-sm lg:text-base">
-              {action.title}
-            </h3>
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              {action.description}
-            </p>
+          {/* Efecto de brillo en hover */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 rounded-2xl" />
+
+          {/* Badges superiores - Con posicionamiento correcto */}
+          <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-2 z-20 pointer-events-none">
+            <div className="flex-1" />
+            
+            {/* Badge "Nuevo" si aplica */}
+            {action.isNew && (
+              <span className="px-2 py-0.5 bg-red-500 text-white text-[9px] sm:text-[10px] font-black rounded-full animate-pulse shadow-lg whitespace-nowrap">
+                NUEVO
+              </span>
+            )}
+            
+            {/* Badge con contador si aplica */}
+            {action.badge && (
+              <span className="flex items-center justify-center min-w-5 h-5 sm:min-w-6 sm:h-6 px-1 sm:px-1.5 bg-[color:var(--accent)] text-white text-[10px] sm:text-xs font-black rounded-full shadow-lg animate-bounce">
+                {action.badge}
+              </span>
+            )}
           </div>
-          
-          {hoveredIndex === index && (
-            <div className="absolute bottom-2 right-2 text-[color:var(--accent)]">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
+
+          {/* Contenedor del icono con animación - Con margin-top para evitar overlap */}
+          <div className="relative z-10 mt-6 sm:mt-4">
+            <div className={`relative w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 bg-gradient-to-br ${action.color} rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-lg`}>
+              <span className="text-2xl sm:text-3xl lg:text-4xl group-hover:scale-110 transition-transform duration-300">
+                {action.icon}
+              </span>
+              
+              {/* Anillo de resplandor */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${action.color} rounded-xl sm:rounded-2xl blur-md opacity-0 group-hover:opacity-60 transition-opacity duration-300 -z-10`} />
             </div>
-          )}
+
+            {/* Título y descripción */}
+            <div className="relative">
+              <h3 className="font-bold text-[color:var(--foreground)] mb-1 sm:mb-1.5 text-xs sm:text-sm lg:text-base group-hover:text-[color:var(--accent)] transition-colors duration-200 line-clamp-1">
+                {action.title}
+              </h3>
+              <p className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] group-hover:text-[color:var(--foreground)] transition-colors duration-200 line-clamp-2">
+                {action.description}
+              </p>
+
+              {/* Indicador de acción */}
+              <div className="mt-2 sm:mt-3 flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold text-[color:var(--accent)] opacity-0 group-hover:opacity-100 transition-all duration-200">
+                <span className="hidden sm:inline">Ir ahora</span>
+                <span className="sm:hidden">Ir</span>
+                <span className="group-hover:translate-x-1 transition-transform duration-200">→</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Borde animado */}
+          <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10 blur-xl`} />
+          
+          {/* Esquina decorativa - Solo visible en pantallas grandes */}
+          <div className="hidden sm:block absolute bottom-0 right-0 w-16 h-16 sm:w-20 sm:h-20 opacity-0 group-hover:opacity-10 transition-opacity duration-300 overflow-hidden rounded-br-2xl">
+            <div className={`w-full h-full bg-gradient-to-tl ${action.color} rounded-tl-full`} />
+          </div>
         </Link>
       ))}
     </div>

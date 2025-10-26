@@ -21,7 +21,7 @@ export default async function CompleteProfilePage() {
   
   if (profile) {
     // Si ya tiene perfil, redirigir al dashboard
-    redirect('/dashboard');
+    redirect('/app');
   }
 
   return (

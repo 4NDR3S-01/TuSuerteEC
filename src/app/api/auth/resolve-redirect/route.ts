@@ -8,7 +8,7 @@ function resolvePathFromRole(role: string | undefined) {
     case 'staff':
       return '/staff';
     default:
-      return '/dashboard';
+      return '/app';
   }
 }
 
@@ -24,6 +24,6 @@ export async function GET() {
     return NextResponse.json({ path, role: user.role });
   } catch (error) {
     console.error('Error resolving redirect path:', error);
-    return NextResponse.json({ path: '/dashboard' }, { status: 500 });
+    return NextResponse.json({ path: '/app' }, { status: 500 });
   }
 }
