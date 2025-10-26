@@ -1,8 +1,9 @@
 import { getSupabaseServerClient } from '../../../../../lib/supabase/server';
 import { getCurrentUser } from '../../../../../lib/auth/get-user';
 import { redirect } from 'next/navigation';
-import { RaffleDetailPage } from '../../../../../components/raffles/raffle-detail-page';
 import { ErrorPage } from '../../../../../components/ui/error-page';
+import { RaffleDetailPage } from '../../../../../components/raffles/raffle-detail-page';
+import { fetchActivePaymentMethods } from '../../../../../lib/payments/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,12 +59,15 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
   // Fetch total entries count
   const { count: totalEntries, error: countError } = await supabase
     .from('raffle_entries')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('raffle_id', id);
 
   if (countError) {
     console.error('Error fetching entries count:', countError);
   }
+
+  // Ensure totalEntries is a number, default to 0 if null
+  const entriesCount = totalEntries ?? 0;
 
   // Check if user has active subscription with expiration validation
   const now = new Date().toISOString();
@@ -78,12 +82,15 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
     console.error('Error fetching subscriptions:', subsError);
   }
 
+  const paymentMethods = await fetchActivePaymentMethods('raffles');
+
   return (
     <RaffleDetailPage
       raffle={raffle}
       userEntries={userEntries || []}
-      totalEntries={totalEntries || 0}
+      totalEntries={entriesCount}
       hasActiveSubscription={Boolean(subscriptions && subscriptions.length > 0)}
+      paymentMethods={paymentMethods}
     />
   );
 }

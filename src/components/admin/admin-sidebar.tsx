@@ -36,7 +36,15 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/administrador/eventos-vivo', label: 'Eventos en vivo', icon: '🎬' },
   { href: '/administrador/planes', label: 'Planes', icon: '💎' },
   { href: '/administrador/ganadores', label: 'Ganadores', icon: '🏆' },
-  { href: '/administrador/pagos', label: 'Pagos', icon: '💳' },
+  {
+    href: '/administrador/transacciones',
+    label: 'Transacciones',
+    icon: '💳',
+    submenu: [
+      { href: '/administrador/pagos/transacciones', label: 'Transacciones' },
+      { href: '/administrador/pagos/metodos', label: 'Métodos de pago' },
+    ],
+  },
   { href: '/administrador/reportes', label: 'Reportes', icon: '📈' },
   { href: '/administrador/configuracion', label: 'Configuración', icon: '⚙️' },
 ];

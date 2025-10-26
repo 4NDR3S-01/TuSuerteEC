@@ -1,8 +1,21 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getSupabaseServerClient } from '../../../../../lib/supabase/server';
 import { getCurrentUser } from '../../../../../lib/auth/get-user';
-import { revalidatePath } from 'next/cache';
+import { fetchPaymentMethodById } from '../../../../../lib/payments/server';
+import { getStripeClient } from '../../../../../lib/payments/stripe';
+import { getAppBaseUrl } from '../../../../../lib/payments/utils';
+
+type ManualTransferPayload = {
+  paymentMethodId: string;
+  reference?: string;
+  notes?: string;
+};
+
+type StripeCheckoutPayload = {
+  paymentMethodId: string;
+};
 
 /**
  * Server Action para comprar un boleto de sorteo
@@ -52,6 +65,218 @@ export async function purchaseRaffleTicket(raffleId: string) {
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Error desconocido al procesar la compra' 
+    };
+  }
+}
+
+/**
+ * Crea un registro de pago pendiente para transferencias manuales
+ * El administrador podrá validar posteriormente y liberar el boleto
+ */
+export async function createManualTransferPayment(raffleId: string, payload: ManualTransferPayload) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return {
+        success: false,
+        error: 'Debes iniciar sesión para continuar',
+      };
+    }
+
+    const supabase = await getSupabaseServerClient();
+
+    const paymentMethod = await fetchPaymentMethodById(payload.paymentMethodId);
+    if (!paymentMethod || paymentMethod.type !== 'manual_transfer' || !paymentMethod.is_active) {
+      return {
+        success: false,
+        error: 'Método de pago no disponible',
+      };
+    }
+
+    const config = paymentMethod.config ?? {};
+    const manualConfig = config.manual ?? {};
+    const currency = config.currency ?? 'USD';
+    const amount = config.amount ?? 0;
+
+    if (!amount) {
+      return {
+        success: false,
+        error: 'El método de pago no tiene un monto configurado.',
+      };
+    }
+
+    // Traer información básica del sorteo para el metadata
+    const { data: raffle, error: raffleError } = await supabase
+      .from('raffles')
+      .select('id, title, status')
+      .eq('id', raffleId)
+      .maybeSingle();
+
+    if (raffleError || !raffle) {
+      return {
+        success: false,
+        error: 'No se encontró el sorteo seleccionado.',
+      };
+    }
+
+    const { error: insertError } = await supabase.from('payment_transactions').insert({
+      user_id: user.id,
+      raffle_id: raffle.id,
+      subscription_id: null,
+      payment_method_id: paymentMethod.id,
+      transaction_type: 'raffle_ticket',
+      amount,
+      currency,
+      status: 'pending',
+      receipt_reference: payload.reference || null,
+      metadata: {
+        payment_method_type: paymentMethod.type,
+        payment_method_name: paymentMethod.name,
+        notes: payload.notes || null,
+        manual_config: manualConfig,
+        raffle: {
+          id: raffle.id,
+          title: raffle.title,
+        },
+        requested_at: new Date().toISOString(),
+      },
+    });
+
+    if (insertError) {
+      console.error('[createManualTransferPayment] error inserting payment:', insertError);
+      return {
+        success: false,
+        error: 'No se pudo registrar la solicitud. Intenta más tarde.',
+      };
+    }
+
+    revalidatePath('/administrador/pagos');
+
+    return {
+      success: true,
+      message: 'Solicitud registrada. Sigue las instrucciones para completar tu transferencia.',
+      instructions: manualConfig,
+    };
+  } catch (error) {
+    console.error('[createManualTransferPayment] Excepción:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido al crear la solicitud',
+    };
+  }
+}
+
+/**
+ * Inicializa un Checkout Session de Stripe para comprar un boleto
+ */
+export async function createStripeCheckoutSession(raffleId: string, payload: StripeCheckoutPayload) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return {
+        success: false,
+        error: 'Debes iniciar sesión para continuar',
+      };
+    }
+
+    const supabase = await getSupabaseServerClient();
+    const paymentMethod = await fetchPaymentMethodById(payload.paymentMethodId);
+    if (!paymentMethod || paymentMethod.type !== 'stripe' || !paymentMethod.is_active) {
+      return {
+        success: false,
+        error: 'Método de pago no disponible',
+      };
+    }
+
+    const config = paymentMethod.config ?? {};
+    const stripeConfig = config.stripe ?? {};
+    const currency = config.currency ?? 'USD';
+    const amount = config.amount ?? 0;
+
+    if (!stripeConfig.priceId) {
+      return {
+        success: false,
+        error: 'El método de Stripe no está configurado correctamente.',
+      };
+    }
+
+    const { data: raffle, error: raffleError } = await supabase
+      .from('raffles')
+      .select('id, title, status')
+      .eq('id', raffleId)
+      .maybeSingle();
+
+    if (raffleError || !raffle) {
+      return {
+        success: false,
+        error: 'No se encontró el sorteo seleccionado.',
+      };
+    }
+
+    const stripe = getStripeClient();
+    const baseUrl = getAppBaseUrl();
+
+    const successPath = stripeConfig.successPath || `/app/sorteos/${raffleId}?payment=success`;
+    const cancelPath = stripeConfig.cancelPath || `/app/sorteos/${raffleId}?payment=cancelled`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: stripeConfig.mode || 'payment',
+      line_items: [
+        {
+          price: stripeConfig.priceId,
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        raffle_id: raffle.id,
+        payment_method_id: paymentMethod.id,
+        user_id: user.id,
+      },
+      client_reference_id: user.id,
+      success_url: `${baseUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}${cancelPath}`,
+      customer_email: user.email ?? undefined,
+    });
+
+    const { error: insertError } = await supabase.from('payment_transactions').insert({
+      user_id: user.id,
+      raffle_id: raffle.id,
+      subscription_id: null,
+      payment_method_id: paymentMethod.id,
+      transaction_type: 'raffle_ticket',
+      amount,
+      currency,
+      status: 'pending',
+      stripe_payment_intent_id: session.id,
+      metadata: {
+        checkout_session_id: session.id,
+        payment_method_type: paymentMethod.type,
+        payment_method_name: paymentMethod.name,
+        raffle: {
+          id: raffle.id,
+          title: raffle.title,
+        },
+        requested_at: new Date().toISOString(),
+      },
+    });
+
+    if (insertError) {
+      console.error('[createStripeCheckoutSession] error inserting payment:', insertError);
+      return {
+        success: false,
+        error: 'No se pudo preparar el pago. Intenta más tarde.',
+      };
+    }
+
+    return {
+      success: true,
+      url: session.url,
+    };
+  } catch (error) {
+    console.error('[createStripeCheckoutSession] Excepción:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error desconocido al crear el Checkout',
     };
   }
 }

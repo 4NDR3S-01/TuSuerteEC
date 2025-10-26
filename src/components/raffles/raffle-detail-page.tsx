@@ -2,7 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { purchaseRaffleTicket, checkRaffleEligibility } from '../../app/(app)/app/sorteos/[id]/actions';
+import {
+  checkRaffleEligibility,
+  createManualTransferPayment,
+  createStripeCheckoutSession,
+} from '../../app/(app)/app/sorteos/[id]/actions';
+import type { PaymentMethod, PaymentMethodConfig } from '../../lib/payments/types';
 
 // Helper para traducir el modo de entrada
 const getEntryModeLabel = (mode: string): string => {
@@ -40,22 +45,33 @@ type RaffleDetailPageProps = {
   userEntries: Entry[];
   totalEntries: number;
   hasActiveSubscription: boolean;
+  paymentMethods: PaymentMethod[];
 };
 
-type PurchaseResult = Awaited<ReturnType<typeof purchaseRaffleTicket>>;
 type EligibilityResult = Awaited<ReturnType<typeof checkRaffleEligibility>>;
 
 export function RaffleDetailPage({ 
   raffle, 
   userEntries, 
   totalEntries,
-  hasActiveSubscription 
+  hasActiveSubscription,
+  paymentMethods,
 }: RaffleDetailPageProps) {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [isCheckingEligibility, setIsCheckingEligibility] = useState(false);
-  const [isPurchasing, setIsPurchasing] = useState(false);
   const [eligibility, setEligibility] = useState<EligibilityResult | null>(null);
-  const [purchaseFeedback, setPurchaseFeedback] = useState<PurchaseResult | null>(null);
+  const [selectedMethodId, setSelectedMethodId] = useState<string | null>(
+    paymentMethods.at(0)?.id ?? null,
+  );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [manualReference, setManualReference] = useState('');
+  const [manualNotes, setManualNotes] = useState('');
+  const [manualFeedback, setManualFeedback] = useState<{
+    message: string;
+    manual?: PaymentMethodConfig['manual'];
+  } | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [stripeError, setStripeError] = useState<string | null>(null);
 
   const drawDate = new Date(raffle.draw_date);
   const now = new Date();
@@ -67,8 +83,7 @@ export function RaffleDetailPage({
   const allowsManualPurchase = raffle.entry_mode === 'hybrid' || raffle.entry_mode === 'tickets_only';
   const requiresSubscription = raffle.entry_mode === 'subscribers_only';
   const showsAutomaticEntry = hasActiveSubscription && raffle.entry_mode !== 'tickets_only';
-  const manualPurchaseCtaLabel = showsAutomaticEntry ? 'Comprar boleto adicional' : 'Participar ahora';
-  const canAttemptPurchase = eligibility?.eligible ?? false;
+  const isEligible = eligibility?.eligible ?? false;
   
   // Show participation count
   const userEntryCount = userEntries.length;
@@ -136,6 +151,32 @@ export function RaffleDetailPage({
     }
   }, [raffle.status]);
 
+  const selectedMethod = useMemo(
+    () => (selectedMethodId ? paymentMethods.find((method) => method.id === selectedMethodId) ?? null : null),
+    [paymentMethods, selectedMethodId],
+  );
+
+  const selectedConfig = useMemo<PaymentMethodConfig>(
+    () => (selectedMethod?.config ?? {}) as PaymentMethodConfig,
+    [selectedMethod],
+  );
+
+  const selectedManualConfig = useMemo(
+    () => selectedConfig.manual ?? {},
+    [selectedConfig],
+  );
+
+  const methodAmount = selectedConfig.amount ?? null;
+  const methodCurrency = selectedConfig.currency ?? 'USD';
+  const isStripeMethod = selectedMethod?.type === 'stripe';
+  const isManualMethod = selectedMethod?.type === 'manual_transfer';
+  const hasPaymentMethods = paymentMethods.length > 0;
+  const confirmDisabled =
+    !isEligible ||
+    !selectedMethod ||
+    isProcessing ||
+    (isManualMethod && Boolean(manualFeedback));
+
   const eligibilityMessage = useMemo(() => {
     if (!eligibility) return null;
     if (eligibility.eligible) {
@@ -167,13 +208,25 @@ export function RaffleDetailPage({
   useEffect(() => {
     if (!showPurchaseModal) {
       setEligibility(null);
-      setPurchaseFeedback(null);
+      setManualFeedback(null);
+      setManualError(null);
+      setStripeError(null);
+      setManualReference('');
+      setManualNotes('');
+      setIsProcessing(false);
       return;
+    }
+
+    if (paymentMethods.length > 0 && !selectedMethodId) {
+      setSelectedMethodId(paymentMethods[0].id);
     }
 
     let cancelled = false;
     setIsCheckingEligibility(true);
-    setPurchaseFeedback(null);
+    setManualFeedback(null);
+    setManualError(null);
+    setStripeError(null);
+
     checkRaffleEligibility(raffle.id)
       .then((result) => {
         if (!cancelled) {
@@ -197,41 +250,68 @@ export function RaffleDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [raffle.id, showPurchaseModal]);
-
-  useEffect(() => {
-    if (!purchaseFeedback?.success) {
-      return;
-    }
-
-    const timeout = setTimeout(() => setShowPurchaseModal(false), 1800);
-    return () => clearTimeout(timeout);
-  }, [purchaseFeedback?.success]);
+  }, [raffle.id, showPurchaseModal, paymentMethods, selectedMethodId]);
 
   const handleOpenPurchaseModal = () => {
+    if (paymentMethods.length > 0) {
+      setSelectedMethodId(paymentMethods[0].id);
+    }
     setShowPurchaseModal(true);
   };
 
-  const handlePurchaseTicket = async () => {
-    setIsPurchasing(true);
-    setPurchaseFeedback(null);
+  const handleConfirmPayment = async () => {
+    if (!selectedMethod) return;
 
-    try {
-      const result = await purchaseRaffleTicket(raffle.id);
-      setPurchaseFeedback(result);
+    setIsProcessing(true);
+    setManualError(null);
+    setStripeError(null);
+    setManualFeedback(null);
 
-      if (result.success) {
-        const updatedEligibility = await checkRaffleEligibility(raffle.id);
-        setEligibility(updatedEligibility);
+    if (selectedMethod.type === 'stripe') {
+      try {
+        const result = await createStripeCheckoutSession(raffle.id, {
+          paymentMethodId: selectedMethod.id,
+        });
+
+        if (result.success && result.url) {
+          window.location.href = result.url;
+          return;
+        }
+
+        setStripeError(result.error ?? 'No se pudo iniciar el pago con Stripe.');
+      } catch (error) {
+        console.error('[RaffleDetailPage] createStripeCheckoutSession error', error);
+        setStripeError('Ocurrió un problema al contactar con Stripe. Intenta nuevamente.');
+      } finally {
+        setIsProcessing(false);
       }
-    } catch (error) {
-      console.error('[RaffleDetailPage] purchaseTicket error', error);
-      setPurchaseFeedback({
-        success: false,
-        error: 'No pudimos registrar tu boleto. Intenta de nuevo.',
-      } as PurchaseResult);
-    } finally {
-      setIsPurchasing(false);
+      return;
+    }
+
+    if (selectedMethod.type === 'manual_transfer') {
+      try {
+        const result = await createManualTransferPayment(raffle.id, {
+          paymentMethodId: selectedMethod.id,
+          reference: manualReference || undefined,
+          notes: manualNotes || undefined,
+        });
+
+        if (result.success) {
+          setManualFeedback({
+            message: result.message ?? 'Solicitud registrada. Sigue las instrucciones para completar tu transferencia.',
+            manual: (result.instructions as PaymentMethodConfig['manual']) ?? selectedManualConfig,
+          });
+        } else {
+          setManualError(result.error ?? 'No pudimos registrar tu solicitud. Intenta más tarde.');
+        }
+      } catch (error) {
+        console.error('[RaffleDetailPage] createManualTransferPayment error', error);
+        setManualError('Ocurrió un error al crear la solicitud. Vuelve a intentarlo.');
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      setIsProcessing(false);
     }
   };
 
@@ -416,13 +496,19 @@ export function RaffleDetailPage({
                       </div>
                     )}
 
-                    {allowsManualPurchase && (
+                    {allowsManualPurchase && hasPaymentMethods && (
                       <button
                         onClick={handleOpenPurchaseModal}
                         className="w-full py-4 rounded-xl font-bold transition-all text-white bg-gradient-to-r from-[color:var(--accent)] to-orange-500 hover:shadow-lg hover:scale-105"
                       >
-                        {manualPurchaseCtaLabel}
+                        Elegir método de pago
                       </button>
+                    )}
+
+                    {allowsManualPurchase && !hasPaymentMethods && (
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-xs text-amber-600 dark:text-amber-400">
+                        No hay métodos de pago disponibles en este momento. Contacta al soporte para completar tu participación.
+                      </div>
                     )}
 
                     {requiresSubscription && !hasActiveSubscription && (
@@ -516,14 +602,14 @@ export function RaffleDetailPage({
           onClick={() => setShowPurchaseModal(false)}
         >
           <div
-            className="bg-[color:var(--card)] border-2 border-[color:var(--border)] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl"
+            className="bg-[color:var(--card)] border-2 border-[color:var(--border)] rounded-2xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h3 className="text-2xl font-black text-[color:var(--foreground)]">Registrar participación</h3>
+                <h3 className="text-2xl font-black text-[color:var(--foreground)]">Selecciona un método de pago</h3>
                 <p className="text-sm text-[color:var(--muted-foreground)] mt-2">
-                  Genera un nuevo boleto manual para este sorteo.
+                  Escoge cómo deseas completar tu participación en este sorteo.
                 </p>
               </div>
               <button
@@ -536,15 +622,15 @@ export function RaffleDetailPage({
             </div>
 
             {isCheckingEligibility ? (
-              <div className="flex flex-col items-center justify-center py-10 text-sm text-[color:var(--muted-foreground)]">
+              <div className="flex flex-col items-center justify-center py-12 text-sm text-[color:var(--muted-foreground)]">
                 <div className="mb-4 inline-block h-10 w-10 animate-spin rounded-full border-4 border-[color:var(--accent)] border-r-transparent" />
                 Verificando disponibilidad...
               </div>
             ) : (
-              <>
+              <div className="space-y-5">
                 {eligibilityMessage && (
                   <div
-                    className={`mb-4 rounded-xl border p-4 text-sm ${
+                    className={`rounded-xl border p-4 text-sm ${
                       eligibility?.eligible
                         ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
                         : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
@@ -554,39 +640,188 @@ export function RaffleDetailPage({
                   </div>
                 )}
 
-                {purchaseFeedback && (
-                  <div
-                    className={`mb-4 rounded-xl border p-4 text-sm ${
-                      purchaseFeedback.success
-                        ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
-                        : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-                    }`}
-                  >
-                    {purchaseFeedback.success
-                      ? purchaseFeedback.message ?? 'Tu entrada ha sido registrada exitosamente.'
-                      : purchaseFeedback.error ?? 'No pudimos completar la compra.'}
+                {stripeError && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
+                    {stripeError}
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  <button
-                    onClick={handlePurchaseTicket}
-                    disabled={!canAttemptPurchase || isPurchasing}
-                    className={`w-full py-3 rounded-xl font-bold transition-all text-white bg-gradient-to-r from-[color:var(--accent)] to-orange-500 hover:shadow-lg ${
-                      (!canAttemptPurchase || isPurchasing) ? 'opacity-60 cursor-not-allowed hover:scale-100' : 'hover:scale-105'
-                    }`}
-                  >
-                    {isPurchasing ? 'Registrando boleto...' : 'Confirmar participación'}
-                  </button>
+                {manualError && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
+                    {manualError}
+                  </div>
+                )}
 
-                  <button
-                    onClick={() => setShowPurchaseModal(false)}
-                    className="w-full py-3 rounded-xl border border-[color:var(--border)] text-sm font-semibold text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </>
+                {!hasPaymentMethods ? (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-sm text-amber-600 dark:text-amber-400">
+                    No hay métodos de pago configurados para este sorteo. Contacta al administrador para completar tu compra.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+                      {paymentMethods.map((method) => {
+                        const isSelected = method.id === selectedMethodId;
+                        const config = (method.config ?? {}) as PaymentMethodConfig;
+                        const amount = config.amount ?? null;
+                        const currency = config.currency ?? 'USD';
+                        return (
+                          <button
+                            key={method.id}
+                            onClick={() => setSelectedMethodId(method.id)}
+                            className={`text-left rounded-2xl border px-4 py-4 transition-all ${
+                              isSelected
+                                ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 shadow-lg'
+                                : 'border-[color:var(--border)] bg-[color:var(--muted)]/20 hover:border-[color:var(--accent)]/40'
+                            }`}
+                            type="button"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-bold text-[color:var(--foreground)]">
+                                  {method.icon ? `${method.icon} ${method.name}` : method.name}
+                                </p>
+                                {method.description && (
+                                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)] line-clamp-2">
+                                    {method.description}
+                                  </p>
+                                )}
+                              </div>
+                              <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${
+                                isSelected ? 'border-[color:var(--accent)] text-[color:var(--accent)]' : 'border-[color:var(--border)] text-[color:var(--muted-foreground)]'
+                              }`}>
+                                {isSelected ? '✓' : ''}
+                              </span>
+                            </div>
+                            {amount ? (
+                              <p className="mt-3 text-xs font-semibold text-[color:var(--foreground)]">
+                                Monto: {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                              </p>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedMethod && (
+                      <div className="space-y-4">
+                        {selectedMethod.instructions && (
+                          <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-4 text-xs text-[color:var(--muted-foreground)] whitespace-pre-line">
+                            {selectedMethod.instructions}
+                          </div>
+                        )}
+
+                        {isStripeMethod && (
+                          <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-xs text-blue-600 dark:text-blue-400">
+                            Serás redirigido a Stripe para completar el pago de forma segura. Una vez aprobado, tu boleto se generará automáticamente.
+                          </div>
+                        )}
+
+                        {isManualMethod && (
+                          <div className="space-y-4">
+                            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-4 text-xs text-[color:var(--muted-foreground)]">
+                              <h4 className="text-sm font-semibold text-[color:var(--foreground)] mb-2">Datos para transferencia</h4>
+                              <div className="space-y-1">
+                                {selectedManualConfig.bankName && (
+                                  <p><span className="font-semibold">Banco:</span> {selectedManualConfig.bankName}</p>
+                                )}
+                                {selectedManualConfig.accountNumber && (
+                                  <p><span className="font-semibold">Cuenta:</span> {selectedManualConfig.accountNumber}</p>
+                                )}
+                                {selectedManualConfig.accountType && (
+                                  <p><span className="font-semibold">Tipo de cuenta:</span> {selectedManualConfig.accountType}</p>
+                                )}
+                                {selectedManualConfig.beneficiary && (
+                                  <p><span className="font-semibold">Beneficiario:</span> {selectedManualConfig.beneficiary}</p>
+                                )}
+                                {selectedManualConfig.identification && (
+                                  <p><span className="font-semibold">Identificación:</span> {selectedManualConfig.identification}</p>
+                                )}
+                                {methodAmount ? (
+                                  <p><span className="font-semibold">Monto:</span> {methodAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {methodCurrency}</p>
+                                ) : null}
+                                {selectedManualConfig.referenceFormat && (
+                                  <p><span className="font-semibold">Referencia sugerida:</span> {selectedManualConfig.referenceFormat}</p>
+                                )}
+                              </div>
+                              {selectedManualConfig.instructions && (
+                                <p className="mt-3 whitespace-pre-line">
+                                  {selectedManualConfig.instructions}
+                                </p>
+                              )}
+                            </div>
+
+                            {!manualFeedback && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Número de referencia (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={manualReference}
+                                    onChange={(e) => setManualReference(e.target.value)}
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Notas para el administrador (opcional)
+                                  </label>
+                                  <textarea
+                                    value={manualNotes}
+                                    onChange={(e) => setManualNotes(e.target.value)}
+                                    rows={3}
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {manualFeedback && (
+                              <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-xs text-green-600 dark:text-green-400">
+                                <p className="font-semibold mb-2">{manualFeedback.message}</p>
+                                <p>
+                                  Nuestro equipo revisará tu comprobante y confirmará el pago. Guarda la referencia y envía el comprobante cuando se te solicite.
+                                </p>
+                                {manualFeedback.manual?.instructions && (
+                                  <p className="mt-2 whitespace-pre-line text-[color:var(--foreground)]">
+                                    {manualFeedback.manual.instructions}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleConfirmPayment}
+                        disabled={confirmDisabled}
+                        className={`w-full py-3 rounded-xl font-bold transition-all text-white bg-gradient-to-r from-[color:var(--accent)] to-orange-500 hover:shadow-lg ${
+                          confirmDisabled ? 'opacity-60 cursor-not-allowed hover:scale-100' : 'hover:scale-105'
+                        }`}
+                      >
+                        {isProcessing
+                          ? 'Procesando...'
+                          : isStripeMethod
+                          ? 'Pagar con Stripe'
+                          : manualFeedback
+                          ? 'Solicitud registrada'
+                          : 'Registrar solicitud de pago'}
+                      </button>
+
+                      <button
+                        onClick={() => setShowPurchaseModal(false)}
+                        className="w-full py-3 rounded-xl border border-[color:var(--border)] text-sm font-semibold text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

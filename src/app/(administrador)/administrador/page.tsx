@@ -34,22 +34,32 @@ export default async function AdminHomePage() {
     supabase.from('winners').select('*', { count: 'exact', head: true }).eq('status', 'pending_contact'),
     supabase.from('raffles').select('id, title, status, created_at').order('created_at', { ascending: false }).limit(5),
     supabase.from('live_events').select('id, title, start_at, status').eq('is_visible', true).order('start_at', { ascending: true }).limit(3),
-    supabase.from('payments').select('id, amount, status, created_at, user_id, profiles(full_name)').order('created_at', { ascending: false }).limit(5),
+    supabase.from('payment_transactions').select('id, amount, status, created_at, user_id').order('created_at', { ascending: false }).limit(5),
     supabase.rpc('get_total_revenue' as any).single() as any,
   ]);
 
   const totalRevenue = (totalRevenueResult?.data as any)?.total || 0;
 
-  // Normalize recentPayments profiles to match Payment type: single object or null
-  const recentPayments = (recentPaymentsRaw || []).map((p: any) => ({
-    id: p.id,
-    amount: p.amount,
-    status: p.status,
-    created_at: p.created_at,
-    profiles: Array.isArray(p.profiles)
-      ? (p.profiles[0] ? { full_name: p.profiles[0].full_name } : null)
-      : (p.profiles ?? null),
-  }));
+  // Obtener perfiles de usuarios para los pagos recientes
+  const recentPaymentsWithProfiles = await Promise.all(
+    (recentPaymentsRaw || []).map(async (payment: any) => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', payment.user_id)
+        .single();
+      
+      return {
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        created_at: payment.created_at,
+        profiles: profile ? { full_name: profile.full_name } : null,
+      };
+    })
+  );
+
+  const recentPayments = recentPaymentsWithProfiles;
 
   return (
     <AdminDashboard

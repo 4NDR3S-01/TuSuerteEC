@@ -38,10 +38,15 @@ export type LiveEvent = Tables<'live_events'>;
 export type LiveEventInsert = Database['public']['Tables']['live_events']['Insert'];
 export type LiveEventUpdate = Database['public']['Tables']['live_events']['Update'];
 
-// Payment types
-export type Payment = Tables<'payments'>;
-export type PaymentInsert = Database['public']['Tables']['payments']['Insert'];
-export type PaymentUpdate = Database['public']['Tables']['payments']['Update'];
+// Payment Transaction types (nueva tabla)
+export type PaymentTransaction = Tables<'payment_transactions'>;
+export type PaymentTransactionInsert = Database['public']['Tables']['payment_transactions']['Insert'];
+export type PaymentTransactionUpdate = Database['public']['Tables']['payment_transactions']['Update'];
+
+// Payment Method types
+export type PaymentMethod = Tables<'payment_methods'>;
+export type PaymentMethodInsert = Database['public']['Tables']['payment_methods']['Insert'];
+export type PaymentMethodUpdate = Database['public']['Tables']['payment_methods']['Update'];
 
 // Location types
 export type Country = Tables<'countries'>;
