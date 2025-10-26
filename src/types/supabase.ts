@@ -48,6 +48,49 @@ export type PaymentMethod = Tables<'payment_methods'>;
 export type PaymentMethodInsert = Database['public']['Tables']['payment_methods']['Insert'];
 export type PaymentMethodUpdate = Database['public']['Tables']['payment_methods']['Update'];
 
+// Payment Method Config types (estructura simplificada)
+export type PaymentMethodType = 'stripe' | 'manual_transfer' | 'qr_code';
+export type PaymentScope = 'raffles' | 'plans';
+
+export interface PaymentMethodConfig {
+  scopes: PaymentScope[];
+  currency: string;
+  // Stripe: pasarela personalizada con API
+  // Los precios se configuran por sorteo/plan. El modo (pago único vs suscripción) 
+  // se detecta automáticamente según el contexto
+  stripe?: {
+    mode: 'payment' | 'subscription'; // Auto-detectado por Stripe API
+    successPath?: string;
+    cancelPath?: string;
+  };
+  // Manual Transfer: configuración completa de cuenta bancaria
+  // Solo disponible para sorteos (raffles), no para planes
+  manual?: {
+    bankName: string;
+    accountNumber: string;
+    accountType: string;
+    beneficiary: string;
+    identification: string;
+    instructions: string;
+    requiresProof: boolean; // Si requiere comprobante de pago
+  };
+  // QR Code: pago por código QR (Binance, Deuna, etc.)
+  // Solo disponible para sorteos (raffles), no para planes
+  qr?: {
+    provider: string; // Ej: "Binance", "Deuna - Banco Pichincha", etc.
+    qrImageUrl?: string; // URL de la imagen del QR (opcional, puede generarse dinámicamente)
+    accountId?: string; // ID de cuenta (email, teléfono, etc.)
+    accountName?: string; // Nombre del titular de la cuenta
+    instructions: string; // Instrucciones detalladas para el pago
+    requiresProof: boolean; // Si requiere comprobante de pago
+  };
+}
+
+// Extended PaymentMethod with typed config
+export type PaymentMethodTyped = Omit<PaymentMethod, 'config'> & {
+  config: PaymentMethodConfig;
+};
+
 // Location types
 export type Country = Tables<'countries'>;
 export type City = Tables<'cities'>;

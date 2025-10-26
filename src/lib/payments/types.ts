@@ -1,13 +1,11 @@
-export type PaymentMethodType = 'stripe' | 'manual_transfer';
+export type PaymentMethodType = 'stripe' | 'manual_transfer' | 'qr_code';
 
 export type PaymentScope = 'raffles' | 'plans';
 
 export type PaymentMethodConfig = {
   scopes?: PaymentScope[];
   currency?: string;
-  amount?: number;
   stripe?: {
-    priceId?: string;
     mode?: 'payment' | 'subscription';
     successPath?: string;
     cancelPath?: string;
@@ -19,7 +17,15 @@ export type PaymentMethodConfig = {
     beneficiary?: string;
     identification?: string;
     instructions?: string;
-    referenceFormat?: string;
+    requiresProof?: boolean;
+  };
+  qr?: {
+    provider?: string;
+    qrImageUrl?: string;
+    accountId?: string;
+    accountName?: string;
+    instructions?: string;
+    requiresProof?: boolean;
   };
 };
 

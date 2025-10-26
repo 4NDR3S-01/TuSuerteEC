@@ -26,7 +26,7 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
   // Fetch raffle details with specific fields and status filter
   const { data: raffle, error } = await supabase
     .from('raffles')
-    .select('id, title, description, prize_description, prize_category, image_url, draw_date, entry_mode, max_entries_per_user, status')
+    .select('id, title, description, prize_description, prize_category, image_url, draw_date, entry_mode, max_entries_per_user, status, ticket_price, stripe_price_id')
     .eq('id', id)
     .in('status', ['active', 'closed', 'drawn'])
     .single();

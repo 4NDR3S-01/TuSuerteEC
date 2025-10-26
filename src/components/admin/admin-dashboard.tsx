@@ -293,7 +293,7 @@ export function AdminDashboard({ metrics, recentRaffles, upcomingEvents, recentP
           description="Últimas transacciones procesadas"
           actions={
             <Link
-              href="/administrador/pagos"
+              href="/administrador/pagos/transacciones"
               className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--foreground)] transition-transform hover:-translate-y-0.5"
             >
               <span aria-hidden>💳</span>

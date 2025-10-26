@@ -5,16 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useToast } from '../../hooks/use-toast'
-import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 
 interface PaymentTransaction {
@@ -140,9 +131,9 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
 
   const getMethodTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
-      stripe_card: 'Tarjeta (Stripe)',
-      stripe_subscription: 'Suscripción (Stripe)',
+      stripe: 'Stripe',
       manual_transfer: 'Transferencia Bancaria',
+      qr_code: 'Código QR',
     };
     return labels[type] || type;
   };
@@ -168,11 +159,11 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
       return
     }
 
-    // Validación: solo se pueden revisar transferencias manuales
-    if (reviewingTransaction.payment_methods?.type !== 'manual_transfer') {
+    // Validación: solo se pueden revisar transferencias manuales y QR
+    if (!['manual_transfer', 'qr_code'].includes(reviewingTransaction.payment_methods?.type || '')) {
       showToast({
         type: 'error',
-        description: 'Solo se pueden revisar transferencias manuales',
+        description: 'Solo se pueden revisar transferencias manuales y pagos QR',
       })
       return
     }
@@ -482,7 +473,7 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
                           Ver detalles
                         </button>
                         {transaction.status === 'pending' && 
-                         transaction.payment_methods?.type === 'manual_transfer' && (
+                         ['manual_transfer', 'qr_code'].includes(transaction.payment_methods?.type || '') && (
                           <>
                             <button
                               onClick={() => handleReviewAction(transaction, 'approve')}
@@ -666,30 +657,72 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
               )}
 
               {/* Información de comprobante */}
-              {(selectedTransaction.receipt_reference || selectedTransaction.receipt_url) && (
-                <div className="rounded-lg border border-[color:var(--border)] p-4">
+              {(selectedTransaction.receipt_reference || selectedTransaction.receipt_url || selectedTransaction.metadata?.notes) && (
+                <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4">
                   <h4 className="mb-3 text-sm font-semibold text-[color:var(--foreground)]">
-                    📎 Comprobante
+                    📎 Información del Comprobante
                   </h4>
-                  <div className="space-y-2">
-                    {selectedTransaction.receipt_reference && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-[color:var(--muted-foreground)]">Referencia:</span>
-                        <span className="font-mono text-xs text-[color:var(--foreground)]">
-                          {selectedTransaction.receipt_reference}
-                        </span>
-                      </div>
-                    )}
+                  <div className="space-y-3">
+                    {/* Imagen del comprobante */}
                     {selectedTransaction.receipt_url && (
-                      <div className="mt-2">
+                      <div className="space-y-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Imagen del comprobante:</span>
+                        <div className="rounded-lg border-2 border-[color:var(--border)] bg-[color:var(--muted)]/20 p-2">
+                          <img
+                            src={selectedTransaction.receipt_url}
+                            alt="Comprobante de pago"
+                            className="w-full h-auto max-h-96 object-contain rounded"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = '<div class="flex items-center justify-center p-8 text-[color:var(--muted-foreground)]"><span class="text-4xl">🖼️</span><p class="ml-3 text-sm">No se pudo cargar la imagen</p></div>';
+                              }
+                            }}
+                          />
+                        </div>
                         <a
                           href={selectedTransaction.receipt_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                          className="flex items-center justify-center gap-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
                         >
-                          📎 Ver comprobante
+                          <span>�</span>
+                          <span>Ver en tamaño completo</span>
+                          <span>↗</span>
                         </a>
+                      </div>
+                    )}
+                    
+                    {selectedTransaction.receipt_reference && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Referencia / ID de Transacción:</span>
+                        <div className="rounded bg-[color:var(--muted)]/30 p-2">
+                          <span className="font-mono text-sm text-[color:var(--foreground)]">
+                            {selectedTransaction.receipt_reference}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedTransaction.metadata?.notes && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Notas del usuario:</span>
+                        <div className="rounded bg-[color:var(--muted)]/30 p-2">
+                          <p className="text-sm text-[color:var(--foreground)] whitespace-pre-wrap">
+                            {selectedTransaction.metadata.notes}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedTransaction.metadata?.payment_type && (
+                      <div className="flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                        <span>Tipo de pago:</span>
+                        <span className="rounded bg-[color:var(--muted)] px-2 py-0.5 font-medium text-[color:var(--foreground)]">
+                          {selectedTransaction.metadata.payment_type}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -785,7 +818,7 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
                 Cerrar
               </button>
               {selectedTransaction.status === 'pending' && 
-               selectedTransaction.payment_methods?.type === 'manual_transfer' && (
+               ['manual_transfer', 'qr_code'].includes(selectedTransaction.payment_methods?.type || '') && (
                 <>
                   <button
                     onClick={() => {
@@ -813,90 +846,212 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
       )}
 
       {/* Modal de Revisión */}
-      <Dialog
-        open={!!reviewingTransaction}
-        onOpenChange={() => {
-          setReviewingTransaction(null)
-          setReviewAction(null)
-        }}
-      >
-        <DialogContent className="bg-[color:var(--card)] max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-[color:var(--foreground)]">
-              {reviewAction === 'approve'
-                ? '✓ Aprobar Transacción'
-                : '✗ Rechazar Transacción'}
-            </DialogTitle>
-            <DialogDescription className="text-[color:var(--muted-foreground)]">
-              {reviewAction === 'approve'
-                ? 'Confirma que la transacción es válida y debe ser aprobada.'
-                : 'Indica el motivo del rechazo de la transacción para que el usuario pueda conocer la razón.'}
-            </DialogDescription>
-          </DialogHeader>
+      {reviewingTransaction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+          onClick={() => {
+            setReviewingTransaction(null)
+            setReviewAction(null)
+            setComment('')
+            setRejectionReason('')
+          }}
+        >
+          <div
+            className="w-full max-w-3xl my-8 rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[color:var(--border)] p-6">
+              <h3 className="text-xl font-bold text-[color:var(--foreground)]">
+                {reviewAction === 'approve'
+                  ? '✓ Aprobar Transacción'
+                  : '✗ Rechazar Transacción'}
+              </h3>
+              <button
+                onClick={() => {
+                  setReviewingTransaction(null)
+                  setReviewAction(null)
+                  setComment('')
+                  setRejectionReason('')
+                }}
+                className="rounded-lg p-2 text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)]"
+              >
+                <span className="text-xl">✕</span>
+              </button>
+            </div>
 
-          <div className="space-y-4 py-2">
-            {reviewAction === 'reject' && (
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-[color:var(--foreground)]">
-                  Motivo del Rechazo *
-                </label>
-                <Textarea
-                  placeholder="Ej: El comprobante no es legible, la transferencia no coincide con el monto, etc."
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  rows={3}
-                  required
-                  className="resize-none"
-                />
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Este mensaje será visible para el usuario.
-                </p>
+            {/* Content */}
+            <div className="p-6 space-y-6 max-h-[calc(90vh-180px)] overflow-y-auto">
+              {/* Información de la transacción */}
+              <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                <h4 className="mb-3 text-sm font-semibold text-blue-900 dark:text-blue-300">
+                  💰 Transacción a Revisar
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Usuario:</span>
+                    <div className="rounded bg-white p-2 dark:bg-blue-950/50">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                        {reviewingTransaction.profiles?.full_name || 'Sin nombre'}
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
+                        {reviewingTransaction.profiles?.email || 'Sin email'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">Monto:</span>
+                    <div className="rounded bg-white p-2 dark:bg-blue-950/50">
+                      <p className="text-lg font-bold text-blue-900 dark:text-blue-200">
+                        {reviewingTransaction.currency} ${Number(reviewingTransaction.amount).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
+                        {reviewingTransaction.payment_methods?.name || 'Método no especificado'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-[color:var(--foreground)]">
-                Comentario Adicional {reviewAction === 'approve' ? '(opcional)' : '(opcional - interno)'}
-              </label>
-              <Textarea
-                placeholder="Añade notas o comentarios internos para el equipo de administración..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={2}
-                className="resize-none"
-              />
-              {reviewAction === 'reject' && (
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Este comentario es opcional y solo visible para administradores.
-                </p>
+              {/* Imagen del comprobante */}
+              {reviewingTransaction.receipt_url && (
+                <div className="rounded-lg border-2 border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
+                  <h4 className="mb-3 text-sm font-semibold text-purple-900 dark:text-purple-300">
+                    📸 Comprobante de Pago
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="rounded-lg border-2 border-purple-300 bg-white p-2 dark:border-purple-700 dark:bg-purple-950/50">
+                      <img
+                        src={reviewingTransaction.receipt_url}
+                        alt="Comprobante de pago"
+                        className="w-full h-auto max-h-96 object-contain rounded"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div class="flex items-center justify-center p-8 text-purple-600 dark:text-purple-400"><span class="text-4xl">🖼️</span><p class="ml-3 text-sm">No se pudo cargar la imagen</p></div>';
+                          }
+                        }}
+                      />
+                    </div>
+                    <a
+                      href={reviewingTransaction.receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 rounded-lg bg-purple-600 p-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
+                    >
+                      <span>🔍</span>
+                      <span>Ver imagen en tamaño completo</span>
+                      <span>↗</span>
+                    </a>
+                  </div>
+                </div>
               )}
+
+              {/* Información del comprobante */}
+              {(reviewingTransaction.receipt_reference || reviewingTransaction.metadata?.notes) && (
+                <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-[color:var(--foreground)]">
+                    📋 Información del Comprobante
+                  </h4>
+                  <div className="space-y-3">
+                    {reviewingTransaction.receipt_reference && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Referencia / ID de Transacción:</span>
+                        <div className="rounded bg-[color:var(--muted)]/30 p-2">
+                          <span className="font-mono text-sm text-[color:var(--foreground)]">
+                            {reviewingTransaction.receipt_reference}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {reviewingTransaction.metadata?.notes && (
+                      <div className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Notas del usuario:</span>
+                        <div className="rounded bg-[color:var(--muted)]/30 p-2">
+                          <p className="text-sm text-[color:var(--foreground)] whitespace-pre-wrap">
+                            {reviewingTransaction.metadata.notes}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Formulario de revisión */}
+              <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+                <h4 className="mb-4 text-sm font-semibold text-[color:var(--foreground)]">
+                  {reviewAction === 'approve' ? '✅ Aprobar Pago' : '❌ Rechazar Pago'}
+                </h4>
+                <div className="space-y-4">
+                  {reviewAction === 'reject' && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-[color:var(--foreground)]">
+                        Motivo del Rechazo *
+                      </label>
+                      <Textarea
+                        placeholder="Ej: El comprobante no es legible, la transferencia no coincide con el monto, el ID de transacción es incorrecto..."
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        rows={3}
+                        required
+                        className="resize-none"
+                      />
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        ⚠️ Este mensaje será visible para el usuario.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-[color:var(--foreground)]">
+                      Comentario Interno (opcional)
+                    </label>
+                    <Textarea
+                      placeholder="Añade notas o comentarios para el equipo de administración..."
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      rows={2}
+                      className="resize-none"
+                    />
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      🔒 Solo visible para administradores.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 border-t border-[color:var(--border)] p-6">
+              <button
+                onClick={() => {
+                  setReviewingTransaction(null)
+                  setReviewAction(null)
+                  setComment('')
+                  setRejectionReason('')
+                }}
+                className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-2 text-sm font-semibold text-[color:var(--foreground)] transition-colors hover:bg-[color:var(--muted)]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={reviewAction === 'reject' && !rejectionReason.trim()}
+                className={
+                  reviewAction === 'approve'
+                    ? 'rounded-lg bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                    : 'rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                }
+              >
+                {reviewAction === 'approve' ? '✓ Confirmar Aprobación' : '✗ Confirmar Rechazo'}
+              </button>
             </div>
           </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setReviewingTransaction(null)
-                setReviewAction(null)
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSubmitReview}
-              className={
-                reviewAction === 'approve'
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-red-500 hover:bg-red-600 text-white'
-              }
-              disabled={reviewAction === 'reject' && !rejectionReason.trim()}
-            >
-              Confirmar {reviewAction === 'approve' ? 'Aprobación' : 'Rechazo'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   )
 }

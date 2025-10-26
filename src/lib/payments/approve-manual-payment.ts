@@ -42,9 +42,9 @@ export async function approveManualPayment(params: ApprovePaymentParams) {
     throw new Error('Transacción no encontrada');
   }
 
-  // 2. Verificar que es transferencia manual
-  if (transaction.payment_methods?.type !== 'manual_transfer') {
-    throw new Error('Esta transacción no es una transferencia manual');
+  // 2. Verificar que es transferencia manual o QR
+  if (!['manual_transfer', 'qr_code'].includes(transaction.payment_methods?.type || '')) {
+    throw new Error('Esta transacción no es una transferencia manual o pago QR');
   }
 
   // 3. Verificar que está pendiente
@@ -138,9 +138,9 @@ export async function rejectManualPayment(params: RejectPaymentParams) {
     throw new Error('Transacción no encontrada');
   }
 
-  // 2. Verificar que es transferencia manual
-  if (transaction.payment_methods?.type !== 'manual_transfer') {
-    throw new Error('Esta transacción no es una transferencia manual');
+  // 2. Verificar que es transferencia manual o QR
+  if (!['manual_transfer', 'qr_code'].includes(transaction.payment_methods?.type || '')) {
+    throw new Error('Esta transacción no es una transferencia manual o pago QR');
   }
 
   // 3. Verificar que está pendiente

@@ -11,6 +11,7 @@ type ManualTransferPayload = {
   paymentMethodId: string;
   reference?: string;
   notes?: string;
+  receiptUrl?: string;
 };
 
 type StripeCheckoutPayload = {
@@ -70,7 +71,7 @@ export async function purchaseRaffleTicket(raffleId: string) {
 }
 
 /**
- * Crea un registro de pago pendiente para transferencias manuales
+ * Crea un registro de pago pendiente para transferencias manuales y pagos QR
  * El administrador podrá validar posteriormente y liberar el boleto
  */
 export async function createManualTransferPayment(raffleId: string, payload: ManualTransferPayload) {
@@ -86,7 +87,7 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
     const supabase = await getSupabaseServerClient();
 
     const paymentMethod = await fetchPaymentMethodById(payload.paymentMethodId);
-    if (!paymentMethod || paymentMethod.type !== 'manual_transfer' || !paymentMethod.is_active) {
+    if (!paymentMethod || !['manual_transfer', 'qr_code'].includes(paymentMethod.type) || !paymentMethod.is_active) {
       return {
         success: false,
         error: 'Método de pago no disponible',
@@ -95,20 +96,13 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
 
     const config = paymentMethod.config ?? {};
     const manualConfig = config.manual ?? {};
+    const qrConfig = config.qr ?? {};
     const currency = config.currency ?? 'USD';
-    const amount = config.amount ?? 0;
 
-    if (!amount) {
-      return {
-        success: false,
-        error: 'El método de pago no tiene un monto configurado.',
-      };
-    }
-
-    // Traer información básica del sorteo para el metadata
+    // Traer información del sorteo incluyendo precio
     const { data: raffle, error: raffleError } = await supabase
       .from('raffles')
-      .select('id, title, status')
+      .select('id, title, status, ticket_price')
       .eq('id', raffleId)
       .maybeSingle();
 
@@ -116,6 +110,16 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
       return {
         success: false,
         error: 'No se encontró el sorteo seleccionado.',
+      };
+    }
+
+    // El precio ahora viene del sorteo, no del método de pago
+    const amount = raffle.ticket_price || 0;
+
+    if (!amount) {
+      return {
+        success: false,
+        error: 'Este sorteo no tiene un precio configurado.',
       };
     }
 
@@ -129,11 +133,13 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
       currency,
       status: 'pending',
       receipt_reference: payload.reference || null,
+      receipt_url: payload.receiptUrl || null,
       metadata: {
-        payment_method_type: paymentMethod.type,
+        payment_type: paymentMethod.type,
         payment_method_name: paymentMethod.name,
         notes: payload.notes || null,
-        manual_config: manualConfig,
+        ...(paymentMethod.type === 'manual_transfer' && { manual_config: manualConfig }),
+        ...(paymentMethod.type === 'qr_code' && { qr_config: qrConfig }),
         raffle: {
           id: raffle.id,
           title: raffle.title,
@@ -151,11 +157,14 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
     }
 
     revalidatePath('/administrador/pagos');
+    revalidatePath(`/app/sorteos/${raffleId}`);
 
     return {
       success: true,
-      message: 'Solicitud registrada. Sigue las instrucciones para completar tu transferencia.',
-      instructions: manualConfig,
+      message: paymentMethod.type === 'qr_code' 
+        ? 'Solicitud registrada. Escanea el código QR y completa el pago.'
+        : 'Solicitud registrada. Sigue las instrucciones para completar tu transferencia.',
+      instructions: paymentMethod.type === 'manual_transfer' ? manualConfig : qrConfig,
     };
   } catch (error) {
     console.error('[createManualTransferPayment] Excepción:', error);
@@ -191,18 +200,11 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
     const config = paymentMethod.config ?? {};
     const stripeConfig = config.stripe ?? {};
     const currency = config.currency ?? 'USD';
-    const amount = config.amount ?? 0;
 
-    if (!stripeConfig.priceId) {
-      return {
-        success: false,
-        error: 'El método de Stripe no está configurado correctamente.',
-      };
-    }
-
+    // Traer información del sorteo incluyendo precio y stripe_price_id
     const { data: raffle, error: raffleError } = await supabase
       .from('raffles')
-      .select('id, title, status')
+      .select('id, title, status, ticket_price, stripe_price_id')
       .eq('id', raffleId)
       .maybeSingle();
 
@@ -210,6 +212,16 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       return {
         success: false,
         error: 'No se encontró el sorteo seleccionado.',
+      };
+    }
+
+    // El precio ahora viene del sorteo
+    const amount = raffle.ticket_price || 0;
+    
+    if (!raffle.stripe_price_id) {
+      return {
+        success: false,
+        error: 'Este sorteo no está configurado para pagos con Stripe. Contacta al administrador.',
       };
     }
 
@@ -223,7 +235,7 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       mode: stripeConfig.mode || 'payment',
       line_items: [
         {
-          price: stripeConfig.priceId,
+          price: raffle.stripe_price_id, // Ahora viene del sorteo
           quantity: 1,
         },
       ],
@@ -250,7 +262,7 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       stripe_payment_intent_id: session.id,
       metadata: {
         checkout_session_id: session.id,
-        payment_method_type: paymentMethod.type,
+        payment_type: paymentMethod.type,
         payment_method_name: paymentMethod.name,
         raffle: {
           id: raffle.id,
@@ -267,6 +279,8 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
         error: 'No se pudo preparar el pago. Intenta más tarde.',
       };
     }
+
+    revalidatePath(`/app/sorteos/${raffleId}`);
 
     return {
       success: true,

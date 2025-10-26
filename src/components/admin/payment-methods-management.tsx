@@ -9,47 +9,15 @@ import { getSupabaseBrowserClient } from '../../lib/supabase/client'
 // Toast
 import { useToast } from '../../hooks/use-toast'
 
-// ===================== Tipos =====================
-export type PaymentMethodType = 'stripe_card' | 'stripe_subscription' | 'manual_transfer'
-export type PaymentScope = 'raffles' | 'plans'
+// Tipos actualizados
+import type { 
+  PaymentMethod, 
+  PaymentMethodConfig, 
+  PaymentMethodType, 
+  PaymentScope 
+} from '../../types/supabase'
 
-export interface PaymentMethodConfig {
-  scopes: PaymentScope[]
-  currency: string
-  amount?: number
-  stripe_card?: {
-    mode: 'payment'
-    successPath: string
-    cancelPath: string
-  }
-  stripe_subscription?: {
-    checkoutUrl: string
-    description?: string
-  }
-  manual?: {
-    bankName: string
-    accountNumber: string
-    accountType: string
-    beneficiary: string
-    identification: string
-    referenceFormat: string
-    instructions: string
-  }
-}
-
-export interface PaymentMethod {
-  id: string
-  name: string
-  type: PaymentMethodType
-  description?: string | null
-  icon?: string | null
-  is_active: boolean
-  instructions?: string | null
-  config: PaymentMethodConfig
-  created_at?: string
-  updated_at?: string
-}
-
+// ===================== FormState =====================
 interface FormState {
   id?: string
   name: string
@@ -59,24 +27,23 @@ interface FormState {
   is_active: boolean
   scopes: PaymentScope[]
   currency: string
-  amount: string // como string para el input; se casterá al guardar
   instructions: string
-  stripe_card: {
-    successPath: string
-    cancelPath: string
-  }
-  stripe_subscription: {
-    checkoutUrl: string
-    description: string
-  }
   manual: {
     bankName: string
     accountNumber: string
     accountType: string
     beneficiary: string
     identification: string
-    referenceFormat: string
     instructions: string
+    requiresProof: boolean
+  }
+  qr: {
+    provider: string
+    qrImageUrl: string
+    accountId: string
+    accountName: string
+    instructions: string
+    requiresProof: boolean
   }
 }
 
@@ -84,28 +51,27 @@ const DEFAULT_FORM_STATE: FormState = {
   name: '',
   description: '',
   icon: '',
-  type: 'stripe_card',
+  type: 'stripe',
   is_active: true,
   scopes: ['raffles'],
   currency: 'USD',
-  amount: '',
   instructions: '',
-  stripe_card: {
-    successPath: '/app/boletos?payment=success',
-    cancelPath: '/app/boletos?payment=cancelled',
-  },
-  stripe_subscription: {
-    checkoutUrl: '',
-    description: '',
-  },
   manual: {
     bankName: '',
     accountNumber: '',
     accountType: '',
     beneficiary: '',
     identification: '',
-    referenceFormat: 'Pago sorteo #{raffle_id}',
     instructions: '',
+    requiresProof: true,
+  },
+  qr: {
+    provider: '',
+    qrImageUrl: '',
+    accountId: '',
+    accountName: '',
+    instructions: '',
+    requiresProof: true,
   },
 }
 
@@ -144,39 +110,36 @@ export default function PaymentMethodsManagement({
   }
 
   const openEditModal = (method: PaymentMethod) => {
-    const config = (method.config ?? {}) as PaymentMethodConfig
+    const config = (method.config ?? {}) as unknown as PaymentMethodConfig
     setFormState({
       id: method.id,
       name: method.name,
       description: method.description ?? '',
       icon: method.icon ?? '',
-      type: method.type,
+      type: method.type as PaymentMethodType,
       is_active: method.is_active,
       scopes:
         Array.isArray(config.scopes) && config.scopes.length > 0
-          ? (config.scopes as PaymentScope[])
+          ? config.scopes
           : ['raffles'],
       currency: config.currency ?? 'USD',
-      amount: config.amount != null ? String(config.amount) : '',
       instructions: method.instructions ?? '',
-      stripe_card: {
-        successPath:
-          config.stripe_card?.successPath ?? '/app/boletos?payment=success',
-        cancelPath:
-          config.stripe_card?.cancelPath ?? '/app/boletos?payment=cancelled',
-      },
-      stripe_subscription: {
-        checkoutUrl: config.stripe_subscription?.checkoutUrl ?? '',
-        description: config.stripe_subscription?.description ?? '',
-      },
       manual: {
         bankName: config.manual?.bankName ?? '',
         accountNumber: config.manual?.accountNumber ?? '',
         accountType: config.manual?.accountType ?? '',
         beneficiary: config.manual?.beneficiary ?? '',
         identification: config.manual?.identification ?? '',
-        referenceFormat: config.manual?.referenceFormat ?? 'Pago sorteo #{raffle_id}',
         instructions: config.manual?.instructions ?? '',
+        requiresProof: config.manual?.requiresProof ?? true,
+      },
+      qr: {
+        provider: config.qr?.provider ?? '',
+        qrImageUrl: config.qr?.qrImageUrl ?? '',
+        accountId: config.qr?.accountId ?? '',
+        accountName: config.qr?.accountName ?? '',
+        instructions: config.qr?.instructions ?? '',
+        requiresProof: config.qr?.requiresProof ?? true,
       },
     })
     setFormMode('edit')
@@ -193,34 +156,35 @@ export default function PaymentMethodsManagement({
     field: K,
     value: FormState[K]
   ) => {
-    setFormState((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const updateScope = (scope: PaymentScope, enabled: boolean) => {
     setFormState((prev) => {
-      const current = new Set(prev.scopes)
-      enabled ? current.add(scope) : current.delete(scope)
-      const next = Array.from(current)
-      return { ...prev, scopes: next.length > 0 ? (next as PaymentScope[]) : ['raffles'] }
+      const newState = { ...prev, [field]: value }
+      
+      // Si cambia a transferencia manual o QR, solo permitir 'raffles'
+      if (field === 'type' && (value === 'manual_transfer' || value === 'qr_code')) {
+        newState.scopes = ['raffles']
+      }
+      
+      return newState
     })
   }
 
-  const mergeConfig = (amount?: number): PaymentMethodConfig => {
+  const toggleScope = (scope: PaymentScope, enabled: boolean) => {
+    setFormState((prev) => {
+      const current = new Set(prev.scopes)
+      enabled ? current.add(scope) : current.delete(scope)
+      const next = Array.from(current) as PaymentScope[]
+      return { ...prev, scopes: next.length > 0 ? next : ['raffles'] }
+    })
+  }
+
+  const mergeConfig = (): PaymentMethodConfig => {
     const base: PaymentMethodConfig = {
       scopes: formState.scopes,
       currency: formState.currency,
-      amount,
     }
-    if (formState.type === 'stripe_card') {
-      base.stripe_card = {
-        mode: 'payment',
-        successPath: formState.stripe_card.successPath,
-        cancelPath: formState.stripe_card.cancelPath,
-      }
-    } else if (formState.type === 'stripe_subscription') {
-      base.stripe_subscription = {
-        checkoutUrl: formState.stripe_subscription.checkoutUrl,
-        description: formState.stripe_subscription.description || undefined,
+    if (formState.type === 'stripe') {
+      base.stripe = {
+        mode: 'payment', // Se detecta automáticamente según el contexto
       }
     } else if (formState.type === 'manual_transfer') {
       base.manual = {
@@ -229,8 +193,17 @@ export default function PaymentMethodsManagement({
         accountType: formState.manual.accountType,
         beneficiary: formState.manual.beneficiary,
         identification: formState.manual.identification,
-        referenceFormat: formState.manual.referenceFormat,
         instructions: formState.manual.instructions,
+        requiresProof: formState.manual.requiresProof,
+      }
+    } else if (formState.type === 'qr_code') {
+      base.qr = {
+        provider: formState.qr.provider,
+        qrImageUrl: formState.qr.qrImageUrl || undefined,
+        accountId: formState.qr.accountId || undefined,
+        accountName: formState.qr.accountName || undefined,
+        instructions: formState.qr.instructions,
+        requiresProof: formState.qr.requiresProof,
       }
     }
     return base
@@ -240,10 +213,54 @@ export default function PaymentMethodsManagement({
   const upsertPaymentMethod = async () => {
     setIsSaving(true)
     try {
-      if (formState.amount && Number.isNaN(Number(formState.amount))) {
-        throw new Error('El monto debe ser un número válido.')
+      let qrImageUrl = formState.qr.qrImageUrl;
+
+      // Si es QR y hay una imagen en base64 (nueva), subirla a Storage
+      if (formState.type === 'qr_code' && qrImageUrl && qrImageUrl.startsWith('data:')) {
+        try {
+          // Convertir base64 a Blob
+          const response = await fetch(qrImageUrl);
+          const blob = await response.blob();
+          
+          // Crear nombre único
+          const timestamp = Date.now();
+          const fileExt = blob.type.split('/')[1] || 'png';
+          const fileName = `${formState.name.toLowerCase().replace(/\s+/g, '-')}-${timestamp}.${fileExt}`;
+
+          // Subir a Storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('payment-qr-codes')
+            .upload(fileName, blob, {
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (uploadError) {
+            console.error('[PaymentMethods] Error uploading QR:', uploadError);
+            alert('Error al subir el código QR. Intenta nuevamente.');
+            setIsSaving(false);
+            return;
+          }
+
+          // Obtener URL pública
+          const { data: { publicUrl } } = supabase.storage
+            .from('payment-qr-codes')
+            .getPublicUrl(uploadData.path);
+          
+          qrImageUrl = publicUrl;
+        } catch (error) {
+          console.error('[PaymentMethods] Error processing QR image:', error);
+          alert('Error al procesar la imagen del código QR');
+          setIsSaving(false);
+          return;
+        }
       }
-      const amountNumber = formState.amount ? Number(formState.amount) : undefined
+
+      // Actualizar el config con la URL real
+      const baseConfig = mergeConfig();
+      if (formState.type === 'qr_code' && baseConfig.qr) {
+        baseConfig.qr.qrImageUrl = qrImageUrl || undefined;
+      }
 
       const payload = {
         name: formState.name,
@@ -252,7 +269,7 @@ export default function PaymentMethodsManagement({
         type: formState.type,
         is_active: formState.is_active,
         instructions: formState.instructions || null,
-        config: mergeConfig(amountNumber),
+        config: baseConfig,
       }
 
       if (formMode === 'create') {
@@ -348,9 +365,9 @@ export default function PaymentMethodsManagement({
   const selectedType = formState.type
 
   const getTypeLabel = (type: PaymentMethodType) => {
-    if (type === 'stripe_card') return 'Stripe Checkout (Tarjeta)'
-    if (type === 'stripe_subscription') return 'Stripe Link (Suscripción)'
+    if (type === 'stripe') return 'Stripe'
     if (type === 'manual_transfer') return 'Transferencia manual'
+    if (type === 'qr_code') return 'Código QR'
     return type
   }
 
@@ -377,7 +394,7 @@ export default function PaymentMethodsManagement({
       {/* Grid */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {methods.map((method) => {
-          const config = (method.config ?? {}) as PaymentMethodConfig
+          const config = (method.config ?? {}) as unknown as PaymentMethodConfig
           return (
             <div
               key={method.id}
@@ -390,7 +407,7 @@ export default function PaymentMethodsManagement({
                     <h3 className="text-lg font-semibold text-[color:var(--foreground)]">{method.name}</h3>
                   </div>
                   <span className="mt-1 inline-flex items-center rounded-full bg-[color:var(--muted)]/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    {getTypeLabel(method.type)}
+                    {getTypeLabel(method.type as PaymentMethodType)}
                   </span>
                 </div>
 
@@ -418,15 +435,6 @@ export default function PaymentMethodsManagement({
                 {config.currency && (
                   <p>
                     <span className="font-semibold">Moneda:</span> {config.currency}
-                  </p>
-                )}
-                {config.amount != null && (
-                  <p>
-                    <span className="font-semibold">Monto base:</span>{' '}
-                    {config.amount.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
                   </p>
                 )}
               </div>
@@ -496,7 +504,7 @@ export default function PaymentMethodsManagement({
                     value={formState.name}
                     onChange={(e) => updateFormField('name', e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    placeholder="Stripe Checkout"
+                    placeholder="Nombre del método de pago"
                   />
                 </div>
 
@@ -518,9 +526,9 @@ export default function PaymentMethodsManagement({
                       onChange={(e) => updateFormField('type', e.target.value as PaymentMethodType)}
                       className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                     >
-                      <option value="stripe_card">Stripe Checkout (Tarjeta)</option>
-                      <option value="stripe_subscription">Stripe Link (Suscripción)</option>
+                      <option value="stripe">Stripe</option>
                       <option value="manual_transfer">Transferencia manual</option>
+                      <option value="qr_code">Código QR</option>
                     </select>
                   </div>
                   <div>
@@ -543,7 +551,7 @@ export default function PaymentMethodsManagement({
                       <input
                         type="checkbox"
                         checked={formState.scopes.includes('raffles')}
-                        onChange={(e) => updateScope('raffles', e.target.checked)}
+                        onChange={(e) => toggleScope('raffles', e.target.checked)}
                       />
                     </label>
                     <label className="flex items-center justify-between gap-3">
@@ -551,33 +559,40 @@ export default function PaymentMethodsManagement({
                       <input
                         type="checkbox"
                         checked={formState.scopes.includes('plans')}
-                        onChange={(e) => updateScope('plans', e.target.checked)}
+                        onChange={(e) => toggleScope('plans', e.target.checked)}
+                        disabled={selectedType === 'manual_transfer' || selectedType === 'qr_code'}
                       />
                     </label>
+                    {selectedType === 'manual_transfer' && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        ⚠️ <strong>Transferencia manual:</strong> Solo disponible para boletos de sorteos.
+                      </p>
+                    )}
+                    {selectedType === 'qr_code' && (
+                      <p className="mt-2 text-xs text-purple-600 dark:text-purple-400">
+                        ⚠️ <strong>Código QR:</strong> Solo disponible para boletos de sorteos.
+                      </p>
+                    )}
+                    {selectedType === 'stripe' && (
+                      <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                        ✓ <strong>Stripe:</strong> Puede usarse para boletos y/o planes.
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Moneda</label>
-                    <input
-                      type="text"
-                      value={formState.currency}
-                      onChange={(e) => updateFormField('currency', e.target.value.toUpperCase())}
-                      className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Monto base</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formState.amount}
-                      onChange={(e) => updateFormField('amount', e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Moneda</label>
+                  <input
+                    type="text"
+                    value={formState.currency}
+                    onChange={(e) => updateFormField('currency', e.target.value.toUpperCase())}
+                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                    placeholder="USD"
+                  />
+                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                    💡 Los precios se configuran directamente en cada sorteo o plan
+                  </p>
                 </div>
 
                 <div>
@@ -606,89 +621,46 @@ export default function PaymentMethodsManagement({
 
               {/* Columna B */}
               <div className="space-y-4">
-                {selectedType === 'stripe_card' ? (
+                {selectedType === 'stripe' ? (
                   <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">Configuración de Stripe (Tarjeta)</h4>
-                    <div className="grid grid-cols-1 gap-3">
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Ruta de éxito</label>
-                        <input
-                          type="text"
-                          value={formState.stripe_card.successPath}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              stripe_card: { ...prev.stripe_card, successPath: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Ruta de cancelación</label>
-                        <input
-                          type="text"
-                          value={formState.stripe_card.cancelPath}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              stripe_card: { ...prev.stripe_card, cancelPath: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        />
+                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
+                      💳 Configuración de Stripe
+                    </h4>
+                    
+                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">✅</span>
+                        <div>
+                          <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                            Pasarela personalizada con tu diseño
+                          </p>
+                          <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                            Este método usa la API de Stripe con tu propio diseño y flujo personalizado. 
+                            Funciona tanto para pagos únicos (boletos) como suscripciones (planes).
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-xs text-blue-600 dark:text-blue-400">
-                      <strong>Stripe con tu propio diseño:</strong> Las variables{' '}
-                      <code className="bg-blue-500/20 px-1 py-0.5 rounded">STRIPE_SECRET_KEY</code> y{' '}
-                      <code className="bg-blue-500/20 px-1 py-0.5 rounded">NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>{' '}
-                      se tomarán de tu entorno. Configura tu pasarela con tu propio diseño.
+
+                    <div className="space-y-3">
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        ℹ️ <strong>Nota:</strong> Stripe detecta automáticamente si es pago único (boletos) o suscripción (planes) según el contexto. Las rutas de redirección y precios se configuran automáticamente.
+                      </p>
                     </div>
                   </>
-                ) : selectedType === 'stripe_subscription' ? (
+                ) : selectedType === 'manual_transfer' ? (
                   <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">Configuración de Stripe Link</h4>
-                    <div>
-                      <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Link de Stripe (generado desde Stripe)</label>
-                      <input
-                        type="url"
-                        value={formState.stripe_subscription.checkoutUrl}
-                        onChange={(e) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            stripe_subscription: { ...prev.stripe_subscription, checkoutUrl: e.target.value },
-                          }))
-                        }
-                        className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        placeholder="https://buy.stripe.com/..."
-                      />
+                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
+                      🏦 Configuración de Transferencia Bancaria
+                    </h4>
+                    
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-400">
+                      <strong>💰 Cuenta bancaria:</strong> Configura los datos de tu cuenta bancaria para que los usuarios puedan realizar transferencias manuales.
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Descripción opcional</label>
-                      <textarea
-                        value={formState.stripe_subscription.description}
-                        onChange={(e) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            stripe_subscription: { ...prev.stripe_subscription, description: e.target.value },
-                          }))
-                        }
-                        rows={3}
-                        className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        placeholder="Información adicional..."
-                      />
-                    </div>
-                    <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 text-xs text-purple-600 dark:text-purple-400">
-                      <strong>Suscripciones:</strong> Genera el link directamente desde tu dashboard de Stripe y pégalo aquí. Este link redirigirá a los usuarios a la pasarela de Stripe.
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">Datos bancarios</h4>
+
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Banco</label>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Banco *</label>
                         <input
                           type="text"
                           value={formState.manual.bankName}
@@ -699,10 +671,12 @@ export default function PaymentMethodsManagement({
                             }))
                           }
                           className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder="Ej: Banco Pichincha"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Número de cuenta</label>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Número de cuenta *</label>
                         <input
                           type="text"
                           value={formState.manual.accountNumber}
@@ -713,12 +687,13 @@ export default function PaymentMethodsManagement({
                             }))
                           }
                           className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder="Ej: 1234567890"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Tipo de cuenta</label>
-                        <input
-                          type="text"
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Tipo de cuenta *</label>
+                        <select
                           value={formState.manual.accountType}
                           onChange={(e) =>
                             setFormState((prev) => ({
@@ -727,10 +702,15 @@ export default function PaymentMethodsManagement({
                             }))
                           }
                           className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        />
+                          required
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="Ahorros">Ahorros</option>
+                          <option value="Corriente">Corriente</option>
+                        </select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Beneficiario</label>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Beneficiario *</label>
                         <input
                           type="text"
                           value={formState.manual.beneficiary}
@@ -741,10 +721,12 @@ export default function PaymentMethodsManagement({
                             }))
                           }
                           className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder="Ej: TuSuerte EC"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Identificación</label>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Cédula/RUC *</label>
                         <input
                           type="text"
                           value={formState.manual.identification}
@@ -755,25 +737,15 @@ export default function PaymentMethodsManagement({
                             }))
                           }
                           className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Formato de referencia</label>
-                        <input
-                          type="text"
-                          value={formState.manual.referenceFormat}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, referenceFormat: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder="Ej: 1234567890001"
+                          required
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Instrucciones para el usuario</label>
+                      <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                        Instrucciones para el usuario *
+                      </label>
                       <textarea
                         value={formState.manual.instructions}
                         onChange={(e) =>
@@ -782,16 +754,185 @@ export default function PaymentMethodsManagement({
                             manual: { ...prev.manual, instructions: e.target.value },
                           }))
                         }
-                        rows={4}
+                        rows={5}
                         className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        placeholder={`1. Realiza la transferencia desde tu banco.\n2. Usa la referencia indicada.`}
+                        placeholder={`Ejemplo:\n\n1. Realiza la transferencia desde tu banco a la cuenta indicada.\n2. Usa la referencia proporcionada.\n3. Sube el comprobante de pago.\n4. Espera la confirmación del administrador (máx. 24 horas).`}
+                        required
                       />
+                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                        Estas instrucciones se mostrarán al participante después de registrar la solicitud.
+                      </p>
                     </div>
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-600 dark:text-amber-400">
-                      Las instrucciones se mostrarán al participante después de registrar la solicitud de pago.
+
+                    <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-3">
+                      <input
+                        id="manual_requires_proof"
+                        type="checkbox"
+                        checked={formState.manual.requiresProof}
+                        onChange={(e) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            manual: { ...prev.manual, requiresProof: e.target.checked },
+                          }))
+                        }
+                      />
+                      <label htmlFor="manual_requires_proof" className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                        Requerir comprobante de pago
+                      </label>
                     </div>
                   </>
-                )}
+                ) : selectedType === 'qr_code' ? (
+                  <>
+                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
+                      📱 Configuración de Código QR
+                    </h4>
+                    
+                    <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 text-xs text-purple-700 dark:text-purple-400">
+                      <strong>🎯 Pago por QR:</strong> Configura los datos para pagos mediante código QR (Binance, Deuna, etc.). Los usuarios escanearán el código para realizar el pago.
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Proveedor *</label>
+                        <input
+                          type="text"
+                          value={formState.qr.provider}
+                          onChange={(e) =>
+                            setFormState((prev) => ({
+                              ...prev,
+                              qr: { ...prev.qr, provider: e.target.value },
+                            }))
+                          }
+                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder="Ej: Binance, Deuna - Banco Pichincha, PayPal"
+                          required
+                        />
+                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                          Nombre del servicio o plataforma de pago por QR
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">ID de cuenta (opcional)</label>
+                          <input
+                            type="text"
+                            value={formState.qr.accountId}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                qr: { ...prev.qr, accountId: e.target.value },
+                              }))
+                            }
+                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                            placeholder="Email, teléfono, ID Binance..."
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Nombre del titular (opcional)</label>
+                          <input
+                            type="text"
+                            value={formState.qr.accountName}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                qr: { ...prev.qr, accountName: e.target.value },
+                              }))
+                            }
+                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                            placeholder="Ej: TuSuerte Ecuador"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Código QR (imagen) *</label>
+                        <div className="mt-1 space-y-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                // Crear URL temporal para previsualización
+                                const reader = new FileReader()
+                                reader.onloadend = () => {
+                                  setFormState((prev) => ({
+                                    ...prev,
+                                    qr: { ...prev.qr, qrImageUrl: reader.result as string },
+                                  }))
+                                }
+                                reader.readAsDataURL(file)
+                              }
+                            }}
+                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          />
+                          {formState.qr.qrImageUrl && (
+                            <div className="relative inline-block">
+                              <img 
+                                src={formState.qr.qrImageUrl} 
+                                alt="Código QR" 
+                                className="w-32 h-32 object-contain border border-[color:var(--border)] rounded-lg"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setFormState((prev) => ({
+                                  ...prev,
+                                  qr: { ...prev.qr, qrImageUrl: '' },
+                                }))}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                          Sube la imagen del código QR que los usuarios escanearán para pagar
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Instrucciones para el usuario *
+                        </label>
+                        <textarea
+                          value={formState.qr.instructions}
+                          onChange={(e) =>
+                            setFormState((prev) => ({
+                              ...prev,
+                              qr: { ...prev.qr, instructions: e.target.value },
+                            }))
+                          }
+                          rows={5}
+                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                          placeholder={`Ejemplo:\n\n1. Escanea el código QR con tu aplicación ${formState.qr.provider || 'de pago'}.\n2. Completa el pago por el monto exacto mostrado.\n3. Guarda el comprobante de transacción.\n4. Sube una captura de pantalla del comprobante.\n5. Espera la confirmación (máx. 24 horas).`}
+                          required
+                        />
+                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                          Estas instrucciones se mostrarán al participante junto con el código QR
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-3">
+                        <input
+                          id="qr_requires_proof"
+                          type="checkbox"
+                          checked={formState.qr.requiresProof}
+                          onChange={(e) =>
+                            setFormState((prev) => ({
+                              ...prev,
+                              qr: { ...prev.qr, requiresProof: e.target.checked },
+                            }))
+                          }
+                        />
+                        <label htmlFor="qr_requires_proof" className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Requerir comprobante de pago
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
 
