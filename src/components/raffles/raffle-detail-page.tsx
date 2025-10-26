@@ -882,12 +882,12 @@ export function RaffleDetailPage({
             {/* User's Entries - Rediseñado */}
             {userEntries.length > 0 && (
               <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border border-[color:var(--border)] rounded-3xl p-8 shadow-lg">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
                   <h3 className="text-2xl font-black text-[color:var(--foreground)] flex items-center gap-3">
                     <span className="text-3xl">🎟️</span>
                     <span>Mis Participaciones</span>
                   </h3>
-                  <div className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-sm shadow-lg">
+                  <div className="inline-flex w-full justify-center sm:w-auto px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-sm shadow-lg">
                     {userEntries.length} {userEntries.length === 1 ? 'Ticket' : 'Tickets'}
                   </div>
                 </div>

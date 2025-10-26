@@ -74,36 +74,62 @@ export async function approveManualPayment(params: ApprovePaymentParams) {
     throw new Error(`Error al aprobar el pago: ${updateError.message}`);
   }
 
-  // 6. Crear entrada de sorteo si aplica
+  // 6. Crear entrada(s) de sorteo si aplica
   if (transaction.raffle_id && transaction.user_id) {
-    const { data: entryResult, error: entryError } = await supabase.rpc('create_raffle_entry_safe', {
-      p_raffle_id: transaction.raffle_id,
-      p_user_id: transaction.user_id,
-      p_entry_source: 'manual_purchase',
-      p_subscription_id: transaction.subscription_id || null,
-    });
+    const ticketsRequestedRaw =
+      (transaction.metadata?.tickets_requested as number | string | null | undefined) ?? 1;
+    const ticketsRequestedNumber = Number(ticketsRequestedRaw);
+    const ticketsToCreate = Number.isFinite(ticketsRequestedNumber)
+      ? Math.max(1, Math.floor(ticketsRequestedNumber))
+      : 1;
 
-    if (entryError) {
+    const createdEntries: unknown[] = [];
+
+    try {
+      for (let i = 0; i < ticketsToCreate; i += 1) {
+        const { data: entryResult, error: entryError } = await supabase.rpc('create_raffle_entry_safe', {
+          p_raffle_id: transaction.raffle_id,
+          p_user_id: transaction.user_id,
+          p_entry_source: 'manual_purchase',
+          p_subscription_id: transaction.subscription_id || null,
+        });
+
+        if (entryError) {
+          throw entryError;
+        }
+
+        createdEntries.push(entryResult);
+      }
+    } catch (entryError) {
       console.error('[payments] error creating raffle entry:', entryError);
-      
-      // Revertir aprobación si falla la creación del boleto
+
+      // Revertir aprobación si falla la creación de los boletos
       await supabase
         .from('payment_transactions')
         .update({
           status: 'pending',
           reviewed_by: null,
           reviewed_at: null,
-          admin_comment: `Error al crear boleto: ${entryError.message}`,
+          admin_comment: `Error al crear boleto: ${
+            entryError instanceof Error ? entryError.message : 'desconocido'
+          }`,
         })
         .eq('id', params.transactionId);
 
-      throw new Error(`Error al crear el boleto del sorteo: ${entryError.message}`);
+      throw new Error(
+        `Error al crear los boletos del sorteo: ${
+          entryError instanceof Error ? entryError.message : 'desconocido'
+        }`,
+      );
     }
 
     return {
       success: true,
-      message: 'Pago aprobado y boleto creado exitosamente',
-      entryId: entryResult,
+      message:
+        ticketsToCreate === 1
+          ? 'Pago aprobado y boleto creado exitosamente'
+          : `Pago aprobado y ${ticketsToCreate} boletos creados exitosamente`,
+      entryId: createdEntries,
     };
   }
 

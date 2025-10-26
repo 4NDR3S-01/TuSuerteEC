@@ -59,8 +59,33 @@ interface PaymentTransactionsManagementProps {
   readonly initialTransactions: PaymentTransaction[]
 }
 
-const formatCurrencyValue = (value: number, currency: string) =>
-  new Intl.NumberFormat('es-EC', { style: 'currency', currency }).format(value)
+const normalizeCurrencyCode = (currency: string | null | undefined): string => {
+  const code = (currency ?? 'USD').toUpperCase();
+  const mapping: Record<string, string> = {
+    USDT: 'USD',
+    USDC: 'USD',
+    BTC: 'USD',
+    ETH: 'USD',
+  };
+  return mapping[code] || code;
+};
+
+const formatCurrencyValue = (value: number, currency: string) => {
+  const normalized = normalizeCurrencyCode(currency);
+  try {
+    return new Intl.NumberFormat('es-EC', {
+      style: 'currency',
+      currency: normalized,
+    }).format(value);
+  } catch (error) {
+    console.warn('[PaymentTransactionsManagement] Currency format fallback:', {
+      value,
+      currency,
+      error,
+    });
+    return `${normalized} ${Number(value || 0).toFixed(2)}`;
+  }
+};
 
 export default function PaymentTransactionsManagement({ initialTransactions }: PaymentTransactionsManagementProps) {
   const router = useRouter()
