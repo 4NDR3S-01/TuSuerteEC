@@ -11,7 +11,6 @@ type Plan = {
   price: number;
   currency: string;
   interval: 'month' | 'year';
-  stripe_price_id: string | null;
   benefits: string[] | null;
   is_active: boolean;
   is_featured: boolean;

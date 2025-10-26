@@ -59,6 +59,9 @@ interface PaymentTransactionsManagementProps {
   readonly initialTransactions: PaymentTransaction[]
 }
 
+const formatCurrencyValue = (value: number, currency: string) =>
+  new Intl.NumberFormat('es-EC', { style: 'currency', currency }).format(value)
+
 export default function PaymentTransactionsManagement({ initialTransactions }: PaymentTransactionsManagementProps) {
   const router = useRouter()
   const [transactions] = useState<PaymentTransaction[]>(initialTransactions)
@@ -657,7 +660,11 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
               )}
 
               {/* Información de comprobante */}
-              {(selectedTransaction.receipt_reference || selectedTransaction.receipt_url || selectedTransaction.metadata?.notes) && (
+              {(selectedTransaction.receipt_reference ||
+                selectedTransaction.receipt_url ||
+                selectedTransaction.metadata?.notes ||
+                typeof selectedTransaction.metadata?.amount_confirmed === 'number' ||
+                typeof selectedTransaction.metadata?.tickets_requested === 'number') && (
                 <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4">
                   <h4 className="mb-3 text-sm font-semibold text-[color:var(--foreground)]">
                     📎 Información del Comprobante
@@ -705,7 +712,7 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
                         </div>
                       </div>
                     )}
-                    
+
                     {selectedTransaction.metadata?.notes && (
                       <div className="space-y-1">
                         <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">Notas del usuario:</span>
@@ -716,12 +723,37 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
                         </div>
                       </div>
                     )}
-                    
+
                     {selectedTransaction.metadata?.payment_type && (
                       <div className="flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
                         <span>Tipo de pago:</span>
                         <span className="rounded bg-[color:var(--muted)] px-2 py-0.5 font-medium text-[color:var(--foreground)]">
                           {selectedTransaction.metadata.payment_type}
+                        </span>
+                      </div>
+                    )}
+
+                    {typeof selectedTransaction.metadata?.amount_confirmed === 'number' && (
+                      <div className="flex items-center justify-between rounded border border-[color:var(--border)]/60 bg-[color:var(--muted)]/20 px-3 py-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Monto reportado:
+                        </span>
+                        <span className="text-sm font-bold text-[color:var(--foreground)]">
+                          {formatCurrencyValue(
+                            selectedTransaction.metadata.amount_confirmed,
+                            selectedTransaction.currency || 'USD',
+                          )}
+                        </span>
+                      </div>
+                    )}
+
+                    {typeof selectedTransaction.metadata?.tickets_requested === 'number' && (
+                      <div className="flex items-center justify-between rounded border border-[color:var(--border)]/60 bg-[color:var(--muted)]/20 px-3 py-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Boletos reportados:
+                        </span>
+                        <span className="text-sm font-bold text-[color:var(--foreground)]">
+                          {selectedTransaction.metadata.tickets_requested.toLocaleString('es-EC')}
                         </span>
                       </div>
                     )}
@@ -950,7 +982,10 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
               )}
 
               {/* Información del comprobante */}
-              {(reviewingTransaction.receipt_reference || reviewingTransaction.metadata?.notes) && (
+              {(reviewingTransaction.receipt_reference ||
+                reviewingTransaction.metadata?.notes ||
+                typeof reviewingTransaction.metadata?.amount_confirmed === 'number' ||
+                typeof reviewingTransaction.metadata?.tickets_requested === 'number') && (
                 <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4">
                   <h4 className="mb-3 text-sm font-semibold text-[color:var(--foreground)]">
                     📋 Información del Comprobante
@@ -974,6 +1009,31 @@ export default function PaymentTransactionsManagement({ initialTransactions }: P
                             {reviewingTransaction.metadata.notes}
                           </p>
                         </div>
+                      </div>
+                    )}
+
+                    {typeof reviewingTransaction.metadata?.amount_confirmed === 'number' && (
+                      <div className="flex items-center justify-between rounded border border-[color:var(--border)]/60 bg-[color:var(--muted)]/20 px-3 py-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Monto reportado:
+                        </span>
+                        <span className="text-sm font-bold text-[color:var(--foreground)]">
+                          {formatCurrencyValue(
+                            reviewingTransaction.metadata.amount_confirmed,
+                            reviewingTransaction.currency || 'USD',
+                          )}
+                        </span>
+                      </div>
+                    )}
+
+                    {typeof reviewingTransaction.metadata?.tickets_requested === 'number' && (
+                      <div className="flex items-center justify-between rounded border border-[color:var(--border)]/60 bg-[color:var(--muted)]/20 px-3 py-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                          Boletos reportados:
+                        </span>
+                        <span className="text-sm font-bold text-[color:var(--foreground)]">
+                          {reviewingTransaction.metadata.tickets_requested.toLocaleString('es-EC')}
+                        </span>
                       </div>
                     )}
                   </div>

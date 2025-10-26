@@ -26,7 +26,7 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
   // Fetch raffle details with specific fields and status filter
   const { data: raffle, error } = await supabase
     .from('raffles')
-    .select('id, title, description, prize_description, prize_category, image_url, draw_date, entry_mode, max_entries_per_user, status, ticket_price, stripe_price_id')
+    .select('id, title, description, prize_description, prize_category, image_url, draw_date, entry_mode, max_entries_per_user, status, ticket_price')
     .eq('id', id)
     .in('status', ['active', 'closed', 'drawn'])
     .single();
@@ -56,18 +56,18 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
     console.error('Error fetching user entries:', entriesError);
   }
 
-  // Fetch total entries count
-  const { count: totalEntries, error: countError } = await supabase
+  // Fetch total unique participants count
+  const { data: entriesData, error: countError } = await supabase
     .from('raffle_entries')
-    .select('id', { count: 'exact', head: true })
+    .select('user_id')
     .eq('raffle_id', id);
 
   if (countError) {
     console.error('Error fetching entries count:', countError);
   }
 
-  // Ensure totalEntries is a number, default to 0 if null
-  const entriesCount = totalEntries ?? 0;
+  // Count unique participants
+  const uniqueParticipants = new Set(entriesData?.map(entry => entry.user_id) || []).size;
 
   // Check if user has active subscription with expiration validation
   const now = new Date().toISOString();
@@ -88,7 +88,7 @@ export default async function SorteoDetailPage({ params }: { params: Promise<Par
     <RaffleDetailPage
       raffle={raffle}
       userEntries={userEntries || []}
-      totalEntries={entriesCount}
+      totalEntries={uniqueParticipants}
       hasActiveSubscription={Boolean(subscriptions && subscriptions.length > 0)}
       paymentMethods={paymentMethods}
     />

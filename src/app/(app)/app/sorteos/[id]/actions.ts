@@ -9,9 +9,11 @@ import { getAppBaseUrl } from '../../../../../lib/payments/utils';
 
 type ManualTransferPayload = {
   paymentMethodId: string;
-  reference?: string;
+  reference: string;
   notes?: string;
   receiptUrl?: string;
+  amount: number;
+  tickets: number;
 };
 
 type StripeCheckoutPayload = {
@@ -94,6 +96,31 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
       };
     }
 
+    const cleanReference = payload.reference.trim();
+    if (!cleanReference) {
+      return {
+        success: false,
+        error: 'Debes ingresar el número de comprobante o transacción.',
+      };
+    }
+
+    const rawAmount = Number(payload.amount);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      return {
+        success: false,
+        error: 'El monto ingresado no es válido.',
+      };
+    }
+
+    if (!Number.isInteger(payload.tickets) || payload.tickets <= 0) {
+      return {
+        success: false,
+        error: 'El número de boletos calculado no es válido.',
+      };
+    }
+
+    const cleanNotes = payload.notes?.trim();
+
     const config = paymentMethod.config ?? {};
     const manualConfig = config.manual ?? {};
     const qrConfig = config.qr ?? {};
@@ -113,15 +140,63 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
       };
     }
 
-    // El precio ahora viene del sorteo, no del método de pago
-    const amount = raffle.ticket_price || 0;
+    const ticketPrice = raffle.ticket_price || 0;
 
-    if (!amount) {
+    if (!ticketPrice) {
       return {
         success: false,
         error: 'Este sorteo no tiene un precio configurado.',
       };
     }
+
+    const countDecimals = (value: number) => {
+      if (!Number.isFinite(value)) return 0;
+      const lower = value.toString().toLowerCase();
+      if (lower.includes('e-')) {
+        const exponent = Number.parseInt(lower.split('e-')[1] ?? '0', 10);
+        return Number.isFinite(exponent) ? exponent : 0;
+      }
+      const decimals = lower.split('.')[1];
+      return decimals ? decimals.length : 0;
+    };
+
+    const decimals = Math.min(Math.max(countDecimals(rawAmount), countDecimals(ticketPrice), 2), 6);
+    const factor = 10 ** decimals;
+    const normalizedAmount = Math.round((rawAmount + Number.EPSILON) * factor);
+    const normalizedPrice = Math.round((ticketPrice + Number.EPSILON) * factor);
+
+    if (normalizedPrice <= 0) {
+      return {
+        success: false,
+        error: 'El precio configurado del sorteo no es válido.',
+      };
+    }
+
+    if (normalizedAmount % normalizedPrice !== 0) {
+      return {
+        success: false,
+        error: 'El monto ingresado no coincide con múltiplos del precio del boleto.',
+      };
+    }
+
+    const normalizedTickets = normalizedAmount / normalizedPrice;
+
+    if (!Number.isFinite(normalizedTickets) || normalizedTickets <= 0) {
+      return {
+        success: false,
+        error: 'El número de boletos calculado no es válido.',
+      };
+    }
+
+    if (normalizedTickets !== payload.tickets) {
+      return {
+        success: false,
+        error: 'El monto ingresado no coincide con la cantidad de boletos solicitada.',
+      };
+    }
+
+    const amount = Number((normalizedAmount / factor).toFixed(decimals));
+    const tickets = payload.tickets;
 
     const { error: insertError } = await supabase.from('payment_transactions').insert({
       user_id: user.id,
@@ -132,18 +207,21 @@ export async function createManualTransferPayment(raffleId: string, payload: Man
       amount,
       currency,
       status: 'pending',
-      receipt_reference: payload.reference || null,
+      receipt_reference: cleanReference,
       receipt_url: payload.receiptUrl || null,
       metadata: {
         payment_type: paymentMethod.type,
         payment_method_name: paymentMethod.name,
-        notes: payload.notes || null,
+        notes: cleanNotes || null,
         ...(paymentMethod.type === 'manual_transfer' && { manual_config: manualConfig }),
         ...(paymentMethod.type === 'qr_code' && { qr_config: qrConfig }),
         raffle: {
           id: raffle.id,
           title: raffle.title,
         },
+        ticket_price: ticketPrice,
+        tickets_requested: tickets,
+        amount_confirmed: amount,
         requested_at: new Date().toISOString(),
       },
     });
@@ -204,7 +282,7 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
     // Traer información del sorteo incluyendo precio y stripe_price_id
     const { data: raffle, error: raffleError } = await supabase
       .from('raffles')
-      .select('id, title, status, ticket_price, stripe_price_id')
+      .select('id, title, status, ticket_price')
       .eq('id', raffleId)
       .maybeSingle();
 
@@ -217,13 +295,11 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
 
     // El precio ahora viene del sorteo
     const amount = raffle.ticket_price || 0;
-    
-    if (!raffle.stripe_price_id) {
-      return {
-        success: false,
-        error: 'Este sorteo no está configurado para pagos con Stripe. Contacta al administrador.',
-      };
-    }
+
+    // No validamos `stripe_price_id` desde el cliente porque la columna fue retirada
+    // o puede moverse a la configuración del método de pago. Confiamos en la
+    // validación server-side al crear la sesión de Stripe. Aquí no mostramos
+    // error por ausencia de price_id para evitar errores de tipado/runtime.
 
     const stripe = getStripeClient();
     const baseUrl = getAppBaseUrl();
@@ -235,7 +311,7 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       mode: stripeConfig.mode || 'payment',
       line_items: [
         {
-          price: raffle.stripe_price_id, // Ahora viene del sorteo
+          price: raffle.ticket_price, // Ahora viene del sorteo
           quantity: 1,
         },
       ],

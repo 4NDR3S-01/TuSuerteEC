@@ -19,6 +19,7 @@ type Raffle = {
   total_winners: number;
   max_entries_per_user: number | null;
   is_trending: boolean;
+  ticket_price?: number | null;
   created_at: string;
   _count?: {
     raffle_entries: number;
@@ -42,6 +43,7 @@ type RaffleFormData = {
   total_winners: number;
   max_entries_per_user: number | null;
   is_trending: boolean;
+  ticket_price?: number | null;
 };
 
 const STATUS_LABELS = {
@@ -310,7 +312,7 @@ export function RafflesTable({ initialRaffles, totalCount }: RafflesTableProps) 
                   Fechas
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                  Participantes
+                  Ventas
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                   Acciones
@@ -556,6 +558,7 @@ function RaffleFormModal({
     total_winners: raffle?.total_winners || 1,
     max_entries_per_user: raffle?.max_entries_per_user || null,
     is_trending: raffle?.is_trending || false,
+    ticket_price: raffle?.ticket_price ?? null,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -915,6 +918,28 @@ function RaffleFormModal({
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                 Dejar vacío para ilimitado
               </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-[color:var(--foreground)] mb-2">
+                Precio por boleto (USD)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.ticket_price ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const parsed = v === '' ? null : Number.parseFloat(v);
+                  setFormData({ ...formData, ticket_price: parsed });
+                }}
+                className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-2 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                placeholder="Ej. 2.50"
+              />
+              <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">Dejar vacío o 0 para sorteos sin boleto.</p>
             </div>
           </div>
 

@@ -1,13 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   checkRaffleEligibility,
   createManualTransferPayment,
   createStripeCheckoutSession,
 } from '../../app/(app)/app/sorteos/[id]/actions';
+import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import type { PaymentMethod, PaymentMethodConfig } from '../../lib/payments/types';
+
+// Opciones rápidas para selección de boletos
+const QUICK_TICKET_OPTIONS = [1, 2, 5, 10];
 
 // Helper para traducir el modo de entrada
 const getEntryModeLabel = (mode: string): string => {
@@ -37,6 +41,31 @@ const getPrizeCategoryLabel = (category: string | null): string => {
   return labels[category] || category;
 };
 
+const MAX_DECIMALS = 6;
+
+const countDecimals = (value: number): number => {
+  if (!Number.isFinite(value)) return 0;
+  const text = value.toString().toLowerCase();
+  if (text.includes('e-')) {
+    const exponent = Number.parseInt(text.split('e-')[1] ?? '0', 10);
+    return Number.isFinite(exponent) ? Math.max(exponent, 0) : 0;
+  }
+  const decimals = text.split('.')[1];
+  return decimals ? decimals.length : 0;
+};
+
+const trimTrailingZeros = (value: string): string =>
+  value.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/\.$/, '');
+
+const formatAmountFromTickets = (ticketPrice: number, tickets: number): string => {
+  if (!Number.isFinite(ticketPrice) || ticketPrice <= 0 || !Number.isFinite(tickets)) {
+    return '';
+  }
+  const decimals = Math.min(Math.max(countDecimals(ticketPrice), 2), MAX_DECIMALS);
+  const amount = ticketPrice * tickets;
+  return trimTrailingZeros(amount.toFixed(decimals));
+};
+
 type Raffle = {
   readonly id: string;
   readonly title: string;
@@ -49,7 +78,6 @@ type Raffle = {
   readonly entry_mode: string;
   readonly max_entries_per_user: number | null;
   readonly ticket_price: number | null;
-  readonly stripe_price_id: string | null;
 };
 
 type Entry = {
@@ -86,15 +114,21 @@ export function RaffleDetailPage({
   const [isProcessing, setIsProcessing] = useState(false);
   const [manualReference, setManualReference] = useState('');
   const [manualNotes, setManualNotes] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualTickets, setManualTickets] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [manualFeedback, setManualFeedback] = useState<{
     message: string;
     manual?: PaymentMethodConfig['manual'];
+    amount?: number;
+    tickets?: number;
+    currency?: string;
   } | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [priceValidationError, setPriceValidationError] = useState<string | null>(null);
+  const [visibleParticipants, setVisibleParticipants] = useState<number>(totalEntries);
 
   const drawDate = new Date(raffle.draw_date);
   const now = new Date();
@@ -194,17 +228,125 @@ export function RaffleDetailPage({
     [selectedConfig],
   );
 
+  const ticketPriceValue = raffle.ticket_price ?? 0;
   const methodCurrency = selectedConfig.currency ?? 'USD';
+
+  // Validar y convertir códigos de moneda no estándar
+  const getValidCurrencyCode = (currency: string): string => {
+    const currencyMap: Record<string, string> = {
+      'USDT': 'USD', // Tether -> USD
+      'USDC': 'USD', // USD Coin -> USD
+      'BTC': 'USD',  // Bitcoin -> USD (aproximación)
+      'ETH': 'USD',  // Ethereum -> USD (aproximación)
+    };
+    return currencyMap[currency] || currency;
+  };
+
+  const validCurrencyCode = getValidCurrencyCode(methodCurrency);
+
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat('es-EC', { style: 'currency', currency: validCurrencyCode }),
+    [validCurrencyCode],
+  );
+  const computeManualEntry = useCallback(
+    (rawAmount: string) => {
+      if (!rawAmount) {
+        return { amount: null as number | null, tickets: null as number | null, error: null as string | null };
+      }
+
+      const sanitized = rawAmount.replace(',', '.');
+      if (!/^\d*(?:\.\d{0,6})?$/.test(sanitized)) {
+        return { amount: null, tickets: null, error: 'Ingresa un monto válido.' };
+      }
+
+      const parsed = Number.parseFloat(sanitized);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return { amount: null, tickets: null, error: 'Ingresa un monto válido.' };
+      }
+
+      if (!ticketPriceValue || ticketPriceValue <= 0) {
+        return {
+          amount: parsed,
+          tickets: null,
+          error: 'Este sorteo no tiene un precio configurado.',
+        };
+      }
+
+      const decimals = Math.min(
+        Math.max(countDecimals(parsed), countDecimals(ticketPriceValue), 2),
+        MAX_DECIMALS,
+      );
+      const factor = 10 ** decimals;
+      const normalizedAmount = Math.round((parsed + Number.EPSILON) * factor);
+      const normalizedPrice = Math.round((ticketPriceValue + Number.EPSILON) * factor);
+
+      if (normalizedAmount < normalizedPrice) {
+        return {
+          amount: parsed,
+          tickets: null,
+          error: `El monto mínimo es ${currencyFormatter.format(ticketPriceValue)}.`,
+        };
+      }
+
+      if (normalizedPrice === 0 || normalizedAmount % normalizedPrice !== 0) {
+        return {
+          amount: parsed,
+          tickets: null,
+          error: `El monto debe ser múltiplo de ${currencyFormatter.format(ticketPriceValue)}.`,
+        };
+      }
+
+      const tickets = normalizedAmount / normalizedPrice;
+      if (!Number.isFinite(tickets) || tickets < 1) {
+        return {
+          amount: parsed,
+          tickets: null,
+          error: `Debes ingresar al menos ${currencyFormatter.format(ticketPriceValue)}.`,
+        };
+      }
+
+      const normalizedAmountValue = Number((normalizedAmount / factor).toFixed(decimals));
+      return { amount: normalizedAmountValue, tickets, error: null };
+    },
+    [currencyFormatter, ticketPriceValue],
+  );
+
+  const manualAmountInfo = useMemo(
+    () => computeManualEntry(manualAmount),
+    [computeManualEntry, manualAmount],
+  );
+  const manualTicketsLabel = useMemo(
+    () => (manualAmountInfo.tickets ? manualAmountInfo.tickets.toLocaleString('es-EC') : ''),
+    [manualAmountInfo.tickets],
+  );
+  const ticketUnitPriceLabel = useMemo(
+    () => currencyFormatter.format(ticketPriceValue),
+    [currencyFormatter, ticketPriceValue],
+  );
   const isStripeMethod = selectedMethod?.type === 'stripe';
   const isManualMethod = selectedMethod?.type === 'manual_transfer';
   const isQrMethod = selectedMethod?.type === 'qr_code';
   const hasPaymentMethods = paymentMethods.length > 0;
-  
+  const manualReferenceTrimmed = manualReference.trim();
+  const requiresManualData = isManualMethod || isQrMethod;
+  const manualFormInvalid =
+    requiresManualData &&
+    (!manualReferenceTrimmed || !manualAmountInfo.amount || Boolean(manualAmountInfo.error));
+  const feedbackCurrencyFormatter = useMemo(
+    () => new Intl.NumberFormat('es-EC', { style: 'currency', currency: getValidCurrencyCode(manualFeedback?.currency ?? methodCurrency) }),
+    [manualFeedback?.currency, methodCurrency],
+  );
+  const manualFeedbackTicketsLabel = useMemo(
+    () => (manualFeedback?.tickets ? manualFeedback.tickets.toLocaleString('es-EC') : ''),
+    [manualFeedback?.tickets],
+  );
+
   const confirmDisabled =
     !isEligible ||
     !selectedMethod ||
     isProcessing ||
     Boolean(priceValidationError) ||
+    manualFormInvalid ||
     ((isManualMethod || isQrMethod) && Boolean(manualFeedback));
 
   const eligibilityMessage = useMemo(() => {
@@ -243,6 +385,8 @@ export function RaffleDetailPage({
       setStripeError(null);
       setManualReference('');
       setManualNotes('');
+      setManualAmount('');
+      setManualTickets('');
       setReceiptFile(null);
       setReceiptPreview(null);
       setPriceValidationError(null);
@@ -254,7 +398,7 @@ export function RaffleDetailPage({
       setSelectedMethodId(paymentMethods[0].id);
     }
 
-    let cancelled = false;
+    let isCancelled = false;
     setIsCheckingEligibility(true);
     setManualFeedback(null);
     setManualError(null);
@@ -262,12 +406,12 @@ export function RaffleDetailPage({
 
     checkRaffleEligibility(raffle.id)
       .then((result) => {
-        if (!cancelled) {
+        if (!isCancelled) {
           setEligibility(result);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!isCancelled) {
           setEligibility({
             eligible: false,
             reason: 'unknown_error',
@@ -275,15 +419,43 @@ export function RaffleDetailPage({
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!isCancelled) {
           setIsCheckingEligibility(false);
         }
       });
 
     return () => {
-      cancelled = true;
+      isCancelled = true;
     };
   }, [raffle.id, showPurchaseModal, paymentMethods, selectedMethodId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchUniqueParticipants = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data, error } = await supabase.rpc('get_raffle_unique_participants_count', {
+          p_raffle_id: raffle.id,
+        });
+        if (error) {
+          console.error('[RaffleDetailPage] RPC error fetching participants count:', error);
+          return;
+        }
+        if (!isCancelled) {
+          setVisibleParticipants(Number(data ?? totalEntries));
+        }
+      } catch (err) {
+        console.error('[RaffleDetailPage] Error calling RPC:', err);
+      }
+    };
+
+    fetchUniqueParticipants();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [raffle.id, totalEntries]);
 
   // Validar precios cuando se selecciona un método de pago
   useEffect(() => {
@@ -294,11 +466,11 @@ export function RaffleDetailPage({
 
     // Validar precios según el tipo de método de pago
     if (selectedMethod.type === 'stripe') {
-      if (!raffle.stripe_price_id) {
-        setPriceValidationError('⚠️ Este sorteo no tiene configurado un precio para pagos con Stripe. Contacta al administrador.');
-      } else {
-        setPriceValidationError(null);
-      }
+      // No validamos `stripe_price_id` desde el cliente porque la columna fue retirada
+      // o puede moverse a la configuración del método de pago. Confiamos en la
+      // validación server-side al crear la sesión de Stripe. Aquí no mostramos
+      // error por ausencia de price_id para evitar errores de tipado/runtime.
+      setPriceValidationError(null);
     } else if (selectedMethod.type === 'manual_transfer' || selectedMethod.type === 'qr_code') {
       if (!raffle.ticket_price || raffle.ticket_price <= 0) {
         setPriceValidationError('⚠️ Este sorteo no tiene configurado un precio válido. Contacta al administrador.');
@@ -308,7 +480,7 @@ export function RaffleDetailPage({
     } else {
       setPriceValidationError(null);
     }
-  }, [selectedMethod, raffle.stripe_price_id, raffle.ticket_price]);
+  }, [selectedMethod, raffle.ticket_price]);
 
   const handleOpenPurchaseModal = () => {
     if (paymentMethods.length > 0) {
@@ -375,6 +547,73 @@ export function RaffleDetailPage({
     reader.readAsDataURL(file);
   };
 
+  const handleRemoveReceipt = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    if (manualError) {
+      setManualError(null);
+    }
+  };
+
+  const handleManualAmountChange = (rawValue: string) => {
+    const sanitized = rawValue.replace(',', '.');
+    if (/^\d*(?:\.\d{0,6})?$/.test(sanitized) || sanitized === '') {
+      setManualAmount(sanitized);
+      if (manualError) {
+        setManualError(null);
+      }
+
+      if (sanitized === '') {
+        setManualTickets('');
+        return;
+      }
+
+      const result = computeManualEntry(sanitized);
+      if (result.tickets && Number.isFinite(result.tickets)) {
+        setManualTickets(result.tickets.toString());
+      } else {
+        setManualTickets('');
+      }
+    }
+  };
+
+  const handleManualTicketsChange = (rawValue: string) => {
+    if (!/^\d*$/.test(rawValue)) {
+      return;
+    }
+
+    setManualTickets(rawValue);
+    if (manualError) {
+      setManualError(null);
+    }
+
+    if (rawValue === '') {
+      setManualAmount('');
+      return;
+    }
+
+    const parsed = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setManualAmount('');
+      return;
+    }
+
+    if (!ticketPriceValue || ticketPriceValue <= 0) {
+      setManualAmount('');
+      return;
+    }
+
+    const formattedAmount = formatAmountFromTickets(ticketPriceValue, parsed);
+    setManualAmount(formattedAmount);
+  };
+
+  const handleQuickTicketSelect = (tickets: number) => {
+    if (!Number.isFinite(tickets) || tickets <= 0) {
+      return;
+    }
+    handleManualTicketsChange(tickets.toString());
+  };
+
   const handleConfirmPayment = async () => {
     if (!selectedMethod) return;
 
@@ -405,6 +644,20 @@ export function RaffleDetailPage({
     }
 
     if (selectedMethod.type === 'manual_transfer' || selectedMethod.type === 'qr_code') {
+      if (!manualReferenceTrimmed) {
+        setManualError('Debes ingresar el número de comprobante o transacción.');
+        setIsProcessing(false);
+        return;
+      }
+
+      const amountToSend = manualAmountInfo.amount;
+      const ticketsToSend = manualAmountInfo.tickets;
+      if (!amountToSend || !ticketsToSend || manualAmountInfo.error) {
+        setManualError(manualAmountInfo.error ?? 'Debes ingresar el valor depositado o transferido.');
+        setIsProcessing(false);
+        return;
+      }
+
       try {
         let receiptUrl: string | undefined;
 
@@ -451,15 +704,22 @@ export function RaffleDetailPage({
 
         const result = await createManualTransferPayment(raffle.id, {
           paymentMethodId: selectedMethod.id,
-          reference: manualReference || undefined,
-          notes: manualNotes || undefined,
+          reference: manualReferenceTrimmed,
+          notes: manualNotes.trim() || undefined,
           receiptUrl,
+          amount: amountToSend,
+          tickets: ticketsToSend,
         });
 
         if (result.success) {
           setManualFeedback({
             message: result.message ?? 'Solicitud registrada. Sigue las instrucciones para completar tu pago.',
-            manual: (result.instructions as PaymentMethodConfig['manual']) ?? selectedManualConfig,
+            manual: selectedMethod.type === 'manual_transfer'
+              ? ((result.instructions as PaymentMethodConfig['manual']) ?? selectedManualConfig)
+              : undefined,
+            amount: amountToSend,
+            tickets: ticketsToSend,
+            currency: methodCurrency,
           });
         } else {
           setManualError(result.error ?? 'No pudimos registrar tu solicitud. Intenta más tarde.');
@@ -576,7 +836,7 @@ export function RaffleDetailPage({
               {/* Stats Grid - Mejorado */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-gradient-to-br from-[color:var(--accent)]/10 to-orange-500/10 border border-[color:var(--accent)]/20 rounded-2xl">
-                  <div className="text-3xl font-black text-[color:var(--accent)] mb-1">{totalEntries}</div>
+                  <div className="text-3xl font-black text-[color:var(--accent)] mb-1">{visibleParticipants}</div>
                   <div className="text-xs text-[color:var(--muted-foreground)] font-semibold">Participantes</div>
                 </div>
                 
@@ -760,7 +1020,7 @@ export function RaffleDetailPage({
                       >
                         <span className="flex items-center justify-center gap-2">
                           <span>🎫</span>
-                          <span>Elegir Método de Pago</span>
+                          <span>Comprar Boleto</span>
                         </span>
                       </button>
                     )}
@@ -832,7 +1092,7 @@ export function RaffleDetailPage({
                     <span>Total Participantes</span>
                   </span>
                   <span className="text-sm font-black text-green-600 dark:text-green-400">
-                    {totalEntries}
+                    {visibleParticipants}
                   </span>
                 </div>
                 {userEntryCount > 0 && (
@@ -1042,14 +1302,82 @@ export function RaffleDetailPage({
                               <div className="space-y-3">
                                 <div>
                                   <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
-                                    Número de referencia (opcional)
+                                    Número de comprobante / transacción (obligatorio)
                                   </label>
                                   <input
                                     type="text"
                                     value={manualReference}
-                                    onChange={(e) => setManualReference(e.target.value)}
+                                    onChange={(e) => {
+                                      setManualReference(e.target.value);
+                                      if (manualError) {
+                                        setManualError(null);
+                                      }
+                                    }}
                                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                                   />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Cantidad de boletos (obligatorio)
+                                  </label>
+                                  <div className="space-y-2">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={manualTickets}
+                                      onChange={(e) => handleManualTicketsChange(e.target.value)}
+                                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                      placeholder="Ej. 1"
+                                    />
+                                    {ticketPriceValue > 0 && (
+                                      <div className="flex flex-wrap gap-2 text-xs">
+                                        {QUICK_TICKET_OPTIONS.map((option) => {
+                                          const isActive = manualTickets === option.toString();
+                                          return (
+                                            <button
+                                              type="button"
+                                              key={option}
+                                              onClick={() => handleQuickTicketSelect(option)}
+                                              className={`rounded-full border px-3 py-1 font-semibold transition-colors ${
+                                                isActive
+                                                  ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 text-[color:var(--accent)]'
+                                                  : 'border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:border-[color:var(--accent)]/60 hover:text-[color:var(--accent)]'
+                                              }`}
+                                            >
+                                              {option} {option === 1 ? 'boleto' : 'boletos'}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Valor depositado o transferido (obligatorio)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    pattern="[0-9]*[.,]?[0-9]*"
+                                    value={manualAmount}
+                                    onChange={(e) => handleManualAmountChange(e.target.value)}
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                    placeholder={`Ej. ${ticketUnitPriceLabel}`}
+                                  />
+                                  {manualAmount && (
+                                    manualAmountInfo.error ? (
+                                      <p className="mt-1 text-xs text-red-500">
+                                        {manualAmountInfo.error}
+                                      </p>
+                                    ) : manualAmountInfo.tickets ? (
+                                      <p className="mt-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                                        Obtendrás {manualTicketsLabel}{' '}
+                                        {manualAmountInfo.tickets === 1 ? 'boleto' : 'boletos'} ({ticketUnitPriceLabel} c/u)
+                                      </p>
+                                    ) : null
+                                  )}
                                 </div>
                                 <div>
                                   <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
@@ -1062,7 +1390,7 @@ export function RaffleDetailPage({
                                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                                   />
                                 </div>
-                                
+
                                 {/* Campo de comprobante */}
                                 <div>
                                   <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
@@ -1077,14 +1405,21 @@ export function RaffleDetailPage({
                                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                                     Sube una imagen del comprobante (JPG, PNG, máx. 5MB)
                                   </p>
-                                  
+
                                   {receiptPreview && (
-                                    <div className="mt-2">
-                                      <img 
-                                        src={receiptPreview} 
-                                        alt="Vista previa del comprobante" 
-                                        className="max-h-40 rounded-lg border border-[color:var(--border)]"
+                                    <div className="mt-2 flex items-center gap-3">
+                                      <img
+                                        src={receiptPreview}
+                                        alt="Vista previa del comprobante"
+                                        className="max-h-32 rounded-lg border border-[color:var(--border)]"
                                       />
+                                      <button
+                                        type="button"
+                                        onClick={handleRemoveReceipt}
+                                        className="text-xs font-semibold text-red-600 transition-colors hover:text-red-500"
+                                      >
+                                        Quitar imagen
+                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -1094,6 +1429,11 @@ export function RaffleDetailPage({
                             {manualFeedback && (
                               <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-xs text-green-600 dark:text-green-400">
                                 <p className="font-semibold mb-2">{manualFeedback.message}</p>
+                                {typeof manualFeedback.amount === 'number' && typeof manualFeedback.tickets === 'number' && (
+                                  <p className="mb-2 text-[color:var(--foreground)]">
+                                    Monto registrado: <span className="font-semibold">{feedbackCurrencyFormatter.format(manualFeedback.amount)}</span> · Boletos solicitados: <span className="font-semibold">{manualFeedbackTicketsLabel}</span>
+                                  </p>
+                                )}
                                 <p>
                                   Nuestro equipo revisará tu comprobante y confirmará el pago. Guarda la referencia y envía el comprobante cuando se te solicite.
                                 </p>
@@ -1144,15 +1484,83 @@ export function RaffleDetailPage({
                               <div className="space-y-3">
                                 <div>
                                   <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
-                                    Número de transacción (opcional)
+                                    Número de comprobante / transacción (obligatorio)
                                   </label>
                                   <input
                                     type="text"
                                     value={manualReference}
-                                    onChange={(e) => setManualReference(e.target.value)}
+                                    onChange={(e) => {
+                                      setManualReference(e.target.value);
+                                      if (manualError) {
+                                        setManualError(null);
+                                      }
+                                    }}
                                     className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                                     placeholder="Ingresa el ID de transacción"
                                   />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Cantidad de boletos (obligatorio)
+                                  </label>
+                                  <div className="space-y-2">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={manualTickets}
+                                      onChange={(e) => handleManualTicketsChange(e.target.value)}
+                                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                      placeholder="Ej. 1"
+                                    />
+                                    {ticketPriceValue > 0 && (
+                                      <div className="flex flex-wrap gap-2 text-xs">
+                                        {QUICK_TICKET_OPTIONS.map((option) => {
+                                          const isActive = manualTickets === option.toString();
+                                          return (
+                                            <button
+                                              type="button"
+                                              key={option}
+                                              onClick={() => handleQuickTicketSelect(option)}
+                                              className={`rounded-full border px-3 py-1 font-semibold transition-colors ${
+                                                isActive
+                                                  ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 text-[color:var(--accent)]'
+                                                  : 'border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:border-[color:var(--accent)]/60 hover:text-[color:var(--accent)]'
+                                              }`}
+                                            >
+                                              {option} {option === 1 ? 'boleto' : 'boletos'}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                    Valor depositado o transferido (obligatorio)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    pattern="[0-9]*[.,]?[0-9]*"
+                                    value={manualAmount}
+                                    onChange={(e) => handleManualAmountChange(e.target.value)}
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                    placeholder={`Ej. ${ticketUnitPriceLabel}`}
+                                  />
+                                  {manualAmount && (
+                                    manualAmountInfo.error ? (
+                                      <p className="mt-1 text-xs text-red-500">
+                                        {manualAmountInfo.error}
+                                      </p>
+                                    ) : manualAmountInfo.tickets ? (
+                                      <p className="mt-1 text-xs font-semibold text-green-600 dark:text-green-400">
+                                        Obtendrás {manualTicketsLabel}{' '}
+                                        {manualAmountInfo.tickets === 1 ? 'boleto' : 'boletos'} ({ticketUnitPriceLabel} c/u)
+                                      </p>
+                                    ) : null
+                                  )}
                                 </div>
                                 <div>
                                   <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
@@ -1181,14 +1589,21 @@ export function RaffleDetailPage({
                                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                                     Sube una captura de pantalla del pago (JPG, PNG, máx. 5MB)
                                   </p>
-                                  
+
                                   {receiptPreview && (
-                                    <div className="mt-2">
-                                      <img 
-                                        src={receiptPreview} 
-                                        alt="Vista previa del comprobante" 
-                                        className="max-h-40 rounded-lg border border-[color:var(--border)]"
+                                    <div className="mt-2 flex items-center gap-3">
+                                      <img
+                                        src={receiptPreview}
+                                        alt="Vista previa del comprobante"
+                                        className="max-h-32 rounded-lg border border-[color:var(--border)]"
                                       />
+                                      <button
+                                        type="button"
+                                        onClick={handleRemoveReceipt}
+                                        className="text-xs font-semibold text-red-600 transition-colors hover:text-red-500"
+                                      >
+                                        Quitar imagen
+                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -1198,8 +1613,13 @@ export function RaffleDetailPage({
                             {manualFeedback && (
                               <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-xs text-green-600 dark:text-green-400">
                                 <p className="font-semibold mb-2">{manualFeedback.message}</p>
+                                {typeof manualFeedback.amount === 'number' && typeof manualFeedback.tickets === 'number' && (
+                                  <p className="mb-2 text-[color:var(--foreground)]">
+                                    Monto registrado: <span className="font-semibold">{feedbackCurrencyFormatter.format(manualFeedback.amount)}</span> · Boletos solicitados: <span className="font-semibold">{manualFeedbackTicketsLabel}</span>
+                                  </p>
+                                )}
                                 <p>
-                                  Nuestro equipo revisará tu comprobante de pago QR y confirmará la transacción. 
+                                  Nuestro equipo revisará tu comprobante de pago QR y confirmará la transacción.
                                   {selectedQrConfig.requiresProof !== false && ' Asegúrate de guardar la captura de pantalla del pago.'}
                                 </p>
                               </div>
