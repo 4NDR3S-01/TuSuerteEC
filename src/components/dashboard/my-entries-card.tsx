@@ -108,7 +108,12 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
                   : 'bg-gradient-to-br from-[color:var(--accent)] to-orange-500'
               }`}>
                 <span className="text-[10px] opacity-75">BOLETO</span>
-                <span className="text-base leading-none">#{entry.ticket_number}</span>
+                <span
+                  className="text-base leading-none max-w-[4.5rem] truncate text-center whitespace-nowrap px-1"
+                  title={`#${entry.ticket_number}`}
+                >
+                  #{entry.ticket_number}
+                </span>
                 {isWinner && (
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
                     <span className="text-lg">🏆</span>

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 type Props = {
   clientSecret: string;
@@ -11,72 +12,48 @@ type Props = {
   submitLabel?: string;
 };
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 export default function StripePaymentForm(props: Props) {
   const { clientSecret } = props;
-  const [stripeModule, setStripeModule] = useState<any | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        // Ahora que la dependencia está instalada, usamos la importación dinámica normal.
-        const mod = await import('@stripe/react-stripe-js');
-        if (mounted) setStripeModule(mod);
-      } catch (err) {
-        console.warn('Stripe React module not available (dynamic import failed):', err);
-        if (mounted)
-          setLoadError(
-            'La librería de Stripe no está instalada. Para habilitar pagos con tarjeta instala `@stripe/react-stripe-js` en tu proyecto.'
-          );
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const options: StripeElementsOptions = useMemo(() => ({ clientSecret }), [clientSecret]);
 
-  if (loadError) {
-    return <div className="p-4 text-sm text-amber-700">{loadError}</div>;
+  if (!publishableKey) {
+    return (
+      <div className="p-4 text-sm text-red-600">
+        Falta la variable `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Configúrala para habilitar los pagos con tarjeta.
+      </div>
+    );
   }
 
-  if (!stripeModule) {
-    return <div className="p-4 text-sm text-[color:var(--muted-foreground)]">Cargando formulario de pago...</div>;
+  if (!stripePromise) {
+    return <div className="p-4 text-sm text-red-600">No se pudo inicializar Stripe. Revisa la configuración.</div>;
   }
-
-  const Elements = stripeModule.Elements;
-  const CardElement = stripeModule.CardElement;
-  const useStripeHook = stripeModule.useStripe;
-  const useElementsHook = stripeModule.useElements;
 
   return (
-    <Elements stripe={stripePromise} options={options}>
-      <InnerPaymentForm
-        CardElement={CardElement}
-        useStripeHook={useStripeHook}
-        useElementsHook={useElementsHook}
-        {...props}
-      />
+    <Elements
+      stripe={stripePromise}
+      options={{
+        ...options,
+        loader: 'auto',
+      }}
+    >
+      <InnerPaymentForm {...props} />
     </Elements>
   );
 }
 
 function InnerPaymentForm({
-  CardElement,
-  useStripeHook,
-  useElementsHook,
   clientSecret,
   onSuccess,
   onError,
   onCancel,
   submitLabel,
 }: any) {
-  const stripe = useStripeHook();
-  const elements = useElementsHook();
+  const stripe = useStripe();
+  const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

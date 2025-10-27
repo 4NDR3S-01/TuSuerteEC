@@ -24,6 +24,7 @@ type Plan = {
   price: number;
   currency: string;
   interval: string;
+  benefits?: Record<string, unknown> | string[] | null;
 };
 
 type Subscription = {
@@ -71,6 +72,7 @@ type ParticipantDashboardProps = {
   activeRaffles: Raffle[];
   myEntries: RaffleEntry[];
   recentWinners: Winner[];
+  winsCount?: number;
   alertEvent?: {
     id: string;
     title: string;
@@ -87,9 +89,11 @@ export function ParticipantDashboard({
   activeRaffles, 
   myEntries, 
   recentWinners,
+  winsCount = 0,
   alertEvent = null
 }: Readonly<ParticipantDashboardProps>) {
-  const totalWins = myEntries.filter(entry => entry.is_winner).length;
+  const winningEntries = myEntries.filter(entry => entry.is_winner);
+  const totalWins = Math.max(winsCount, winningEntries.length);
   
   // Keyboard shortcuts para power users
   useEffect(() => {
@@ -134,14 +138,26 @@ export function ParticipantDashboard({
       timestamp: sub.current_period_end,
       icon: '💳'
     })),
-    ...myEntries.filter(e => e.is_winner).slice(0, 2).map(entry => ({
-      id: `win-${entry.id}`,
-      type: 'win' as const,
-      title: '¡Ganaste!',
-      description: entry.raffles?.title || 'Sorteo',
-      timestamp: entry.created_at,
-      icon: '🏆'
-    }))
+    ...(winningEntries.length > 0
+      ? winningEntries.slice(0, 2).map(entry => ({
+          id: `win-${entry.id}`,
+          type: 'win' as const,
+          title: '¡Ganaste!',
+          description: entry.raffles?.title || 'Sorteo',
+          timestamp: entry.created_at,
+          icon: '🏆'
+        }))
+      : recentWinners
+          .filter(winner => winner.user_id === user?.id)
+          .slice(0, 2)
+          .map(winner => ({
+            id: `win-${winner.id}`,
+            type: 'win' as const,
+            title: '¡Ganaste!',
+            description: winner.raffles?.title || 'Sorteo',
+            timestamp: winner.created_at,
+            icon: '🏆'
+          })))
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // Calcular días activos (desde la primera participación)
@@ -205,7 +221,7 @@ export function ParticipantDashboard({
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
-                      <span>Plan {activeSubscriptions[0].plans?.name}</span>
+                      <span>{activeSubscriptions[0].plans?.name}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[color:var(--muted-foreground)] text-xs">

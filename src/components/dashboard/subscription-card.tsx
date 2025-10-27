@@ -10,6 +10,7 @@ interface Subscription {
     name: string;
     price: number;
     interval?: string;
+    benefits?: Record<string, unknown> | string[] | string | null;
   };
 }
 
@@ -18,6 +19,55 @@ interface SubscriptionCardProps {
 }
 
 export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
+  const extractBenefits = (plan?: Subscription['plans']) => {
+    const benefitSource = plan?.benefits;
+    if (!benefitSource) return [];
+
+    if (Array.isArray(benefitSource)) {
+      return benefitSource.map((item) => String(item)).filter(Boolean).slice(0, 6);
+    }
+
+    if (typeof benefitSource === 'string') {
+      const raw = benefitSource.trim();
+      if (!raw) return [];
+
+      // Try to parse JSON array first
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item)).filter(Boolean).slice(0, 6);
+        }
+      } catch (_) {
+        // Not JSON, fall back to splitting by newline/comma/bullet
+      }
+      return raw
+        .split(/[\n,•;-]+/)
+        .map((text) => text.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+    }
+
+    if (typeof benefitSource !== 'object') return [];
+
+    const chips: string[] = [];
+    const benefits = benefitSource as Record<string, unknown>;
+
+    if (typeof benefits.ticket_allocation === 'number') {
+      chips.push(`${benefits.ticket_allocation} boletos incluidos`);
+    }
+    if (benefits.priority_support) {
+      chips.push('Soporte prioritario 24/7');
+    }
+    if (benefits.early_access) {
+      chips.push('Acceso anticipado');
+    }
+    if (Array.isArray(benefits.features)) {
+      chips.push(...(benefits.features as string[]));
+    }
+
+    return chips.slice(0, 4);
+  };
+
   if (!subscriptions || subscriptions.length === 0) {
     return (
       <div className="group relative bg-[color:var(--card)] border-2 border-dashed border-[color:var(--border)] rounded-2xl p-8 hover:border-[color:var(--accent)]/50 transition-all duration-300 overflow-hidden">
@@ -27,10 +77,10 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
               <span className="text-2xl">💳</span>
-              <span>Mis Suscripciones</span>
+              <span>Mi Suscripción</span>
             </h2>
             <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">
-              0 Activas
+              ¡Ninguna activa!
             </span>
           </div>
           
@@ -69,9 +119,9 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
           <span className="text-2xl">💳</span>
-          <span>Mis Suscripciones</span>
+          <span>Mi Suscripción</span>
         </h2>
-        <span className="px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-semibold rounded-full flex items-center gap-1">
+        <span className="px-3 py-1 bg-g}reen-500/10 text-green-600 dark:text-green-400 text-xs font-semibold rounded-full flex items-center gap-1">
           <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
           {subscriptions.length} Activa{subscriptions.length > 1 ? 's' : ''}
         </span>
@@ -82,6 +132,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
           const renewalDate = new Date(sub.current_period_end);
           const daysLeft = Math.ceil((renewalDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
           const isExpiring = daysLeft <= 7;
+          const benefitChips = extractBenefits(sub.plans);
 
           return (
             <div
@@ -157,12 +208,28 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
 
                 {/* Beneficios destacados */}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
-                    ✅ Participación automática
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
-                    🎁 Todos los sorteos
-                  </span>
+                  {benefitChips.length > 0 ? (
+                    benefitChips.map((benefit, idx) => (
+                      <span
+                        key={`${sub.id}-benefit-${idx}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md"
+                      >
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          ✓
+                        </span>
+                        {benefit}
+                      </span>
+                    ))
+                  ) : (
+                    <>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
+                        ✅ Participación automática
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
+                        🎁 Todos los sorteos activos
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

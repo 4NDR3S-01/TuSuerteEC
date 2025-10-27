@@ -21,6 +21,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       .eq('status', 'active')
       .eq('user_id', user.id)
       .gt('current_period_end', now)
+      .order('current_period_end', { ascending: false })
       .limit(1)
       .maybeSingle();
 

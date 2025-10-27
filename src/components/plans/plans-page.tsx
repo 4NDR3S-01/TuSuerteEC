@@ -1,6 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import StripeSubscriptionModal from '../payments/stripe-subscription-modal';
 
 type Plan = {
   readonly id: string;
@@ -9,7 +11,7 @@ type Plan = {
   readonly price: number;
   readonly currency: string;
   readonly interval: string;
-  readonly benefits: Record<string, unknown> | null; // JSONB column
+  readonly benefits: Record<string, unknown> | string[] | string | null; // JSONB column
   readonly is_active: boolean | null;
   readonly is_featured: boolean | null;
   readonly max_concurrent_raffles: number | null;
@@ -31,7 +33,18 @@ type PlansPageProps = {
 
 export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
   const [selectedInterval, setSelectedInterval] = useState<'monthly' | 'annual'>('monthly');
+  const [modalPlanId, setModalPlanId] = useState<string | null>(null);
 
+  const modalPlan = useMemo(() => {
+    if (!modalPlanId) return null;
+    return plans.find((plan) => plan.id === modalPlanId) ?? null;
+  }, [plans, modalPlanId]);
+
+  const modalPlanLite = useMemo(() => {
+    if (!modalPlan) return null;
+    const { id, name, price, currency, interval, description } = modalPlan;
+    return { id, name, price, currency, interval, description };
+  }, [modalPlan]);
   const activeSubscription = userSubscriptions.find(sub => sub.status === 'active');
   
   // Normalize plan data (could be array or object from Supabase join)
@@ -46,33 +59,50 @@ export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
 
   const getPlanFeatures = (plan: Plan): string[] => {
     const features: string[] = [];
-    
-    // Parse benefits JSONB field
-    if (plan.benefits && typeof plan.benefits === 'object') {
-      // Extract features from benefits object
-      const benefits = plan.benefits;
-      
-      // Common benefit keys to check
-      if (benefits.ticket_allocation && typeof benefits.ticket_allocation === 'number') {
-        features.push(`${benefits.ticket_allocation} boletos mensuales incluidos`);
-      }
-      if (benefits.priority_support) {
-        features.push('Soporte prioritario 24/7');
-      }
-      if (benefits.early_access) {
-        features.push('Acceso anticipado a sorteos exclusivos');
-      }
-      if (benefits.features && Array.isArray(benefits.features)) {
-        features.push(...(benefits.features as string[]));
+
+    const benefitSource = plan.benefits;
+    if (benefitSource) {
+      if (Array.isArray(benefitSource)) {
+        features.push(...benefitSource.map((item) => String(item)).filter(Boolean));
+      } else if (typeof benefitSource === 'string') {
+        const raw = benefitSource.trim();
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              features.push(...parsed.map((item) => String(item)).filter(Boolean));
+            }
+          } catch (_) {
+            features.push(
+              ...raw
+                .split(/[\n,•;-]+/)
+                .map((text) => text.trim())
+                .filter(Boolean)
+            );
+          }
+        }
+      } else if (typeof benefitSource === 'object') {
+        const benefits = benefitSource as Record<string, unknown>;
+
+        if (typeof benefits.ticket_allocation === 'number') {
+          features.push(`${benefits.ticket_allocation} boletos mensuales incluidos`);
+        }
+        if (benefits.priority_support) {
+          features.push('Soporte prioritario 24/7');
+        }
+        if (benefits.early_access) {
+          features.push('Acceso anticipado a sorteos exclusivos');
+        }
+        if (Array.isArray(benefits.features)) {
+          features.push(...(benefits.features as string[]));
+        }
       }
     }
-    
-    // Add max concurrent raffles if available
+
     if (plan.max_concurrent_raffles && plan.max_concurrent_raffles > 0) {
       features.push(`Hasta ${plan.max_concurrent_raffles} sorteos simultáneos`);
     }
-    
-    // Default features if none defined
+
     if (features.length === 0) {
       features.push(
         'Acceso a todos los sorteos activos',
@@ -89,6 +119,15 @@ export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header */}
+                <Link
+                  href="/app"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--accent)] hover:text-orange-500 transition-colors mb-4"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span>Volver al Dashboard</span>
+                </Link>
         <div className="text-center space-y-4">
           <h1 className="text-4xl font-black text-[color:var(--foreground)]">💎 Planes de Suscripción</h1>
           <p className="text-lg text-[color:var(--muted-foreground)] max-w-2xl mx-auto">
@@ -108,7 +147,7 @@ export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-green-600 dark:text-green-400">Suscripción Activa</h3>
                   <p className="text-sm text-[color:var(--muted-foreground)] mt-1">
-                    Actualmente tienes el plan <span className="font-bold">{currentPlan.name}</span>
+                    Actualmente tienes el paquete de <span className="font-bold">{currentPlan.name}</span>
                   </p>
                   <p className="text-xs text-[color:var(--muted-foreground)] mt-2">
                     Renovación: {new Date(activeSubscription.current_period_end).toLocaleDateString('es-EC')}
@@ -120,7 +159,7 @@ export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
         })()}
 
         {/* Interval Toggle */}
-        <div className="flex justify-center">
+        <div className="flex justify-center mb-6">
           <div className="inline-flex bg-[color:var(--muted)] p-1 rounded-xl">
             <button
               onClick={() => setSelectedInterval('monthly')}
@@ -156,95 +195,100 @@ export function PlansPage({ plans, userSubscriptions }: PlansPageProps) {
             <p className="text-[color:var(--muted-foreground)]">Pronto agregaremos nuevos planes</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredPlans.map((plan, index) => {
-              const isPopular = index === 1; // Middle plan is popular
-              const isPremium = index === filteredPlans.length - 1;
+              const isPopular = (plan as any).is_featured ?? index === 1; // prefer DB flag
               const isCurrentPlan = activeSubscription?.plan_id === plan.id;
               const features = getPlanFeatures(plan);
 
               return (
-                <div
+                <article
                   key={plan.id}
-                  className={`relative overflow-hidden rounded-2xl border-2 transition-all hover:shadow-2xl ${
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border transition-all hover:-translate-y-1 hover:shadow-xl ${
                     isPopular
-                      ? 'border-[color:var(--accent)] shadow-lg scale-105'
-                      : 'border-[color:var(--border)] hover:border-[color:var(--accent)]/50'
+                      ? 'border-[color:var(--accent)] bg-gradient-to-br from-[color:var(--accent)]/5 to-[color:var(--accent)]/10 shadow-lg'
+                      : 'border-[color:var(--border)] bg-[color:var(--background)]'
                   }`}
                 >
-                  {/* Badge - Solo mostrar uno */}
+                  {/* Badge */}
                   {isPopular && (
-                    <div className="absolute top-0 right-0 px-4 py-1 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white text-xs font-bold rounded-bl-xl">
-                      🔥 MÁS POPULAR
-                    </div>
-                  )}
-                  
-                  {!isPopular && isPremium && (
-                    <div className="absolute top-0 right-0 px-4 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold rounded-bl-xl">
-                      ⭐ PREMIUM
+                    <div className="absolute right-4 top-4 z-10">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                        ⭐ Popular
+                      </span>
                     </div>
                   )}
 
-                  <div className="p-8 space-y-6">
-                    {/* Plan Header */}
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-black text-[color:var(--foreground)]">{plan.name}</h3>
-                      <p className="text-sm text-[color:var(--muted-foreground)] min-h-[40px]">
-                        {plan.description}
-                      </p>
+                  <div className="flex flex-1 flex-col p-6">
+                    <div className="mb-6 space-y-2">
+                      <h3 className="text-xl font-bold text-[color:var(--foreground)]">{plan.name}</h3>
+                      <p className="text-sm text-[color:var(--muted-foreground)] min-h-[40px]">{plan.description}</p>
                     </div>
 
-                    {/* Price */}
-                    <div className="space-y-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-5xl font-black text-[color:var(--accent)]">
-                          ${plan.price}
-                        </span>
-                        <span className="text-[color:var(--muted-foreground)] text-sm">
-                          /{plan.interval === 'month' ? 'mes' : 'año'}
-                        </span>
+                    <div className="mb-6">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-bold text-[color:var(--foreground)]">${plan.price.toFixed?.(2) ?? plan.price}</span>
+                        <span className="text-sm text-[color:var(--muted-foreground)]">/{plan.interval === 'month' ? 'mes' : 'año'}</span>
                       </div>
                       {plan.interval === 'year' && (
-                        <p className="text-xs text-green-600 dark:text-green-400 font-semibold">
-                          Ahorra ${(plan.price * 0.2).toFixed(2)} al año
-                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400 font-semibold">Ahorra ${(plan.price * 0.2).toFixed(2)} al año</p>
                       )}
                     </div>
 
-                    {/* Features */}
-                    <div className="space-y-3 py-6 border-y border-[color:var(--border)]">
-                      {features.map((feature, idx) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <span className="text-green-500 text-xl flex-shrink-0">✓</span>
-                          <span className="text-sm text-[color:var(--foreground)]">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* CTA Button */}
-                    {isCurrentPlan ? (
-                      <button
-                        disabled
-                        className="w-full py-4 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] rounded-xl font-bold cursor-not-allowed"
-                      >
-                        ✓ Plan Actual
-                      </button>
-                    ) : (
-                      <button
-                        className={`w-full py-4 rounded-xl font-bold transition-all hover:shadow-lg ${
-                          isPopular || isPremium
-                            ? 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white hover:scale-105'
-                            : 'bg-[color:var(--muted)] text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/70'
-                        }`}
-                      >
-                        {activeSubscription ? 'Cambiar a este Plan' : 'Suscribirme Ahora'}
-                      </button>
+                    {plan.max_concurrent_raffles && (
+                      <div className="mb-4 rounded-lg bg-blue-500/10 px-3 py-2 text-sm">
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">Hasta {plan.max_concurrent_raffles} sorteos simultáneos</span>
+                      </div>
                     )}
+
+                    {features.length > 0 && (
+                      <ul className="mb-6 flex-1 space-y-3">
+                        {features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start gap-3 text-sm">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">✓</span>
+                            <span className="text-[color:var(--foreground)]">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="mt-auto">
+                      {isCurrentPlan ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full rounded-lg px-6 py-3 text-sm font-semibold border border-[color:var(--border)] bg-[color:var(--muted)] text-[color:var(--muted-foreground)] cursor-not-allowed"
+                        >
+                          ✓ Plan Actual
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setModalPlanId(plan.id)}
+                          className={`mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition-all ${
+                            isPopular ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg hover:shadow-xl' : 'border border-[color:var(--border)] bg-[color:var(--background)] text-[color:var(--foreground)] hover:bg-[color:var(--muted)]'
+                          }`}
+                        >
+                          {activeSubscription ? 'Cambiar a este Plan' : 'Suscribirme Ahora'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
+        )}
+
+        {modalPlanLite && (
+          <StripeSubscriptionModal
+            plan={modalPlanLite}
+            onClose={() => setModalPlanId(null)}
+            onSuccess={() => {
+              setModalPlanId(null);
+              window.location.reload();
+            }}
+          />
         )}
 
         {/* FAQ Section */}

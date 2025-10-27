@@ -136,6 +136,101 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   } else if (!didUpdate) {
     console.info('[stripe-webhook] transaction already finalized by another process, skipping entry creation', existingTransaction.id);
   }
+
+  // If this checkout created a subscription, record it in our subscriptions table
+  try {
+    if (session.mode === 'subscription' && session.subscription) {
+      // Pull subscription details from Stripe
+      const sub = await stripe.subscriptions.retrieve(String(session.subscription));
+
+      // Persist subscription in our DB. We don't store the Stripe subscription id
+      // as the PK (our `subscriptions.id` is a UUID). Instead we search for an
+      // existing row that contains this Stripe id in `stripe_raw->>id`. If none
+      // exists we insert a new subscription row and then link the transaction to
+      // that internal subscription id.
+      try {
+        const { data: existingSub } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq("stripe_raw->>id", String(sub.id))
+          .maybeSingle();
+
+        let internalSubId: string | null = null;
+
+        if (existingSub && existingSub.id) {
+          // Update existing
+          const { data: updated, error: updateErr } = await supabase
+            .from('subscriptions')
+            .update({
+              user_id: existingTransaction.user_id,
+              plan_id: session.metadata?.plan_id ?? null,
+              status: sub.status ?? 'active',
+              current_period_start: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
+              current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+              stripe_raw: sub,
+            })
+            .eq('id', existingSub.id)
+            .select('id')
+            .single();
+
+          if (updateErr) {
+            console.error('[stripe-webhook] error updating existing subscription record:', updateErr);
+          } else {
+            internalSubId = updated.id;
+            console.info('[stripe-webhook] subscription updated', updated);
+          }
+        } else {
+          const { data: inserted, error: insertErr } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: existingTransaction.user_id,
+              plan_id: session.metadata?.plan_id ?? null,
+              status: sub.status ?? 'active',
+              current_period_start: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
+              current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+              stripe_raw: sub,
+            })
+            .select('id')
+            .single();
+
+          if (insertErr) {
+            console.error('[stripe-webhook] error inserting subscription record:', insertErr);
+          } else {
+            internalSubId = inserted.id;
+            console.info('[stripe-webhook] subscription inserted', inserted);
+          }
+        }
+
+        // Link the payment transaction to our internal subscription id (if available)
+        if (internalSubId) {
+          const { error: txErr } = await supabase
+            .from('payment_transactions')
+            .update({ subscription_id: internalSubId })
+            .eq('id', existingTransaction.id);
+
+          if (txErr) console.error('[stripe-webhook] error linking transaction to subscription:', txErr);
+
+          // Ensure this user has only one active subscription: mark others as canceled
+          try {
+            const { error: cancelErr } = await supabase
+              .from('subscriptions')
+              .update({ status: 'canceled' })
+              .neq('id', internalSubId)
+              .eq('user_id', existingTransaction.user_id)
+              .eq('status', 'active');
+
+            if (cancelErr) console.error('[stripe-webhook] error canceling other subscriptions for user:', cancelErr);
+          } catch (e) {
+            console.error('[stripe-webhook] exception canceling other subscriptions:', e);
+          }
+        }
+      } catch (e) {
+        console.error('[stripe-webhook] error upserting/inserting subscription record:', e);
+      }
+    }
+  } catch (err) {
+    console.error('[stripe-webhook] error handling subscription creation from checkout session:', err);
+  }
 }
 
 async function handlePaymentIntentSucceeded(event: Stripe.Event) {
@@ -232,6 +327,85 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     }
   } else if (!didUpdate) {
     console.info('[stripe-webhook] transaction already finalized by another process, skipping entry creation', existingTransaction.id);
+  }
+
+  // If this payment intent relates to a subscription invoice, ensure we upsert the
+  // subscription record in our DB (this covers the create-subscription-intent flow
+  // where we create a subscription server-side and the client confirms the PI).
+  try {
+    if (paymentIntent.invoice) {
+      // Retrieve the invoice and expand the subscription object
+      const invoice = await stripe.invoices.retrieve(String(paymentIntent.invoice), { expand: ['subscription'] });
+      const sub = invoice.subscription as Stripe.Subscription | null;
+
+      if (sub && existingTransaction) {
+        try {
+          const { data: existingSub } = await supabase
+            .from('subscriptions')
+            .select('id')
+            .eq("stripe_raw->>id", String(sub.id))
+            .maybeSingle();
+
+          let internalSubId: string | null = null;
+
+          if (existingSub && existingSub.id) {
+            const { data: updated, error: updateErr } = await supabase
+              .from('subscriptions')
+              .update({
+                user_id: existingTransaction.user_id,
+                plan_id: (sub?.metadata && (sub.metadata.plan_id as string)) || existingTransaction.metadata?.plan_id || null,
+                status: sub.status ?? 'active',
+                current_period_start: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
+                current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+                stripe_raw: sub,
+              })
+              .eq('id', existingSub.id)
+              .select('id')
+              .single();
+
+            if (updateErr) {
+              console.error('[stripe-webhook] error updating existing subscription record from payment_intent:', updateErr);
+            } else {
+              internalSubId = updated.id;
+              console.info('[stripe-webhook] subscription updated from payment_intent', updated);
+            }
+          } else {
+            const { data: inserted, error: insertErr } = await supabase
+              .from('subscriptions')
+              .insert({
+                user_id: existingTransaction.user_id,
+                plan_id: (sub?.metadata && (sub.metadata.plan_id as string)) || existingTransaction.metadata?.plan_id || null,
+                status: sub.status ?? 'active',
+                current_period_start: sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null,
+                current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+                stripe_raw: sub,
+              })
+              .select('id')
+              .single();
+
+            if (insertErr) {
+              console.error('[stripe-webhook] error inserting subscription record from payment_intent:', insertErr);
+            } else {
+              internalSubId = inserted.id;
+              console.info('[stripe-webhook] subscription inserted from payment_intent', inserted);
+            }
+          }
+
+          if (internalSubId) {
+            const { error: txErr } = await supabase
+              .from('payment_transactions')
+              .update({ subscription_id: internalSubId })
+              .eq('id', existingTransaction.id);
+
+            if (txErr) console.error('[stripe-webhook] error updating transaction with internal subscription id:', txErr);
+          }
+        } catch (e) {
+          console.error('[stripe-webhook] error handling subscription upsert from payment_intent:', e);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[stripe-webhook] error handling subscription upsert from payment_intent:', err);
   }
 }
 

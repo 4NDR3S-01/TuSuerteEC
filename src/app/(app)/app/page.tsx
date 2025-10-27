@@ -21,11 +21,12 @@ export default async function DashboardHomePage() {
     { data: activeRaffles },
     { data: myEntries },
     { data: recentWinners },
-    { data: alertEvent }
+    { data: alertEvent },
+    { count: userWinsCount }
   ] = await Promise.all([
     supabase
       .from('subscriptions')
-      .select('id, status, current_period_end, plans(id, name, price, currency, interval)')
+      .select('id, status, current_period_end, plans(id, name, price, currency, interval, benefits)')
       .eq('status', 'active')
       .eq('user_id', user.id)
       .gt('current_period_end', now),
@@ -55,7 +56,12 @@ export default async function DashboardHomePage() {
       .in('status', ['scheduled', 'live'])
       .order('start_at', { ascending: true })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
+    supabase
+      .from('winners')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .in('status', ['prize_pending', 'prize_delivered', 'prize_processing'])
   ]);
 
   // Transform data to match expected types (Supabase returns arrays for joins, we need single objects)
@@ -81,6 +87,7 @@ export default async function DashboardHomePage() {
       activeRaffles={activeRaffles || []}
       myEntries={transformedEntries as any}
       recentWinners={transformedWinners as any}
+      winsCount={userWinsCount ?? 0}
       alertEvent={alertEvent || null}
     />
   );
