@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^5.2.0",
     "@stripe/stripe-js": "^2.3.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.45.5",

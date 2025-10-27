@@ -18,6 +18,7 @@ type ManualTransferPayload = {
 
 type StripeCheckoutPayload = {
   paymentMethodId: string;
+  tickets: number;
 };
 
 /**
@@ -293,8 +294,36 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       };
     }
 
-    // El precio ahora viene del sorteo
-    const amount = raffle.ticket_price || 0;
+    const ticketPrice = raffle.ticket_price || 0;
+
+    if (!ticketPrice || ticketPrice <= 0) {
+      return {
+        success: false,
+        error: 'Este sorteo no tiene un precio configurado para pagos con tarjeta.',
+      };
+    }
+
+    const ticketsRequested = Number.isFinite(payload.tickets) && payload.tickets > 0
+      ? Math.floor(payload.tickets)
+      : 0;
+
+    if (!ticketsRequested) {
+      return {
+        success: false,
+        error: 'Debes seleccionar al menos un boleto para continuar.',
+      };
+    }
+
+    const amount = ticketPrice * ticketsRequested;
+    const stripeCurrency = (currency || 'USD').toLowerCase();
+    const unitAmount = Math.round(ticketPrice * 100);
+
+    if (!unitAmount || unitAmount <= 0) {
+      return {
+        success: false,
+        error: 'El monto configurado para el sorteo no es válido.',
+      };
+    }
 
     // No validamos `stripe_price_id` desde el cliente porque la columna fue retirada
     // o puede moverse a la configuración del método de pago. Confiamos en la
@@ -311,14 +340,24 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       mode: stripeConfig.mode || 'payment',
       line_items: [
         {
-          price: raffle.ticket_price, // Ahora viene del sorteo
-          quantity: 1,
+          quantity: ticketsRequested,
+          price_data: {
+            currency: stripeCurrency,
+            unit_amount: unitAmount,
+            product_data: {
+              name: `Boleto ${raffle.title}`,
+              metadata: {
+                raffle_id: raffle.id,
+              },
+            },
+          },
         },
       ],
       metadata: {
         raffle_id: raffle.id,
         payment_method_id: paymentMethod.id,
         user_id: user.id,
+        tickets_requested: ticketsRequested,
       },
       client_reference_id: user.id,
       success_url: `${baseUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
@@ -326,27 +365,32 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       customer_email: user.email ?? undefined,
     });
 
-    const { error: insertError } = await supabase.from('payment_transactions').insert({
-      user_id: user.id,
-      raffle_id: raffle.id,
-      subscription_id: null,
-      payment_method_id: paymentMethod.id,
-      transaction_type: 'raffle_ticket',
-      amount,
-      currency,
-      status: 'pending',
-      stripe_payment_intent_id: session.id,
-      metadata: {
-        checkout_session_id: session.id,
-        payment_type: paymentMethod.type,
-        payment_method_name: paymentMethod.name,
-        raffle: {
-          id: raffle.id,
-          title: raffle.title,
+    const { data: transactionData, error: insertError } = await supabase
+      .from('payment_transactions')
+      .insert({
+        user_id: user.id,
+        raffle_id: raffle.id,
+        subscription_id: null,
+        payment_method_id: paymentMethod.id,
+        transaction_type: 'raffle_ticket',
+        amount,
+        currency,
+        status: 'pending',
+        stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null,
+        metadata: {
+          checkout_session_id: session.id,
+          payment_type: paymentMethod.type,
+          payment_method_name: paymentMethod.name,
+          raffle: {
+            id: raffle.id,
+            title: raffle.title,
+          },
+          tickets_requested: ticketsRequested,
+          requested_at: new Date().toISOString(),
         },
-        requested_at: new Date().toISOString(),
-      },
-    });
+      })
+      .select('id')
+      .single();
 
     if (insertError) {
       console.error('[createStripeCheckoutSession] error inserting payment:', insertError);
@@ -354,6 +398,22 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
         success: false,
         error: 'No se pudo preparar el pago. Intenta más tarde.',
       };
+    }
+
+    // Actualizar metadata del checkout con el ID de la transacción para rastreo
+    if (transactionData?.id) {
+      try {
+        // Type casting because types for checkout.sessions.update may vary entre versiones
+        await (stripe.checkout.sessions as any).update(session.id, {
+          metadata: {
+            ...(session.metadata || {}),
+            transaction_id: transactionData.id,
+            tickets_requested: String(ticketsRequested),
+          },
+        });
+      } catch (updateError) {
+        console.warn('[createStripeCheckoutSession] Unable to update session metadata:', updateError);
+      }
     }
 
     revalidatePath(`/app/sorteos/${raffleId}`);
@@ -368,6 +428,234 @@ export async function createStripeCheckoutSession(raffleId: string, payload: Str
       success: false,
       error: error instanceof Error ? error.message : 'Error desconocido al crear el Checkout',
     };
+  }
+}
+
+/**
+ * Crea un PaymentIntent (no redirige) y retorna client_secret para confirmar en el cliente
+ */
+export async function createStripePaymentIntent(raffleId: string, payload: StripeCheckoutPayload) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Debes iniciar sesión para continuar' };
+    }
+
+    const supabase = await getSupabaseServerClient();
+    const paymentMethod = await fetchPaymentMethodById(payload.paymentMethodId);
+    if (!paymentMethod || paymentMethod.type !== 'stripe' || !paymentMethod.is_active) {
+      return { success: false, error: 'Método de pago no disponible' };
+    }
+
+    const config = paymentMethod.config ?? {};
+    const stripeConfig = config.stripe ?? {};
+    const currency = (config.currency ?? 'USD').toLowerCase();
+
+    const { data: raffle, error: raffleError } = await supabase
+      .from('raffles')
+      .select('id, title, status, ticket_price')
+      .eq('id', raffleId)
+      .maybeSingle();
+
+    if (raffleError || !raffle) {
+      return { success: false, error: 'No se encontró el sorteo seleccionado.' };
+    }
+
+    const ticketPrice = raffle.ticket_price || 0;
+    if (!ticketPrice || ticketPrice <= 0) {
+      return { success: false, error: 'Este sorteo no tiene un precio configurado para pagos con tarjeta.' };
+    }
+
+    const ticketsRequested = Number.isFinite(payload.tickets) && payload.tickets > 0
+      ? Math.floor(payload.tickets)
+      : 0;
+
+    if (!ticketsRequested) {
+      return { success: false, error: 'Debes seleccionar al menos un boleto para continuar.' };
+    }
+
+    // Calcular monto en centavos (manejo simple de decimales)
+    const unitAmount = Math.round(ticketPrice * 100);
+    if (!unitAmount || unitAmount <= 0) {
+      return { success: false, error: 'El monto configurado para el sorteo no es válido.' };
+    }
+
+    const amount = unitAmount * ticketsRequested;
+
+    const stripe = getStripeClient();
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+      metadata: {
+        raffle_id: raffle.id,
+        payment_method_id: paymentMethod.id,
+        user_id: user.id,
+        tickets_requested: String(ticketsRequested),
+      },
+      receipt_email: user.email ?? undefined,
+      // No confirm here; confirm from client with client_secret
+      description: `Compra de ${ticketsRequested} boleto(s) - ${raffle.title}`,
+    });
+
+    // Registrar transacción pendiente en la BD
+    const { data: transactionData, error: insertError } = await supabase
+      .from('payment_transactions')
+      .insert({
+        user_id: user.id,
+        raffle_id: raffle.id,
+        subscription_id: null,
+        payment_method_id: paymentMethod.id,
+        transaction_type: 'raffle_ticket',
+        amount: Number((amount / 100).toFixed(2)),
+        currency: currency.toUpperCase(),
+        status: 'pending',
+        stripe_payment_intent_id: paymentIntent.id ? String(paymentIntent.id) : null,
+        metadata: {
+          payment_intent_id: paymentIntent.id,
+          payment_type: paymentMethod.type,
+          payment_method_name: paymentMethod.name,
+          raffle: { id: raffle.id, title: raffle.title },
+          tickets_requested: ticketsRequested,
+          requested_at: new Date().toISOString(),
+        },
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('[createStripePaymentIntent] error inserting payment:', insertError);
+      // intentar cancelar el PaymentIntent para evitar intentos huérfanos
+      try {
+        await stripe.paymentIntents.cancel(paymentIntent.id as string);
+      } catch (e) {
+        console.warn('[createStripePaymentIntent] could not cancel payment intent', e);
+      }
+      return { success: false, error: 'No se pudo preparar el pago. Intenta más tarde.' };
+    }
+
+    revalidatePath(`/app/sorteos/${raffleId}`);
+
+    return {
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      transactionId: transactionData?.id ?? null,
+    };
+  } catch (error) {
+    console.error('[createStripePaymentIntent] Excepción:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido al crear PaymentIntent' };
+  }
+}
+
+/**
+ * Finaliza manualmente un PaymentIntent cuando el webhook no llegue oportunamente.
+ * Este endpoint es idempotente: si la transacción ya está marcada como 'completed' no creará entradas duplicadas.
+ */
+export async function finalizeStripePaymentIntent(paymentIntentId: string) {
+  try {
+    const supabase = await getSupabaseServerClient();
+
+    // Buscar la transacción por stripe_payment_intent_id o en metadata
+    const { data: existingTransaction, error: fetchError } = await supabase
+      .from('payment_transactions')
+      .select('id, user_id, raffle_id, subscription_id, metadata, status, stripe_payment_intent_id')
+      .or(`stripe_payment_intent_id.eq.${String(paymentIntentId)},metadata->>payment_intent_id.eq.${String(paymentIntentId)}`)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('[finalizeStripePaymentIntent] error fetching transaction:', fetchError);
+      return { success: false, error: 'Error fetching transaction' };
+    }
+
+    if (!existingTransaction) {
+      console.warn('[finalizeStripePaymentIntent] transaction not found for payment_intent', paymentIntentId);
+      return { success: false, error: 'Transaction not found' };
+    }
+
+    // If already completed, nothing to do
+    if (existingTransaction.status === 'completed') {
+      return { success: true, message: 'Already completed' };
+    }
+
+    const metadata = existingTransaction.metadata ?? {};
+    // Obtener cantidad de boletos solicitados desde metadata (fallback a 1)
+    const ticketsRequestedRaw = metadata?.tickets_requested ?? 1;
+    const ticketsRequestedNumber = Number(
+      typeof ticketsRequestedRaw === 'string' ? parseInt(String(ticketsRequestedRaw), 10) : ticketsRequestedRaw,
+    );
+    const ticketsRequested = Number.isFinite(ticketsRequestedNumber) && ticketsRequestedNumber > 0 ? Math.floor(ticketsRequestedNumber) : 1;
+
+    const updatedMetadata = {
+      ...metadata,
+      tickets_requested: ticketsRequested,
+      stripe: {
+        ...(metadata?.stripe as Record<string, unknown> | undefined),
+        payment_intent_id: paymentIntentId,
+        completed_at: new Date().toISOString(),
+      },
+    };
+
+    console.info('[finalizeStripePaymentIntent] finalizing intent', paymentIntentId, 'transaction', existingTransaction.id);
+
+    // Update only if the transaction is still pending. If another process (webhook)
+    // already marked it as completed, don't create entries again.
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('payment_transactions')
+      .update({
+        status: 'completed',
+        stripe_payment_status: 'succeeded',
+        stripe_payment_intent_id: String(paymentIntentId),
+        metadata: updatedMetadata,
+      })
+      .eq('id', existingTransaction.id)
+      .eq('status', 'pending')
+      .select('id');
+
+    if (updateError) {
+      console.error('[finalizeStripePaymentIntent] error updating transaction:', updateError);
+      return { success: false, error: 'Error updating transaction' };
+    }
+
+    const didUpdate = Array.isArray(updatedRows) && updatedRows.length > 0;
+
+    if (!didUpdate) {
+      console.info('[finalizeStripePaymentIntent] transaction already finalized by another process, skipping entry creation', existingTransaction.id);
+      return { success: true, message: 'Already completed by another process' };
+    }
+
+    console.info('[finalizeStripePaymentIntent] transaction updated to completed', existingTransaction.id);
+
+    if (existingTransaction.raffle_id && existingTransaction.user_id) {
+      for (let i = 0; i < ticketsRequested; i += 1) {
+        const { data: entryCreation, error: entryError } = await supabase.rpc('create_raffle_entry_safe', {
+          p_raffle_id: existingTransaction.raffle_id,
+          p_user_id: existingTransaction.user_id,
+          // Align with existing Checkout source so DB check constraint accepts it
+          p_entry_source: 'stripe_checkout',
+          p_subscription_id: existingTransaction.subscription_id || null,
+        });
+
+        if (entryError) {
+          console.error('[finalizeStripePaymentIntent] error creating raffle entry:', entryError);
+          break;
+        } else {
+          console.info('[finalizeStripePaymentIntent] entry created', entryCreation);
+        }
+      }
+
+      try {
+        revalidatePath(`/app/sorteos/${existingTransaction.raffle_id}`);
+        revalidatePath('/app');
+        revalidatePath('/administrador/pagos');
+      } catch (err) {
+        console.error('[finalizeStripePaymentIntent] revalidate error:', err);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[finalizeStripePaymentIntent] exception:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 

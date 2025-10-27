@@ -6,9 +6,14 @@ import {
   checkRaffleEligibility,
   createManualTransferPayment,
   createStripeCheckoutSession,
+  createStripePaymentIntent,
+  finalizeStripePaymentIntent,
 } from '../../app/(app)/app/sorteos/[id]/actions';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import type { PaymentMethod, PaymentMethodConfig } from '../../lib/payments/types';
+import StripePaymentForm from '../payments/stripe-payment-form';
+import { useRouter } from 'next/navigation';
+import { useToast } from '../../hooks/use-toast';
 
 // Opciones rápidas para selección de boletos
 const QUICK_TICKET_OPTIONS = [1, 2, 5, 10];
@@ -112,10 +117,16 @@ export function RaffleDetailPage({
     paymentMethods.at(0)?.id ?? null,
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripeTransactionId, setStripeTransactionId] = useState<string | null>(null);
+  const [showStripePaymentForm, setShowStripePaymentForm] = useState(false);
+  const router = useRouter();
+  const { showToast } = useToast();
   const [manualReference, setManualReference] = useState('');
   const [manualNotes, setManualNotes] = useState('');
   const [manualAmount, setManualAmount] = useState('');
   const [manualTickets, setManualTickets] = useState('');
+  const [stripeTickets, setStripeTickets] = useState('1');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [manualFeedback, setManualFeedback] = useState<{
@@ -332,6 +343,30 @@ export function RaffleDetailPage({
   const manualFormInvalid =
     requiresManualData &&
     (!manualReferenceTrimmed || !manualAmountInfo.amount || Boolean(manualAmountInfo.error));
+  const stripeTicketsNumber = useMemo(() => {
+    const parsed = Number.parseInt(stripeTickets, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [stripeTickets]);
+  const stripeTicketsError = useMemo(() => {
+    if (!isStripeMethod) return null;
+    if (!stripeTickets || stripeTickets.trim() === '') {
+      return 'Ingresa la cantidad de boletos.';
+    }
+    if (!stripeTicketsNumber || stripeTicketsNumber < 1) {
+      return 'La cantidad mínima es 1.';
+    }
+    if (!ticketPriceValue || ticketPriceValue <= 0) {
+      return 'Este sorteo no tiene un precio configurado para pagos con tarjeta.';
+    }
+    return null;
+  }, [isStripeMethod, stripeTickets, stripeTicketsNumber, ticketPriceValue]);
+  const stripeTotalAmountLabel = useMemo(() => {
+    if (!stripeTicketsNumber || !ticketPriceValue || ticketPriceValue <= 0) return null;
+    const total = ticketPriceValue * stripeTicketsNumber;
+    return currencyFormatter.format(total);
+  }, [currencyFormatter, stripeTicketsNumber, ticketPriceValue]);
+  const stripeFormInvalid =
+    isStripeMethod && Boolean(stripeTicketsError);
   const feedbackCurrencyFormatter = useMemo(
     () => new Intl.NumberFormat('es-EC', { style: 'currency', currency: getValidCurrencyCode(manualFeedback?.currency ?? methodCurrency) }),
     [manualFeedback?.currency, methodCurrency],
@@ -347,6 +382,7 @@ export function RaffleDetailPage({
     isProcessing ||
     Boolean(priceValidationError) ||
     manualFormInvalid ||
+    stripeFormInvalid ||
     ((isManualMethod || isQrMethod) && Boolean(manualFeedback));
 
   const eligibilityMessage = useMemo(() => {
@@ -387,6 +423,7 @@ export function RaffleDetailPage({
       setManualNotes('');
       setManualAmount('');
       setManualTickets('');
+      setStripeTickets('1');
       setReceiptFile(null);
       setReceiptPreview(null);
       setPriceValidationError(null);
@@ -607,11 +644,28 @@ export function RaffleDetailPage({
     setManualAmount(formattedAmount);
   };
 
-  const handleQuickTicketSelect = (tickets: number) => {
+  const handleManualQuickTicketSelect = (tickets: number) => {
     if (!Number.isFinite(tickets) || tickets <= 0) {
       return;
     }
     handleManualTicketsChange(tickets.toString());
+  };
+
+  const handleStripeTicketsChange = (rawValue: string) => {
+    if (!/^\d*$/.test(rawValue)) {
+      return;
+    }
+
+    setStripeTickets(rawValue);
+    setStripeError(null);
+  };
+
+  const handleStripeQuickTicketSelect = (tickets: number) => {
+    if (!Number.isFinite(tickets) || tickets <= 0) {
+      return;
+    }
+    setStripeTickets(tickets.toString());
+    setStripeError(null);
   };
 
   const handleConfirmPayment = async () => {
@@ -623,13 +677,28 @@ export function RaffleDetailPage({
     setManualFeedback(null);
 
     if (selectedMethod.type === 'stripe') {
+      if (stripeFormInvalid || !stripeTicketsNumber) {
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!ticketPriceValue || ticketPriceValue <= 0) {
+        setIsProcessing(false);
+        return;
+      }
+
       try {
-        const result = await createStripeCheckoutSession(raffle.id, {
+        // Crear PaymentIntent en el servidor y obtener client_secret
+        const result = await createStripePaymentIntent(raffle.id, {
           paymentMethodId: selectedMethod.id,
+          tickets: stripeTicketsNumber,
         });
 
-        if (result.success && result.url) {
-          window.location.href = result.url;
+        if (result.success && result.clientSecret) {
+          setStripeClientSecret(result.clientSecret);
+          setStripeTransactionId(result.transactionId ?? null);
+          setShowStripePaymentForm(true);
+          // Dejar el modal abierto para que el usuario ingrese datos de tarjeta
           return;
         }
 
@@ -1181,7 +1250,72 @@ export function RaffleDetailPage({
 
             {/* Content */}
             <div className="p-6 space-y-5 max-h-[calc(90vh-180px)] overflow-y-auto">
-              {isCheckingEligibility ? (
+              {showStripePaymentForm && stripeClientSecret ? (
+                <div>
+                  <h3 className="text-lg font-bold mb-3">Pagar con tarjeta</h3>
+                    <StripePaymentForm
+                      clientSecret={stripeClientSecret}
+                      submitLabel={`Pagar ${stripeTotalAmountLabel ?? ''}`}
+                      onSuccess={async (paymentIntentId) => {
+                        // Intentar finalizar el pago server-side inmediatamente (idempotente).
+                        if (paymentIntentId) {
+                          try {
+                            const res = await finalizeStripePaymentIntent(paymentIntentId);
+                            if (res?.success) {
+                              showToast({
+                                title: 'Pago confirmado',
+                                description: 'Pago procesado y boletos asignados correctamente.',
+                                type: 'success',
+                                duration: 6000,
+                              });
+                            } else {
+                              // Si no se pudo finalizar, notificar que está pendiente y seguir esperando webhook
+                              showToast({
+                                title: 'Pago recibido',
+                                description: 'Pago completado — asignación de boletos en proceso (pendiente).',
+                                type: 'info',
+                                duration: 6000,
+                              });
+                            }
+                          } catch (err) {
+                            console.error('[RaffleDetailPage] finalizeStripePaymentIntent error', err);
+                            showToast({ title: 'Pago recibido', description: 'Pago completado — asignación de boletos en proceso (pendiente).', type: 'info' });
+                          }
+                        }
+
+                        // Cerrar modal y limpiar estados
+                        setShowStripePaymentForm(false);
+                        setShowPurchaseModal(false);
+                        setStripeClientSecret(null);
+                        setStripeTransactionId(null);
+
+                        try {
+                          router.refresh();
+                        } catch (e) {
+                          // no bloquear
+                        }
+
+                        setTimeout(() => {
+                          try {
+                            router.refresh();
+                          } catch (e) {}
+                        }, 3000);
+
+                        setManualFeedback({
+                          message: 'Pago completado. La asignación de boletos se procesará en breve.',
+                          amount: ticketPriceValue * (stripeTicketsNumber ?? 0),
+                          tickets: stripeTicketsNumber ?? 0,
+                          currency: methodCurrency,
+                        });
+                      }}
+                      onError={(msg) => {
+                        setStripeError(msg);
+                        showToast({ title: 'Error en pago', description: msg, type: 'error' });
+                      }}
+                      onCancel={() => setShowStripePaymentForm(false)}
+                    />
+                </div>
+              ) : isCheckingEligibility ? (
               <div className="flex flex-col items-center justify-center py-12 text-sm text-[color:var(--muted-foreground)]">
                 <div className="mb-4 inline-block h-10 w-10 animate-spin rounded-full border-4 border-[color:var(--accent)] border-r-transparent" />
                 Verificando disponibilidad...
@@ -1232,7 +1366,18 @@ export function RaffleDetailPage({
                         return (
                           <button
                             key={method.id}
-                            onClick={() => setSelectedMethodId(method.id)}
+                            onClick={() => {
+                              setSelectedMethodId(method.id);
+                              if (method.type === 'stripe') {
+                                setStripeTickets((prev) => {
+                                  const parsed = Number.parseInt(prev, 10);
+                                  return Number.isFinite(parsed) && parsed > 0 ? prev : '1';
+                                });
+                                setStripeError(null);
+                              } else {
+                                setStripeError(null);
+                              }
+                            }}
                             className={`text-left rounded-2xl border px-4 py-4 transition-all ${
                               isSelected
                                 ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 shadow-lg'
@@ -1267,6 +1412,73 @@ export function RaffleDetailPage({
                         {selectedMethod.instructions && (
                            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-xs text-blue-600 dark:text-blue-400">
                             {selectedMethod.instructions}
+                          </div>
+                        )}
+
+                        {isStripeMethod && (
+                          <div className="space-y-4">
+                            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-4 text-xs text-[color:var(--muted-foreground)]">
+                              <h4 className="text-sm font-semibold text-[color:var(--foreground)] mb-2">
+                                Pago con tarjeta
+                              </h4>
+                              <p>
+                                Selecciona la cantidad de boletos que quieres comprar. Serás dirigido a una
+                                pasarela segura de Stripe para ingresar los datos de tu tarjeta.
+                              </p>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-xs font-semibold text-[color:var(--muted-foreground)] block mb-1">
+                                  Cantidad de boletos
+                                </label>
+                                <div className="space-y-2">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={stripeTickets}
+                                    onChange={(e) => handleStripeTicketsChange(e.target.value)}
+                                    className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                                  />
+                                  {ticketPriceValue > 0 && (
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      {QUICK_TICKET_OPTIONS.map((option) => {
+                                        const isActive = stripeTickets === option.toString();
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={option}
+                                            onClick={() => handleStripeQuickTicketSelect(option)}
+                                            className={`rounded-full border px-3 py-1 font-semibold transition-colors ${
+                                              isActive
+                                                ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 text-[color:var(--accent)]'
+                                                : 'border-[color:var(--border)] text-[color:var(--muted-foreground)] hover:border-[color:var(--accent)]/60 hover:text-[color:var(--accent)]'
+                                            }`}
+                                          >
+                                            {option} {option === 1 ? 'boleto' : 'boletos'}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                {stripeTicketsError && (
+                                  <p className="mt-1 text-xs text-red-500">{stripeTicketsError}</p>
+                                )}
+                              </div>
+
+                              {stripeTotalAmountLabel && !stripeTicketsError && (
+                                <div className="rounded-lg border border-[color:var(--highlight)] bg-[color:var(--highlight)]/10 px-3 py-2 text-xs">
+                                  <p className="text-[color:var(--foreground)] font-semibold">
+                                    Total a pagar: <span className="text-[color:var(--accent)]">{stripeTotalAmountLabel}</span>
+                                  </p>
+                                  <p className="mt-1 text-[color:var(--muted-foreground)]">
+                                    Se procesará en Stripe con el método de pago seleccionado.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -1338,7 +1550,7 @@ export function RaffleDetailPage({
                                             <button
                                               type="button"
                                               key={option}
-                                              onClick={() => handleQuickTicketSelect(option)}
+                                              onClick={() => handleManualQuickTicketSelect(option)}
                                               className={`rounded-full border px-3 py-1 font-semibold transition-colors ${
                                                 isActive
                                                   ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 text-[color:var(--accent)]'
@@ -1521,7 +1733,7 @@ export function RaffleDetailPage({
                                             <button
                                               type="button"
                                               key={option}
-                                              onClick={() => handleQuickTicketSelect(option)}
+                                              onClick={() => handleManualQuickTicketSelect(option)}
                                               className={`rounded-full border px-3 py-1 font-semibold transition-colors ${
                                                 isActive
                                                   ? 'border-[color:var(--accent)] bg-[color:var(--accent)]/10 text-[color:var(--accent)]'
