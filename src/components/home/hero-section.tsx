@@ -1,4 +1,10 @@
+'use client';
+
+import { useState } from "react";
+
 export function HeroSection() {
+  const [showMobileDetails, setShowMobileDetails] = useState(false);
+
   return (
     <section
       id="inicio"
@@ -20,7 +26,7 @@ export function HeroSection() {
             Impulsa la participación y fideliza a tu comunidad con sorteos transparentes y seguros. ¡Participa
             en tu primer sorteo hoy mismo! 
           </p>
-          <div className="flex flex-wrap gap-3 sm:gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
             <a
               href="#planes"
               className="rounded-full px-5 py-3 text-sm font-semibold shadow-lg shadow-[color:rgba(249,115,22,0.35)] transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-6 sm:text-base"
@@ -42,21 +48,41 @@ export function HeroSection() {
               Inicia sesión
             </a>
           </div>
-          <div className="grid gap-4 text-sm sm:grid-cols-2 sm:gap-6 md:grid-cols-4">
-            {[
-              { value: "+120K", label: "Usuarios activos" },
-              { value: "+5K", label: "Premios entregados" },
-              { value: "98%", label: "Nivel de satisfacción" },
-              { value: "24/7", label: "Soporte humano" },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <p className="text-xl font-semibold sm:text-2xl">{stat.value}</p>
-                <p className="text-xs text-[color:var(--muted-foreground)] sm:text-sm">{stat.label}</p>
+          <div className="md:hidden">
+            <button
+              type="button"
+              onClick={() => setShowMobileDetails((prev) => !prev)}
+              aria-expanded={showMobileDetails}
+              className="group flex w-full items-center justify-between rounded-2xl border border-[color:var(--border)] bg-[rgba(255,255,255,0.08)] px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-[rgba(255,255,255,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <span>¿Por qué elegir TuSuerte?</span>
+              <svg
+                className={`h-4 w-4 transition-transform ${showMobileDetails ? "rotate-180" : ""}`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.24 4.51a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" />
+              </svg>
+            </button>
+            {showMobileDetails && (
+              <div className="mt-3 space-y-3 rounded-2xl border border-[color:var(--border)] bg-[rgba(255,255,255,0.2)] p-4 text-sm text-[color:var(--muted-foreground)]">
+                <p>
+                  Tecnología transparente para sorteos en vivo y una experiencia fluida para tus participantes.
+                </p>
+                <ul className="space-y-2">
+                  <li>• Plataforma intuitiva y 100% verificable.</li>
+                  <li>• Premios irresistibles para aumentar la participación.</li>
+                  <li>• Seguridad reforzada para tu comunidad.</li>
+                </ul>
+                <p className="text-xs font-medium text-[color:var(--accent)]">
+                  Únete y maximiza tus sorteos desde el primer día.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         </div>
-        <div className="flex-1 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(255,255,255,0.24)] p-5 backdrop-blur sm:p-6 md:p-10">
+        <div className="hidden flex-1 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(255,255,255,0.24)] p-5 backdrop-blur sm:p-6 md:block md:p-10">
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold sm:text-3xl">¿Por qué elegir TuSuerte?</h2>
             <p className="text-sm text-[color:var(--muted-foreground)]">

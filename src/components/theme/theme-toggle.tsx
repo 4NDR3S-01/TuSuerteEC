@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import { useTheme } from './theme-provider';
+import {Sun, Moon, MonitorCog } from 'lucide-react';
 
-const MODES: Array<{ value: 'light' | 'dark' | 'system'; label: string; icon: string }> = [
-  { value: 'light', label: 'Claro', icon: '☀️' },
-  { value: 'system', label: 'Sistema', icon: '🌓' },
-  { value: 'dark', label: 'Oscuro', icon: '🌙' },
+const MODES: Array<{ value: 'light' | 'dark' | 'system'; label: string; icon: ReactElement }> = [
+  { value: 'light', label: 'Claro', icon: <Sun /> },
+  { value: 'system', label: 'Sistema', icon: <MonitorCog /> },
+  { value: 'dark', label: 'Oscuro', icon: <Moon /> },
 ];
 
 export function ThemeToggle() {
@@ -24,7 +25,7 @@ export function ThemeToggle() {
         onClick={() => setMode(orderedModes[nextIndex].value)}
         aria-label={`Cambiar tema. Modo actual: ${orderedModes[currentIndex]?.label ?? mode}`}
       >
-        <span aria-hidden="true">{orderedModes[currentIndex]?.icon ?? '🌓'}</span>
+        <span aria-hidden="true">{orderedModes[currentIndex]?.icon ?? <MonitorCog />}</span>
       </button>
       <div className="hidden items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--muted)] p-1 text-xs font-medium shadow-sm sm:flex">
         {orderedModes.map((option) => {

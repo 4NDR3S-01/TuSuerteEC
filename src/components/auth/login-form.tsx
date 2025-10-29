@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { Eye, EyeOff } from 'lucide-react';
 
 type FormState = {
   email: string;
@@ -251,7 +252,7 @@ export function LoginForm({ redirectTo }: LoginFormProps = {}) {
             className="absolute inset-y-0 right-3 inline-flex items-center justify-center rounded-full p-1.5 text-lg text-[color:var(--muted-foreground)] transition-colors hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
             aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
           >
-            <span aria-hidden="true">{showPassword ? '🙈' : '👁️'}</span>
+            <span aria-hidden="true">{showPassword ? <EyeOff /> : <Eye /> }</span>
           </button>
         </div>
       </div>

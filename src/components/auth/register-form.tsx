@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
 import { getEcuadorianIdError } from '../../lib/validators/ecuador-id';
+import { Eye, EyeOff } from 'lucide-react';
 
 type RegisterFormState = {
   fullName: string;
@@ -646,7 +647,7 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
               className="absolute inset-y-0 right-3 inline-flex items-center justify-center rounded-full p-1.5 text-lg text-[color:var(--muted-foreground)] transition-colors hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
               aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             >
-              <span aria-hidden="true">{showPassword ? '🙈' : '👁️'}</span>
+              <span aria-hidden="true">{showPassword ? <EyeOff /> : <Eye />}</span>
             </button>
           </div>
           {form.password ? (
@@ -688,7 +689,7 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
               className="absolute inset-y-0 right-3 inline-flex items-center justify-center rounded-full p-1.5 text-lg text-[color:var(--muted-foreground)] transition-colors hover:text-[color:var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
               aria-label={showConfirmPassword ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
             >
-              <span aria-hidden="true">{showConfirmPassword ? '🙈' : '👁️'}</span>
+              <span aria-hidden="true">{showConfirmPassword ? <EyeOff /> : <Eye />}</span>
             </button>
           </div>
         </div>
