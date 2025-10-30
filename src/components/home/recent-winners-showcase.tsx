@@ -133,7 +133,7 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
         {/* Header */}
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold tracking-tight text-[color:var(--foreground)] sm:text-4xl">
-            🏆 Ganadores del Mes
+            Ganadores del Mes
           </h2>
           <p className="mt-4 text-lg text-[color:var(--muted-foreground)]">
             {((totalCount ?? transformedWinners.length) === 1)
