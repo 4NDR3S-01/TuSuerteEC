@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 type Plan = {
@@ -25,9 +28,29 @@ const INTERVAL_LABELS = {
 };
 
 export function PlansSection({ plans = [] }: Readonly<PlansSectionProps>) {
+  const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const detect = () => setIsMobile(window.innerWidth < 640);
+    detect();
+    window.addEventListener('resize', detect);
+    return () => window.removeEventListener('resize', detect);
+  }, []);
+
   const formatPrice = (price: number, currency: string) => {
     const symbol = currency === 'USD' ? '$' : currency;
     return `${symbol}${price.toFixed(2)}`;
+  };
+
+  const togglePlan = (planId: string) => {
+    setExpandedPlans((prev) => ({
+      ...prev,
+      [planId]: !prev[planId],
+    }));
   };
 
   if (plans.length === 0) {
@@ -66,6 +89,10 @@ export function PlansSection({ plans = [] }: Readonly<PlansSectionProps>) {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => {
           const isPopular = plan.is_featured;
+          const benefits = plan.benefits ?? [];
+          const isExpanded = expandedPlans[plan.id] ?? false;
+          const visibleBenefits = !isMobile ? benefits : benefits.slice(0, isExpanded ? benefits.length : 3);
+          const hiddenBenefitsCount = !isMobile ? 0 : benefits.length - visibleBenefits.length;
           
           return (
             <article
@@ -119,9 +146,9 @@ export function PlansSection({ plans = [] }: Readonly<PlansSectionProps>) {
                 )}
 
                 {/* Beneficios */}
-                {plan.benefits && plan.benefits.length > 0 && (
-                  <ul className="mb-6 flex-1 space-y-3">
-                    {plan.benefits.map((benefit, idx) => (
+                {benefits.length > 0 && (
+                  <ul className="mb-3 flex-1 space-y-3">
+                    {visibleBenefits.map((benefit, idx) => (
                       <li key={idx} className="flex items-start gap-3 text-sm">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                           ✓
@@ -130,6 +157,15 @@ export function PlansSection({ plans = [] }: Readonly<PlansSectionProps>) {
                       </li>
                     ))}
                   </ul>
+                )}
+                {hiddenBenefitsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => togglePlan(plan.id)}
+                    className="mb-6 inline-flex items-center justify-center text-xs font-semibold uppercase tracking-wide text-[color:var(--accent)] transition-colors hover:text-[color:var(--accent)]/80"
+                  >
+                    {isExpanded ? 'Ver menos beneficios' : `Ver ${hiddenBenefitsCount} beneficios más`}
+                  </button>
                 )}
 
                 {/* Botón CTA */}

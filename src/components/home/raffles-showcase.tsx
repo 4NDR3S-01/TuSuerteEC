@@ -145,12 +145,12 @@ export function RafflesShowcase({
   if (transformedRaffles.length === 0 && !showLoginCta) {
     return (
       <section id="sorteos" className="scroll-mt-header space-y-8 sm:space-y-10">
-        <div className="space-y-2">
-          <span className="text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)' }}>
+        <div className="space-y-2 text-center">
+          <span className="block text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)' }}>
             {kicker}
           </span>
           <h2 className="text-2xl font-semibold sm:text-3xl md:text-4xl">{title}</h2>
-          <p className="max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">{description}</p>
+          <p className="mx-auto max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">{description}</p>
         </div>
 
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[color:var(--border)] bg-[color:var(--muted)]/20 p-12 text-center">
@@ -164,12 +164,12 @@ export function RafflesShowcase({
 
   return (
     <section id="sorteos" className="scroll-mt-header space-y-8 sm:space-y-10">
-      <div className="space-y-2">
-        <span className="text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)' }}>
+      <div className="space-y-2 text-center">
+        <span className="block text-sm font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)' }}>
           {kicker}
         </span>
         <h2 className="text-2xl font-semibold sm:text-3xl md:text-4xl">{title}</h2>
-        <p className="max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">{description}</p>
+        <p className="mx-auto max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">{description}</p>
       </div>
 
       <div className="relative px-8 sm:px-12 md:px-16">

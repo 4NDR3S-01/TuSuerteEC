@@ -1,14 +1,12 @@
-import { Globe, Phone, Mail } from "lucide-react";
-import { ReactNode } from "react";
+import { Globe, Phone, Mail, type LucideIcon } from "lucide-react";
 
 export interface SupportChannel {
   title: string;
   description: string;
   href: string;
   label: string;
-  icon: ReactNode; // ✅ permite JSX aquí
+  icon: LucideIcon;
 }
-
 
 export const FAQS = [
   {
@@ -50,7 +48,7 @@ export const SUPPORT_CHANNELS: SupportChannel[] = [
       "Resolvemos dudas y compartimos novedades en Instagram. Envíanos un mensaje directo para una respuesta rápida.",
     href: "https://www.instagram.com/tusuerte",
     label: "Abrir Instagram",
-    icon: <Globe className="w-6 h-6 text-[color:var(--accent)]" />,
+    icon: Globe,
   },
   {
     title: "Línea telefónica",
@@ -58,7 +56,7 @@ export const SUPPORT_CHANNELS: SupportChannel[] = [
       "Atención humana de lunes a viernes de 9h00 a 18h00. Marca y te guiaremos paso a paso.",
     href: "tel:+593963924479",
     label: "Llamar al soporte",
-    icon: <Phone className="w-6 h-6 text-[color:var(--accent)]" />,
+    icon: Phone,
   },
   {
     title: "Correo electrónico",
@@ -66,9 +64,8 @@ export const SUPPORT_CHANNELS: SupportChannel[] = [
       "Para casos detallados o seguimiento de premios, escríbenos y te responderemos en menos de 24 horas.",
     href: "mailto:soporte@tusuerte.com",
     label: "Enviar correo",
-    icon: <Mail className="w-6 h-6 text-[color:var(--accent)]" />,
+    icon: Mail,
   },
 ];
-
 
 export type FaqItem = (typeof FAQS)[number];

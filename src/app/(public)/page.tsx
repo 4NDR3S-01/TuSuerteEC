@@ -111,7 +111,7 @@ export default async function HomePage() {
         <RafflesShowcase
           kicker="Sorteos disponibles"
           title="Participa por premios increíbles"
-          description="Explora nuestros sorteos activos y participa para ganar premios emocionantes. Cada sorteo es transparente y seguro, garantizando una experiencia justa para todos los participantes. ¡No pierdas la oportunidad de ser nuestro próximo ganador! Revisa los detalles y participa ahora. ¡Buena suerte!"
+          description="Vive la emoción de ganar con nuestros sorteos activos. Cada participación es segura, justa y llena de oportunidades. ¡Descubre cómo convertirte en el próximo gran ganador!"
           raffles={activeRaffles || []}
           totalCount={typeof totalRafflesCount === 'number' ? totalRafflesCount : (((activeRaffles as any) || []) as any).length}
           showLoginCtaIfMore={true}

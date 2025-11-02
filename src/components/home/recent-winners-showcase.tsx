@@ -132,16 +132,22 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
     <section id="ganadores" className="scroll-mt-header space-y-8 sm:space-y-10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="mb-12 space-y-3 text-center">
+          <span
+            className="block text-sm font-semibold uppercase tracking-[0.3em]"
+            style={{ color: 'var(--accent)' }}
+          >
+            Ganadores del mes
+          </span>
           <h2 className="text-3xl font-bold tracking-tight text-[color:var(--foreground)] sm:text-4xl">
-            Ganadores del Mes
+            Historias de premios entregados
           </h2>
-          <p className="mt-4 text-lg text-[color:var(--muted-foreground)]">
+          <p className="mx-auto max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">
             {((totalCount ?? transformedWinners.length) === 1)
-              ? 'Felicitamos a nuestro ganador que ya recibió su premio'
-              : `Celebramos junto a ${totalCount ?? transformedWinners.length} ganadores que ya recibieron sus premios`}
+              ? 'Felicitamos a nuestro ganador que ya recibió su premio.'
+              : `Celebramos junto a ${totalCount ?? transformedWinners.length} ganadores que ya recibieron sus premios.`}
             {transformedWinners.length > 0 && (
-              <span className="block mt-2 text-sm text-[color:var(--muted-foreground)]">
+              <span className="block mt-2 text-xs text-[color:var(--muted-foreground)] sm:text-sm">
                 Mostrando los últimos {transformedWinners.length} ganadores en el carrusel.
               </span>
             )}
