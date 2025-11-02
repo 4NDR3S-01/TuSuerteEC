@@ -12,12 +12,10 @@ import {
   useState,
 } from 'react';
 
-type ThemePreference = 'light' | 'dark' | 'system';
-type ResolvedTheme = 'light' | 'dark';
+type ThemePreference = 'light' | 'dark';
 
 type ThemeContextValue = {
   mode: ThemePreference;
-  resolved: ResolvedTheme;
   setMode: Dispatch<SetStateAction<ThemePreference>>;
 };
 
@@ -26,19 +24,11 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'theme-preference';
 const COLOR_SCHEME_QUERY = '(prefers-color-scheme: dark)';
 
-function resolveTheme(mode: ThemePreference, systemDark: boolean): ResolvedTheme {
-  if (mode === 'system') {
-    return systemDark ? 'dark' : 'light';
-  }
-
-  return mode;
-}
-
-function applyTheme(mode: ThemePreference, resolved: ResolvedTheme) {
+function applyTheme(mode: ThemePreference) {
   const root = document.documentElement;
-  root.dataset.theme = resolved;
+  root.dataset.theme = mode;
   root.dataset.themeMode = mode;
-  root.style.setProperty('color-scheme', resolved);
+  root.style.setProperty('color-scheme', mode);
 }
 
 type ThemeProviderProps = {
@@ -46,32 +36,27 @@ type ThemeProviderProps = {
 };
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [mode, setMode] = useState<ThemePreference>('system');
-  const [resolved, setResolved] = useState<ResolvedTheme>('light');
+  const [mode, setModeState] = useState<ThemePreference>('light');
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
-      setMode(stored);
+    if (stored === 'light' || stored === 'dark') {
+      applyTheme(stored);
+      setModeState(stored);
+      return;
     }
-  }, []);
 
-  useEffect(() => {
     const media = window.matchMedia(COLOR_SCHEME_QUERY);
-
-    const updateResolved = (value: ThemePreference) => {
-      const nextResolved = resolveTheme(value, media.matches);
-      setResolved(nextResolved);
-      applyTheme(value, nextResolved);
-    };
-
-    updateResolved(mode);
+    const preferred = media.matches ? 'dark' : 'light';
+    applyTheme(preferred);
+    setModeState(preferred);
 
     const listener = (event: MediaQueryListEvent) => {
-      if (mode === 'system') {
-        const nextResolved = resolveTheme(mode, event.matches);
-        setResolved(nextResolved);
-        applyTheme(mode, nextResolved);
+      const persisted = window.localStorage.getItem(STORAGE_KEY);
+      if (persisted !== 'light' && persisted !== 'dark') {
+        const nextMode = event.matches ? 'dark' : 'light';
+        applyTheme(nextMode);
+        setModeState(nextMode);
       }
     };
 
@@ -80,19 +65,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     return () => {
       media.removeEventListener('change', listener);
     };
-  }, [mode]);
+  }, []);
 
   const setModeAndPersist = useCallback<Dispatch<SetStateAction<ThemePreference>>>(
     (value) => {
-      setMode((prev) => {
+      setModeState((prev) => {
         const nextValue = typeof value === 'function' ? value(prev) : value;
         window.localStorage.setItem(STORAGE_KEY, nextValue);
-
-        const media = window.matchMedia(COLOR_SCHEME_QUERY);
-        const nextResolved = resolveTheme(nextValue, media.matches);
-        setResolved(nextResolved);
-        applyTheme(nextValue, nextResolved);
-
+        applyTheme(nextValue);
         return nextValue;
       });
     },
@@ -102,10 +82,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const contextValue = useMemo<ThemeContextValue>(
     () => ({
       mode,
-      resolved,
       setMode: setModeAndPersist,
     }),
-    [mode, resolved, setModeAndPersist],
+    [mode, setModeAndPersist],
   );
 
   return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;

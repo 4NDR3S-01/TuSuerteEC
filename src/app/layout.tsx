@@ -35,12 +35,13 @@ export default function RootLayout({
         var storageKey = 'theme-preference';
         var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
         var stored = window.localStorage.getItem(storageKey);
-        var mode = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
-        var resolved = mode === 'system' ? (mediaQuery.matches ? 'dark' : 'light') : mode;
+        var mode = stored === 'light' || stored === 'dark'
+          ? stored
+          : (mediaQuery.matches ? 'dark' : 'light');
         var root = document.documentElement;
-        root.dataset.theme = resolved;
+        root.dataset.theme = mode;
         root.dataset.themeMode = mode;
-        root.style.setProperty('color-scheme', resolved);
+        root.style.setProperty('color-scheme', mode);
       } catch (error) {
         // noop
       }
@@ -48,7 +49,7 @@ export default function RootLayout({
   `.trim();
 
   return (
-    <html lang="es" data-theme="light" data-theme-mode="system" suppressHydrationWarning>
+    <html lang="es" data-theme="light" data-theme-mode="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

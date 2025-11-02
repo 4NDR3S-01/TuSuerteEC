@@ -2,11 +2,10 @@
 
 import { useMemo, type ReactElement } from 'react';
 import { useTheme } from './theme-provider';
-import {Sun, Moon, MonitorCog } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
-const MODES: Array<{ value: 'light' | 'dark' | 'system'; label: string; icon: ReactElement }> = [
+const MODES: Array<{ value: 'light' | 'dark'; label: string; icon: ReactElement }> = [
   { value: 'light', label: 'Claro', icon: <Sun /> },
-  { value: 'system', label: 'Sistema', icon: <MonitorCog /> },
   { value: 'dark', label: 'Oscuro', icon: <Moon /> },
 ];
 
@@ -21,33 +20,12 @@ export function ThemeToggle() {
     <>
       <button
         type="button"
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--muted)] text-lg shadow-sm transition-transform hover:-translate-y-0.5 sm:hidden"
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--muted)] text-lg shadow-sm transition-transform hover:-translate-y-0.5"
         onClick={() => setMode(orderedModes[nextIndex].value)}
         aria-label={`Cambiar tema. Modo actual: ${orderedModes[currentIndex]?.label ?? mode}`}
       >
-        <span aria-hidden="true">{orderedModes[currentIndex]?.icon ?? <MonitorCog />}</span>
+        <span aria-hidden="true">{orderedModes[currentIndex]?.icon ?? <Sun />}</span>
       </button>
-      <div className="hidden items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--muted)] p-1 text-xs font-medium shadow-sm sm:flex">
-        {orderedModes.map((option) => {
-          const isActive = option.value === mode;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setMode(option.value)}
-              className="flex items-center gap-1 rounded-full px-3 py-1.5 transition-colors"
-              style={{
-                backgroundColor: isActive ? 'var(--accent)' : 'transparent',
-                color: isActive ? 'var(--accent-foreground)' : 'var(--foreground)',
-              }}
-              aria-pressed={isActive}
-            >
-              <span aria-hidden="true">{option.icon}</span>
-              <span>{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
     </>
   );
 }

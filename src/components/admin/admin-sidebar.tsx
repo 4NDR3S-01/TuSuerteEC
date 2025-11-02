@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Logo } from '../ui/logo';
+import { Logo } from '../ui/logo'
+import {ArrowLeft, ArrowRight} from 'lucide-react';
 
 type NavItem = {
   href: string;

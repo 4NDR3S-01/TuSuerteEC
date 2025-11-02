@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import {ArrowLeft, ArrowRight} from 'lucide-react'
 
 type Raffle = {
   id: string;
@@ -177,14 +178,14 @@ export function RafflesShowcase({
           className="hidden sm:block absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-[color:var(--background)] p-2 sm:p-3 shadow-xl border border-[color:var(--border)] transition-all hover:scale-110 hover:shadow-2xl"
           aria-label="Anterior"
         >
-          <span className="text-xl sm:text-2xl">←</span>
+          <span className="text-xl sm:text-2xl"><ArrowLeft/> </span>
         </button>
         <button
           onClick={handleNext}
           className="hidden sm:block absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-[color:var(--background)] p-2 sm:p-3 shadow-xl border border-[color:var(--border)] transition-all hover:scale-110 hover:shadow-2xl"
           aria-label="Siguiente"
         >
-          <span className="text-xl sm:text-2xl">→</span>
+          <span className="text-xl sm:text-2xl"><ArrowRight/></span>
         </button>
 
         <div className="overflow-hidden py-8">
@@ -276,8 +277,8 @@ export function RafflesShowcase({
         </div>
 
         <div className="mt-4 flex justify-center gap-4 sm:hidden">
-          <button onClick={handlePrevious} className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95">←</button>
-          <button onClick={handleNext} className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95">→</button>
+          <button onClick={handlePrevious} className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95"><ArrowLeft/></button>
+          <button onClick={handleNext} className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95"><ArrowRight/></button>
         </div>
 
         {/* Dots basados en la longitud real (no incluir CTA en el conteo visual) */}

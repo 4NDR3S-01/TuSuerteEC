@@ -226,9 +226,16 @@ export default function SobreNosotrosPage() {
       <footer className="border-t border-[color:var(--border)] bg-[color:var(--muted)]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10 text-sm text-[color:var(--muted-foreground)] md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} TuSuerte. Todos los derechos reservados.</p>
+          
           <div className="flex flex-wrap gap-4">
-            <a className="hover:text-[color:var(--accent)]" href="https://www.instagram.com/andres.cabrera20/">
-              Desarrollado con ❤️ por William Cabrera
+            <a
+              className="hover:text-[color:var(--accent)] transition-colors"
+              href="https://www.instagram.com/andres.cabrera20/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Desarrollado con ❤️ por{" "}
+              <span className="font-semibold">William Cabrera</span>
             </a>
           </div>
         </div>

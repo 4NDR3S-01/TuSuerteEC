@@ -14,6 +14,7 @@ import type { PaymentMethod, PaymentMethodConfig } from '../../lib/payments/type
 import StripePaymentForm from '../payments/stripe-payment-form';
 import { useRouter } from 'next/navigation';
 import { useToast } from '../../hooks/use-toast';
+import {Facebook, Link as LinkIcon, MessageCircle} from 'lucide-react'
 
 // Opciones rápidas para selección de boletos
 const QUICK_TICKET_OPTIONS = [1, 2, 5, 10];
@@ -1198,21 +1199,21 @@ export function RaffleDetailPage({
                   onClick={() => handleShare('facebook')}
                   className="p-4 bg-gradient-to-br from-blue-500/20 to-blue-600/20 hover:from-blue-500/30 hover:to-blue-600/30 border-2 border-blue-500/40 rounded-xl transition-all transform hover:scale-105 hover:shadow-lg group"
                 >
-                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1">📘</span>
+                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1"><Facebook/></span>
                   <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Facebook</span>
                 </button>
                 <button
                   onClick={() => handleShare('whatsapp')}
                   className="p-4 bg-gradient-to-br from-green-500/20 to-emerald-600/20 hover:from-green-500/30 hover:to-emerald-600/30 border-2 border-green-500/40 rounded-xl transition-all transform hover:scale-105 hover:shadow-lg group"
                 >
-                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1">💬</span>
+                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1"><MessageCircle/></span>
                   <span className="text-[10px] font-bold text-green-600 dark:text-green-400">WhatsApp</span>
                 </button>
                 <button
                   onClick={() => handleShare('copy')}
                   className="p-4 bg-gradient-to-br from-purple-500/20 to-pink-600/20 hover:from-purple-500/30 hover:to-pink-600/30 border-2 border-purple-500/40 rounded-xl transition-all transform hover:scale-105 hover:shadow-lg group"
                 >
-                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1">📎</span>
+                  <span className="text-3xl block group-hover:scale-110 transition-transform mb-1"><LinkIcon/></span>
                   <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400">Copiar</span>
                 </button>
               </div>

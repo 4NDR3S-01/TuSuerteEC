@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Trophy, ArrowLeft, ArrowRight, MessageSquareText } from 'lucide-react';
 
 type Winner = {
   id: string;
@@ -155,14 +156,14 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
             className="hidden sm:block absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-[color:var(--background)] p-2 sm:p-3 shadow-xl border border-[color:var(--border)] transition-all hover:scale-110 hover:shadow-2xl"
             aria-label="Anterior"
           >
-            <span className="text-xl sm:text-2xl">←</span>
+            <span className="text-xl sm:text-2xl"><ArrowLeft/></span>
           </button>
           <button
             onClick={handleNext}
             className="hidden sm:block absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-[color:var(--background)] p-2 sm:p-3 shadow-xl border border-[color:var(--border)] transition-all hover:scale-110 hover:shadow-2xl"
             aria-label="Siguiente"
           >
-            <span className="text-xl sm:text-2xl">→</span>
+            <span className="text-xl sm:text-2xl"><ArrowRight/></span>
           </button>
 
           {/* Contenedor del carrusel */}
@@ -195,8 +196,9 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
                     )}
                     
                     {/* Badge de ganador */}
-                    <div className="absolute right-3 top-3 rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                      🏆 Ganador
+                    <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                      <Trophy className="w-3 h-3" />
+                      <span>Ganador</span>
                     </div>
                   </div>
 
@@ -240,14 +242,14 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
               className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95"
               aria-label="Anterior"
             >
-              <span className="text-xl">←</span>
+              <span className="text-xl"><ArrowLeft/></span>
             </button>
             <button
               onClick={handleNext}
               className="rounded-full bg-[color:var(--background)] p-2 shadow-lg border border-[color:var(--border)] transition-all active:scale-95"
               aria-label="Siguiente"
             >
-              <span className="text-xl">→</span>
+              <span className="text-xl"><ArrowRight/></span>
             </button>
           </div>
 
@@ -344,7 +346,7 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
               {selectedWinner.testimonial && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">
-                    💬 Testimonio del ganador
+                    <MessageSquareText className="inline-block w-4 h-4 mr-1" /> Testimonio del ganador
                   </p>
                   <p className="mt-2 text-sm italic text-amber-900 dark:text-amber-200">
                     "{selectedWinner.testimonial}"
