@@ -1,3 +1,15 @@
+import { Globe, Phone, Mail } from "lucide-react";
+import { ReactNode } from "react";
+
+export interface SupportChannel {
+  title: string;
+  description: string;
+  href: string;
+  label: string;
+  icon: ReactNode; // ✅ permite JSX aquí
+}
+
+
 export const FAQS = [
   {
     question: "¿Cómo puedo iniciar sesión?",
@@ -29,16 +41,16 @@ export const FAQS = [
     answer:
       "Sí, puedes participar en tantos sorteos como desees, siempre y cuando cumplas con los requisitos específicos de cada uno.",
   },
-] as const;
+];
 
-export const SUPPORT_CHANNELS = [
+export const SUPPORT_CHANNELS: SupportChannel[] = [
   {
     title: "Redes sociales",
     description:
       "Resolvemos dudas y compartimos novedades en Instagram. Envíanos un mensaje directo para una respuesta rápida.",
     href: "https://www.instagram.com/tusuerte",
     label: "Abrir Instagram",
-    icon: "🌐",
+    icon: <Globe className="w-6 h-6 text-[color:var(--accent)]" />,
   },
   {
     title: "Línea telefónica",
@@ -46,7 +58,7 @@ export const SUPPORT_CHANNELS = [
       "Atención humana de lunes a viernes de 9h00 a 18h00. Marca y te guiaremos paso a paso.",
     href: "tel:+593963924479",
     label: "Llamar al soporte",
-    icon: "📞",
+    icon: <Phone className="w-6 h-6 text-[color:var(--accent)]" />,
   },
   {
     title: "Correo electrónico",
@@ -54,9 +66,9 @@ export const SUPPORT_CHANNELS = [
       "Para casos detallados o seguimiento de premios, escríbenos y te responderemos en menos de 24 horas.",
     href: "mailto:soporte@tusuerte.com",
     label: "Enviar correo",
-    icon: "✉️",
+    icon: <Mail className="w-6 h-6 text-[color:var(--accent)]" />,
   },
-] as const;
+];
+
 
 export type FaqItem = (typeof FAQS)[number];
-export type SupportChannel = (typeof SUPPORT_CHANNELS)[number];
