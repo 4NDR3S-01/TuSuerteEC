@@ -470,6 +470,13 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
   return (
     <div className={containerClass}>
+      <header className="space-y-2 text-center">
+        <h2 className="text-xl font-semibold text-[color:var(--foreground)]">Crea tu cuenta</h2>
+        <p className="text-sm text-[color:var(--muted-foreground)]">
+          Completa tus datos para comenzar a participar en sorteos y ganar premios.
+        </p>
+      </header>
+
       <form
         onSubmit={handleSubmit}
         className="grid w-full gap-6 sm:gap-7 md:grid-cols-2 lg:grid-cols-12"

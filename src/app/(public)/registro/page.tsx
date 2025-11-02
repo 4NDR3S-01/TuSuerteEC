@@ -36,12 +36,6 @@ export default function RegisterPage() {
           rightColumnClassName="gap-10 px-8 lg:px-12"
         >
           <div className="mx-auto w-full max-w-2xl space-y-8">
-            <header className="space-y-3 text-center">
-              <h2 className="text-xl font-semibold">Crea tu cuenta</h2>
-              <p className="text-sm text-[color:var(--muted-foreground)]">
-                Completa tus datos para comenzar a participar en sorteos y ganar premios.
-              </p>
-            </header>
             <RegisterForm containerClassName="mx-auto w-full max-w-[42rem] border-[color:var(--border)] bg-[color:var(--background)]/96 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
 
             <div className="mx-auto w-full space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-xs text-[color:var(--muted-foreground)] md:flex md:items-center md:gap-6 md:space-y-0">
