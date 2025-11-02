@@ -232,7 +232,13 @@ export function RafflesShowcase({
                 >
                   <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/20 dark:to-amber-800/20">
                     {raffle.image_url ? (
-                      <img src={raffle.image_url} alt={raffle.prize_description} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
+                      <img
+                        src={raffle.image_url}
+                        alt={raffle.prize_description}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center">
                         <span className="text-6xl opacity-50">{CATEGORY_ICONS[raffle.prize_category || 'other'] || '🎁'}</span>

@@ -1,10 +1,21 @@
+import dynamic from "next/dynamic";
 import { HeroSection } from "../../components/home/hero-section";
 import { PlansSection } from "../../components/home/plans-section";
 import { RafflesShowcase } from "../../components/home/raffles-showcase";
-import { RecentWinnersShowcase } from "../../components/home/recent-winners-showcase";
 import { SiteHeader } from "../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../config/navigation";
 import { getSupabaseServerClient } from "../../lib/supabase/server";
+
+const RecentWinnersShowcase = dynamic(() =>
+  import("../../components/home/recent-winners-showcase").then((mod) => mod.RecentWinnersShowcase),
+  {
+    loading: () => (
+      <section className="scroll-mt-header space-y-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--muted)]/40 px-6 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
+        Cargando historias recientes…
+      </section>
+    ),
+  },
+);
 
 // FAQS and SUPPORT_CHANNELS are imported from `src/config/help` to avoid duplication
 

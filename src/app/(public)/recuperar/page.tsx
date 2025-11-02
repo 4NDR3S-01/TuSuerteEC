@@ -13,8 +13,8 @@ export default function RecoverPage() {
         cta={{ href: "/registro", label: "Crear cuenta" }}
       />
 
-      <main className="relative flex w-full min-h-screen items-center justify-center px-4 pb-20 pt-14 text-base sm:px-6 sm:pb-24 sm:pt-16">
-        <div className="absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.18)_0%,_transparent_55%)]" />
+      <main className="relative flex w-full min-h-screen items-center justify-center px-4 pb-12 pt-12 text-base sm:px-6 sm:pb-20 sm:pt-16">
+        <div className="absolute inset-x-0 top-0 -z-10 hidden h-[420px] bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.18)_0%,_transparent_55%)] sm:block" />
 
         <AuthPageLayout
           badge="¿Olvidaste tu contraseña?"
