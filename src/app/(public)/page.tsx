@@ -67,14 +67,6 @@ export default async function HomePage() {
     .order('delivered_at', { ascending: false })
     .limit(24); // Mostrar solo los últimos 24 en el carrusel
 
-  // DEBUG: mostrar respuesta temporalmente durante pruebas (eliminar antes del merge)
-  console.log('DEBUG_WINNERS', {
-    data: winnersResponse.data,
-    error: winnersResponse.error,
-    count: winnersResponse.data?.length,
-    totalWinnersCount,
-  });
-
   const winnersData = winnersResponse.data || [];
   let deliveredWinners: any[] = [];
 
