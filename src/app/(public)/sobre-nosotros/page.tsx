@@ -217,7 +217,7 @@ export default function SobreNosotrosPage() {
             '@type': 'Organization',
             name: 'TuSuerte',
             url: 'https://tusuerte.example',
-            sameAs: ['https://www.instagram.com/tusuerte'],
+            sameAs: ['https://www.instagram.com/tusuerte_ec'],
             description:
               'Plataforma de sorteos digitales que prioriza transparencia, seguridad y experiencias memorables para la comunidad.',
             foundingDate: '2024',

@@ -46,7 +46,7 @@ export const SUPPORT_CHANNELS: SupportChannel[] = [
     title: "Redes sociales",
     description:
       "Resolvemos dudas y compartimos novedades en Instagram. Envíanos un mensaje directo para una respuesta rápida.",
-    href: "https://www.instagram.com/tusuerte",
+    href: "https://www.instagram.com/tusuerte_ec",
     label: "Abrir Instagram",
     icon: Globe,
   },
