@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Home, Search, ArrowLeft, Ticket } from 'lucide-react';
+import { Home, Search, Ticket } from 'lucide-react';
 
 // Posiciones fijas para los tickets flotantes (evita hydration mismatch)
 const TICKET_POSITIONS = [
