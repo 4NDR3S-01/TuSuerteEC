@@ -41,9 +41,9 @@ export default async function HomePage() {
     .order('created_at', { ascending: false })
     .limit(6);
 
-  // Obtener ganadores con fotos de entrega del último mes
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  // Obtener ganadores con fotos de entrega (últimos 3 meses)
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
   
   // Primero obtener el conteo total de ganadores que cumplen filtros
   const { data: _countData, error: countError, count: totalWinnersCount } = await supabase
@@ -51,7 +51,7 @@ export default async function HomePage() {
     .select('id', { count: 'exact' })
     .eq('status', 'prize_delivered')
     .not('delivery_photo_url', 'is', null)
-    .gte('delivered_at', oneMonthAgo.toISOString());
+    .gte('delivered_at', threeMonthsAgo.toISOString());
 
   if (countError) {
     console.error('Error fetching winners count:', countError);
@@ -63,16 +63,17 @@ export default async function HomePage() {
     .select('id, prize_position, delivered_at, testimonial, delivery_photo_url, user_id, raffle_id')
     .eq('status', 'prize_delivered')
     .not('delivery_photo_url', 'is', null)
-    .gte('delivered_at', oneMonthAgo.toISOString())
+    .gte('delivered_at', threeMonthsAgo.toISOString())
     .order('delivered_at', { ascending: false })
     .limit(24); // Mostrar solo los últimos 24 en el carrusel
 
-  // console.log('Winners response:', {
-  //   data: winnersResponse.data,
-  //   error: winnersResponse.error,
-  //   count: winnersResponse.data?.length,
-  //   totalWinnersCount,
-  // });
+  // DEBUG: mostrar respuesta temporalmente durante pruebas (eliminar antes del merge)
+  console.log('DEBUG_WINNERS', {
+    data: winnersResponse.data,
+    error: winnersResponse.error,
+    count: winnersResponse.data?.length,
+    totalWinnersCount,
+  });
 
   const winnersData = winnersResponse.data || [];
   let deliveredWinners: any[] = [];
@@ -109,7 +110,7 @@ export default async function HomePage() {
       };
     });
 
-    // console.log('Delivered winners final:', deliveredWinners);
+    
   }
 
   return (

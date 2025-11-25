@@ -125,7 +125,34 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
   };
 
   if (transformedWinners.length === 0) {
-    return null;
+    return (
+      <section id="ganadores" className="scroll-mt-header space-y-8 sm:space-y-10">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 space-y-3 text-center">
+            <span
+              className="block text-sm font-semibold uppercase tracking-[0.3em]"
+              style={{ color: 'var(--accent)' }}
+            >
+              Ganadores (Últimos 3 meses)
+            </span>
+            <h2 className="text-3xl font-bold tracking-tight text-[color:var(--foreground)] sm:text-4xl">
+              Historias de premios entregados
+            </h2>
+            <p className="mx-auto max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">
+              No se encontraron ganadores entregados en los últimos 3 meses.
+            </p>
+            <div className="mt-6">
+              <a
+                href="/winners"
+                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--accent)] px-4 py-2 text-white font-semibold"
+              >
+                Ver historial completo
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -137,15 +164,15 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
             className="block text-sm font-semibold uppercase tracking-[0.3em]"
             style={{ color: 'var(--accent)' }}
           >
-            Ganadores del mes
+            Ganadores (Últimos 3 meses)
           </span>
           <h2 className="text-3xl font-bold tracking-tight text-[color:var(--foreground)] sm:text-4xl">
             Historias de premios entregados
           </h2>
           <p className="mx-auto max-w-3xl text-sm text-[color:var(--muted-foreground)] sm:text-base">
             {((totalCount ?? transformedWinners.length) === 1)
-              ? 'Felicitamos a nuestro ganador que ya recibió su premio.'
-              : `Celebramos junto a ${totalCount ?? transformedWinners.length} ganadores que ya recibieron sus premios.`}
+              ? 'Felicitamos a nuestro ganador que recibió su premio en los últimos 3 meses.'
+              : `Celebramos junto a ${totalCount ?? transformedWinners.length} ganadores que recibieron sus premios en los últimos 3 meses.`}
             {transformedWinners.length > 0 && (
               <span className="block mt-2 text-xs text-[color:var(--muted-foreground)] sm:text-sm">
                 Mostrando los últimos {transformedWinners.length} ganadores en el carrusel.
