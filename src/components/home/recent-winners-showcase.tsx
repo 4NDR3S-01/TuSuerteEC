@@ -173,11 +173,6 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
             {((totalCount ?? transformedWinners.length) === 1)
               ? 'Felicitamos a nuestro ganador que recibió su premio en los últimos 3 meses.'
               : `Celebramos junto a ${totalCount ?? transformedWinners.length} ganadores que recibieron sus premios en los últimos 3 meses.`}
-            {transformedWinners.length > 0 && (
-              <span className="block mt-2 text-xs text-[color:var(--muted-foreground)] sm:text-sm">
-                Mostrando los últimos {transformedWinners.length} ganadores en el carrusel.
-              </span>
-            )}
           </p>
         </div>
 
@@ -200,7 +195,7 @@ export function RecentWinnersShowcase({ winners, totalCount }: Readonly<RecentWi
           </button>
 
           {/* Contenedor del carrusel */}
-          <div className="overflow-hidden py-8">
+            <div className="overflow-hidden pt-4 pb-6">
             <div 
               ref={carouselRef}
               className="flex gap-3 sm:gap-4 md:gap-6 transition-transform duration-700 ease-in-out"
