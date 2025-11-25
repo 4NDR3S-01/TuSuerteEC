@@ -4,6 +4,7 @@ import { PUBLIC_NAV_ITEMS } from '../../../config/navigation';
 import { FAQS, SUPPORT_CHANNELS } from '../../../config/help';
 import React from 'react';
 import { User, BadgeCheck, Trophy, HelpCircle, ShieldCheck, FileText } from "lucide-react";
+import FaqSearch from '../../../components/help/faq-search';
 
 export const metadata = {
   title: 'Ayuda y Soporte · TuSuerte',
@@ -115,14 +116,7 @@ export default function AyudaPage() {
               );
             })}
           </div>
-          <form className="max-w-lg" action="#faq">
-            <input
-              type="search"
-              name="query"
-              placeholder="Busca temas como pagos, sorteos o planes..."
-              className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-3 text-sm outline-none transition-colors focus:border-[color:var(--accent)]"
-            />
-          </form>
+          {/* El buscador ahora está junto a las Preguntas Frecuentes */}
         </div>
 
         {/* Guía rápida de inicio */}
@@ -159,30 +153,8 @@ export default function AyudaPage() {
               </p>
             </div>
 
-            {/* FAQ accesible usando <details> para soporte de enlazado por id */}
-            <div className="space-y-3">
-              {faqEntries.map((item) => (
-                <details
-                  key={item.id}
-                  id={item.id}
-                  className="group rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4"
-                  aria-labelledby={`${item.id}-label`}
-                >
-                  <summary
-                    id={`${item.id}-label`}
-                    className="flex cursor-pointer items-center justify-between gap-4 text-base font-semibold transition-colors group-open:text-[color:var(--accent)]"
-                  >
-                    <span>{item.question}</span>
-                    <span className="ml-auto text-xl text-[color:var(--muted-foreground)] transition-transform group-open:rotate-180" aria-hidden>
-                      ▼
-                    </span>
-                  </summary>
-                  <div className="mt-3 border-t border-[color:var(--border)] pt-3 text-sm text-[color:var(--muted-foreground)]">
-                    {item.answer}
-                  </div>
-                </details>
-              ))}
-            </div>
+            {/* Componente cliente con buscador y FAQ filtrable */}
+            <FaqSearch entries={faqEntries} />
           </div>
 
           {/* Sidebar: Canales de soporte */}
