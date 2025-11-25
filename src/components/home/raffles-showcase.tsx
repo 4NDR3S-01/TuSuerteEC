@@ -188,7 +188,7 @@ export function RafflesShowcase({
           <span className="text-xl sm:text-2xl"><ArrowRight/></span>
         </button>
 
-        <div className="overflow-hidden py-8">
+        <div className="overflow-hidden pt-4 pb-6">
           <div
             ref={carouselRef}
             className="flex gap-3 sm:gap-4 md:gap-6 transition-transform duration-700 ease-in-out"
