@@ -7,7 +7,6 @@ import { SubscriptionCard } from '../dashboard/subscription-card';
 import { MyEntriesCard } from '../dashboard/my-entries-card';
 import { ActiveRafflesCard } from '../dashboard/active-raffles-card';
 import { RecentWinnersCard } from '../dashboard/recent-winners-card';
-import { QuickActionsGrid } from '../dashboard/quick-actions-grid';
 import { RecentActivityFeed } from '../dashboard/recent-activity-feed';
 import { UpcomingRafflesCalendar } from '../dashboard/upcoming-raffles-calendar';
 import { QuickTipsCard } from '../dashboard/quick-tips-card';
@@ -16,6 +15,7 @@ import LiveEventAlertBar from '../dashboard/live-event-alert-bar';
 type User = {
   id: string;
   email: string;
+  fullName: string;
 };
 
 type Plan = {
@@ -166,103 +166,98 @@ export function ParticipantDashboard({
     : new Date();
   const daysActive = Math.max(1, Math.ceil((Date.now() - firstEntryDate.getTime()) / (1000 * 60 * 60 * 24)));
 
+  // Usar el nombre completo desde Supabase
+  const displayName = user?.fullName || user?.email?.split('@')[0] || 'Usuario';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[color:var(--background)] via-[color:var(--background)] to-[color:var(--muted)]/10">
       {/* Barra de alerta de evento en vivo */}
       <LiveEventAlertBar event={alertEvent} />
       
-      {/* Hero Header Mejorado */}
-      <header className="relative border-b border-[color:var(--border)]/50 bg-gradient-to-b from-[color:var(--card)]/30 to-transparent backdrop-blur-sm overflow-hidden">
-        {/* Pattern de fondo decorativo */}
+      {/* Hero Header Rediseñado */}
+      <header className="relative border-b border-[color:var(--border)] bg-[color:var(--card)]/50 backdrop-blur-xl overflow-hidden">
+        {/* Fondo con gradiente moderno */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/3 via-transparent to-blue-500/3" />
+        
+        {/* Grid pattern sutil */}
         <div 
-          className="absolute inset-0 opacity-[0.015]" 
+          className="absolute inset-0 opacity-[0.02]" 
           style={{
             backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
-            backgroundSize: '24px 24px',
+            backgroundSize: '32px 32px',
             color: 'var(--foreground)'
           }}
         />
         
-        {/* Gradient orbs decorativos */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[color:var(--accent)]/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
+        {/* Gradient orbs más sutiles */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-[color:var(--accent)]/10 to-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
         
-        <div className="relative mx-auto max-w-7xl px-4 py-6 sm:py-8 lg:py-10 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-center lg:justify-between">
-            {/* User Info Section */}
-            <div className="flex items-start gap-3 sm:gap-4">
-              {/* Avatar con gradiente dinámico */}
+        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            {/* User Info Section - Más limpio */}
+            <div className="flex items-center gap-4">
+              {/* Avatar moderno */}
               <div className="relative group">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 flex items-center justify-center shadow-lg group-hover:shadow-2xl transition-shadow duration-300">
-                  <span className="text-2xl sm:text-3xl">👋</span>
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 p-0.5 shadow-xl group-hover:shadow-2xl transition-all duration-300">
+                  <div className="w-full h-full rounded-2xl bg-[color:var(--card)] flex items-center justify-center">
+                    <span className="text-3xl sm:text-4xl">👋</span>
+                  </div>
                 </div>
-                {/* Status indicator */}
-                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1">
-                  <span className="relative flex h-4 w-4 sm:h-5 sm:w-5">
+                {/* Status indicator mejorado */}
+                <div className="absolute -bottom-1 -right-1">
+                  <span className="relative flex h-5 w-5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 sm:h-5 sm:w-5 bg-green-500 border-2 border-[color:var(--background)]"></span>
+                    <span className="relative inline-flex rounded-full h-5 w-5 bg-green-500 border-2 border-[color:var(--card)] shadow-lg"></span>
                   </span>
                 </div>
-                {/* Glow effect */}
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] to-orange-500 opacity-0 group-hover:opacity-20 blur-xl transition-opacity duration-300 -z-10" />
               </div>
               
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-[color:var(--foreground)] mb-1">
-                  ¡Bienvenido de nuevo!
-                </h1>
-                <div className="flex flex-col xs:flex-row xs:items-center gap-1 xs:gap-2 text-xs sm:text-sm">
-                  <span className="font-mono text-[color:var(--accent)] font-semibold truncate">
-                    {user?.email}
-                  </span>
-                  <span className="hidden xs:inline text-[color:var(--muted-foreground)]">•</span>
-                  {activeSubscriptions.length > 0 ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 text-green-600 dark:text-green-400 rounded-lg text-xs font-bold">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <span>{activeSubscriptions[0].plans?.name}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[color:var(--muted-foreground)] text-xs">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Sin suscripción activa</span>
-                    </span>
-                  )}
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black bg-gradient-to-r from-[color:var(--foreground)] to-[color:var(--foreground)]/70 bg-clip-text text-transparent">
+                    ¡Bienvenido de nuevo!
+                  </h1>
                 </div>
+                <p className="text-sm sm:text-base text-[color:var(--muted-foreground)] font-medium">
+                  {displayName}
+                </p>
               </div>
             </div>
             
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2 sm:gap-3">
+            {/* Action Buttons - Mejorados */}
+            <div className="flex flex-wrap gap-3">
               {activeSubscriptions.length === 0 && (
                 <Link
                   href="/app/planes"
-                  className="group relative inline-flex items-center gap-2 rounded-xl border-2 border-[color:var(--accent)] bg-gradient-to-r from-[color:var(--accent)]/5 to-transparent px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-bold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition-all duration-300 hover:shadow-lg overflow-hidden"
+                  className="group relative inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--accent)] bg-[color:var(--background)]/50 backdrop-blur-sm px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white hover:border-[color:var(--accent)] transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
                 >
-                  <span className="relative z-10 text-base sm:text-lg group-hover:scale-110 transition-transform">⭐</span>
+                  <span className="relative z-10 text-lg sm:text-xl group-hover:scale-110 transition-transform">⭐</span>
                   <span className="relative z-10">Ver Planes</span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <svg className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
                 </Link>
               )}
               <Link
                 href="/app/sorteos"
-                className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] to-orange-500 px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-bold text-white hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
+                className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] via-orange-500 to-orange-600 px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden"
               >
-                <span className="relative z-10 text-base sm:text-lg group-hover:rotate-12 transition-transform">🎁</span>
+                <span className="relative z-10 text-lg sm:text-xl group-hover:rotate-12 transition-transform">🎁</span>
                 <span className="relative z-10">Ver Sorteos</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <svg className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               </Link>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-8 lg:py-10 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
+      <main className="relative mx-auto max-w-7xl px-4 py-6 sm:py-8 lg:py-10 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
         {/* Stats Section con mejor diseño */}
-        <section>
+        <section className="relative">
           <div className="flex items-center justify-between mb-4 sm:mb-6">
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
@@ -322,22 +317,6 @@ export function ParticipantDashboard({
           </div>
         </section>
 
-        {/* Quick Actions Section Rediseñada */}
-        <section>
-          <div className="flex items-center justify-between mb-4 sm:mb-6">
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
-                <span className="text-xl sm:text-2xl">⚡</span>
-                <span>Acciones Rápidas</span>
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)] mt-0.5">
-                Acceso directo a funciones clave
-              </p>
-            </div>
-          </div>
-          <QuickActionsGrid activeRafflesCount={activeRaffles.length} />
-        </section>
-
         {/* Grid Principal de Cards con mejor jerarquía visual */}
         <div className="space-y-6">
           {/* Fila 1: Calendario de Sorteos - Ancho Completo */}
@@ -375,30 +354,6 @@ export function ParticipantDashboard({
             <RecentActivityFeed activities={recentActivities} />
           </section>
         )}
-
-        {/* Keyboard Shortcuts Helper - Solo desktop */}
-        <div className="hidden lg:block">
-          <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg">
-            <h3 className="text-sm font-bold text-[color:var(--foreground)] flex items-center gap-2 mb-4">
-              <span className="text-lg">⌨️</span>
-              <span>Atajos de Teclado</span>
-            </h3>
-            <div className="grid grid-cols-3 gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-[color:var(--muted)] border border-[color:var(--border)] rounded text-[10px] font-mono">Ctrl+S</kbd>
-                <span className="text-[color:var(--muted-foreground)]">Ver Sorteos</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-[color:var(--muted)] border border-[color:var(--border)] rounded text-[10px] font-mono">Ctrl+P</kbd>
-                <span className="text-[color:var(--muted-foreground)]">Ver Planes</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-[color:var(--muted)] border border-[color:var(--border)] rounded text-[10px] font-mono">Ctrl+B</kbd>
-                <span className="text-[color:var(--muted-foreground)]">Mis Boletos</span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Tips & Best Practices */}
         <QuickTipsCard />
