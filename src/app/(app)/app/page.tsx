@@ -26,7 +26,7 @@ export default async function DashboardHomePage() {
   ] = await Promise.all([
     supabase
       .from('subscriptions')
-      .select('id, status, current_period_end, plans(id, name, price, currency, interval, benefits)')
+      .select('id, status, created_at, current_period_end, plans(id, name, price, currency, interval, benefits)')
       .eq('status', 'active')
       .eq('user_id', user.id)
       .gt('current_period_end', now),

@@ -29,7 +29,6 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-              <span className="text-2xl">🎫</span>
               <span>Mis Participaciones</span>
             </h2>
             <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">

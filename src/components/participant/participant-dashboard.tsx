@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StatCard } from '../dashboard/stat-card';
 import { SubscriptionCard } from '../dashboard/subscription-card';
 import { MyEntriesCard } from '../dashboard/my-entries-card';
@@ -31,6 +31,7 @@ type Subscription = {
   id: string;
   status: string;
   current_period_end: string;
+  created_at?: string;
   plans: Plan;
 };
 
@@ -94,6 +95,19 @@ export function ParticipantDashboard({
 }: Readonly<ParticipantDashboardProps>) {
   const winningEntries = myEntries.filter(entry => entry.is_winner);
   const totalWins = Math.max(winsCount, winningEntries.length);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<'sorteos' | 'mi-cuenta' | 'comunidad'>('sorteos');
+  
+  // Header sticky colapsable
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      setIsHeaderCollapsed(scrollY > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   
   // Keyboard shortcuts para power users
   useEffect(() => {
@@ -135,7 +149,7 @@ export function ParticipantDashboard({
       type: 'subscription' as const,
       title: 'Suscripción activa',
       description: sub.plans?.name || 'Plan',
-      timestamp: sub.current_period_end,
+      timestamp: sub.created_at || sub.current_period_end,
       icon: '💳'
     })),
     ...(winningEntries.length > 0
@@ -193,15 +207,15 @@ export function ParticipantDashboard({
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-[color:var(--accent)]/10 to-orange-500/10 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
         
-        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:py-10 lg:py-12 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative mx-auto max-w-7xl px-4 py-4 sm:py-8 lg:py-10 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 sm:gap-6 lg:flex-row lg:items-center lg:justify-between">
             {/* User Info Section - Más limpio */}
             <div className="flex items-center gap-4">
               {/* Avatar moderno */}
               <div className="relative group">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 p-0.5 shadow-xl group-hover:shadow-2xl transition-all duration-300">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 p-0.5 shadow-xl group-hover:shadow-2xl transition-all duration-300">
                   <div className="w-full h-full rounded-2xl bg-[color:var(--card)] flex items-center justify-center">
-                    <span className="text-3xl sm:text-4xl">👋</span>
+                    <span className="text-2xl sm:text-3xl lg:text-4xl">👋</span>
                   </div>
                 </div>
                 {/* Status indicator mejorado */}
@@ -214,12 +228,12 @@ export function ParticipantDashboard({
               </div>
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black bg-gradient-to-r from-[color:var(--foreground)] to-[color:var(--foreground)]/70 bg-clip-text text-transparent">
-                    ¡Bienvenido de nuevo!
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black bg-gradient-to-r from-[color:var(--foreground)] to-[color:var(--foreground)]/70 bg-clip-text text-transparent">
+                    ¡Bienvenido!
                   </h1>
                 </div>
-                <p className="text-sm sm:text-base text-[color:var(--muted-foreground)] font-medium">
+                <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)] font-medium">
                   {displayName}
                 </p>
               </div>
@@ -255,21 +269,10 @@ export function ParticipantDashboard({
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-7xl px-4 py-6 sm:py-8 lg:py-10 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
-        {/* Stats Section con mejor diseño */}
+      <main className="relative mx-auto max-w-7xl px-4 py-4 sm:py-6 lg:py-8 sm:px-6 lg:px-8 space-y-4 sm:space-y-6">
+        {/* Stats Section - Minimalista */}
         <section className="relative">
-          <div className="flex items-center justify-between mb-4 sm:mb-6">
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
-                <span className="text-xl sm:text-2xl">📊</span>
-                <span>Resumen</span>
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)] mt-0.5">
-                Tu actividad en un vistazo
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
             <StatCard
               title="Suscripción"
               value={activeSubscriptions.length > 0 ? activeSubscriptions[0].plans?.name || 'Activo' : 'Sin plan'}
@@ -301,7 +304,6 @@ export function ParticipantDashboard({
                 </svg>
               }
               description="Disponibles ahora"
-              maxValue={activeRaffles.length + 3}
             />
             <StatCard
               title="Premios Ganados"
@@ -317,138 +319,183 @@ export function ParticipantDashboard({
           </div>
         </section>
 
-        {/* Grid Principal de Cards con mejor jerarquía visual */}
-        <div className="space-y-6">
-          {/* Fila 1: Calendario de Sorteos - Ancho Completo */}
-          {myEntries.length > 0 && (
-            <div className="w-full">
-              <UpcomingRafflesCalendar raffles={activeRaffles} />
+        {/* Sistema de Tabs - Solo en móvil */}
+        <section className="lg:hidden sticky top-0 z-30 bg-[color:var(--background)] border-b border-[color:var(--border)] -mx-4 px-4 shadow-md">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
+            <button
+              onClick={() => setActiveTab('sorteos')}
+              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+                activeTab === 'sorteos'
+                  ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
+                  : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <span>🎁</span>
+                <span>Sorteos</span>
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('mi-cuenta')}
+              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+                activeTab === 'mi-cuenta'
+                  ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
+                  : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <span>👤</span>
+                <span>Mi Cuenta</span>
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('comunidad')}
+              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+                activeTab === 'comunidad'
+                  ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
+                  : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <span>🏆</span>
+                <span>Comunidad</span>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* Contenido con Tabs - Móvil */}
+        <div className="lg:hidden space-y-3">
+          {/* Tab: Sorteos */}
+          {activeTab === 'sorteos' && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              {activeRaffles.length > 0 && (
+                <UpcomingRafflesCalendar raffles={activeRaffles} />
+              )}
+              <MyEntriesCard entries={myEntries} />
             </div>
           )}
-          
-          {/* Fila 2: Suscripción y Participaciones */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <SubscriptionCard subscriptions={activeSubscriptions} />
-            <MyEntriesCard entries={myEntries} />
-          </div>
 
-          {/* Fila 3: Sorteos Activos y Últimos Ganadores */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            <ActiveRafflesCard raffles={activeRaffles} />
-            <RecentWinnersCard winners={recentWinners} currentUserId={user?.id || ''} />
-          </div>
+          {/* Tab: Mi Cuenta */}
+          {activeTab === 'mi-cuenta' && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              <SubscriptionCard subscriptions={activeSubscriptions} />
+              {recentActivities.length > 0 && (
+                <RecentActivityFeed activities={recentActivities} />
+              )}
+            </div>
+          )}
+
+          {/* Tab: Comunidad */}
+          {activeTab === 'comunidad' && (
+            <div className="space-y-3 animate-in fade-in duration-300">
+              <RecentWinnersCard winners={recentWinners} currentUserId={user?.id || ''} />
+              <QuickTipsCard />
+            </div>
+          )}
         </div>
 
-        {/* Actividad reciente con mejor presentación */}
-        {recentActivities.length > 0 && (
-          <section>
-            <div className="mb-4 sm:mb-6">
-              <h2 className="text-lg sm:text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2 mb-1">
-                <span className="text-xl sm:text-2xl">🕐</span>
-                <span>Actividad Reciente</span>
-              </h2>
-              <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">
-                Tus últimos movimientos y eventos
-              </p>
-            </div>
-            <RecentActivityFeed activities={recentActivities} />
-          </section>
-        )}
+        {/* Vista Desktop - Sin Tabs (layout original) */}
+        <div className="hidden lg:block space-y-6">
+          {/* Calendario de Sorteos - Ancho Completo */}
+          {activeRaffles.length > 0 && (
+            <UpcomingRafflesCalendar raffles={activeRaffles} />
+          )}
 
-        {/* Tips & Best Practices */}
-        <QuickTipsCard />
+          {/* Contenido Principal - Layout Minimalista */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Columna Principal (2/3) */}
+            <div className="lg:col-span-2 space-y-3 sm:space-y-6">
+              {/* Participaciones */}
+              <MyEntriesCard entries={myEntries} />
+              
+              {/* Actividad Reciente */}
+              {recentActivities.length > 0 && (
+                <RecentActivityFeed activities={recentActivities} />
+              )}
+            </div>
+
+            {/* Columna Lateral (1/3) */}
+            <div className="space-y-3 sm:space-y-6">
+              {/* Suscripción */}
+              <SubscriptionCard subscriptions={activeSubscriptions} />
+              
+              {/* Ganadores Recientes */}
+              <RecentWinnersCard winners={recentWinners} currentUserId={user?.id || ''} />
+              
+              {/* Tips Rápidos */}
+              <QuickTipsCard />
+            </div>
+          </div>
+        </div>
 
         {/* Estado vacío premium con mejor UX */}
         {activeSubscriptions.length === 0 && 
          myEntries.length === 0 && 
          activeRaffles.length === 0 && (
-          <div className="relative mt-8 sm:mt-12 bg-gradient-to-br from-[color:var(--card)] via-[color:var(--background)] to-[color:var(--card)] border-2 border-dashed border-[color:var(--border)] rounded-3xl p-8 sm:p-12 lg:p-16 text-center overflow-hidden">
-            {/* Grid pattern decorativo */}
-            <div 
-              className="absolute inset-0 opacity-[0.02]" 
-              style={{
-                backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
-                backgroundSize: '24px 24px',
-                color: 'var(--foreground)'
-              }}
-            />
+          <div className="relative bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-8 sm:p-12 text-center overflow-hidden">
+            {/* Gradient orbs más sutiles */}
+            <div className="absolute top-0 left-1/4 w-48 h-48 bg-[color:var(--accent)]/5 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl" />
             
-            {/* Gradient orbs */}
-            <div className="absolute top-0 left-1/4 w-64 h-64 bg-[color:var(--accent)]/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
-            
-            <div className="relative z-10 max-w-2xl mx-auto">
+            <div className="relative z-10 max-w-md mx-auto">
               {/* Animated icon */}
-              <div className="inline-block relative mb-6 sm:mb-8">
-                <div className="text-6xl sm:text-8xl animate-bounce">🎉</div>
-                <div className="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-[color:var(--accent)] to-orange-500 rounded-full flex items-center justify-center animate-pulse shadow-2xl">
-                  <span className="text-xl sm:text-2xl">✨</span>
-                </div>
-                <div className="absolute -bottom-2 -left-2 sm:-bottom-4 sm:-left-4 w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse shadow-xl" style={{ animationDelay: '0.5s' }}>
-                  <span className="text-lg sm:text-xl">🎯</span>
-                </div>
+              <div className="inline-block relative mb-6">
+                <div className="text-6xl animate-bounce">🎉</div>
               </div>
               
-              <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[color:var(--foreground)] mb-3 sm:mb-4">
+              <h3 className="text-2xl sm:text-3xl font-black text-[color:var(--foreground)] mb-3">
                 ¡Comienza tu Aventura!
               </h3>
-              <p className="text-[color:var(--muted-foreground)] text-sm sm:text-base lg:text-lg mb-6 sm:mb-8 max-w-xl mx-auto leading-relaxed">
-                Aún no has participado en ningún sorteo. Explora nuestros premios increíbles, suscríbete a un plan o compra boletos para comenzar a ganar hoy mismo.
+              <p className="text-[color:var(--muted-foreground)] text-sm sm:text-base mb-6">
+                Aún no has participado. Explora sorteos y comienza a ganar hoy.
               </p>
               
               {/* CTAs principales */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-8 sm:mb-12">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
                 <Link
                   href="/app/sorteos"
-                  className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 sm:gap-3 rounded-xl bg-gradient-to-r from-[color:var(--accent)] to-orange-500 px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-bold text-white hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                  className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] to-orange-500 px-6 py-3 text-sm font-bold text-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
                 >
-                  <span className="relative z-10 text-xl sm:text-2xl group-hover:rotate-12 transition-transform">🎁</span>
-                  <span className="relative z-10">Explorar Sorteos</span>
-                  <svg className="relative z-10 w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <span className="text-xl group-hover:rotate-12 transition-transform">🎁</span>
+                  <span>Explorar Sorteos</span>
                 </Link>
                 <Link
                   href="/app/planes"
-                  className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 sm:gap-3 rounded-xl border-2 border-[color:var(--accent)] bg-[color:var(--background)] hover:bg-[color:var(--accent)] px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-bold text-[color:var(--accent)] hover:text-white transition-all duration-300 overflow-hidden"
+                  className="group inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--accent)] bg-[color:var(--background)] hover:bg-[color:var(--accent)] px-6 py-3 text-sm font-bold text-[color:var(--accent)] hover:text-white transition-all duration-300"
                 >
-                  <span className="relative z-10 text-xl sm:text-2xl group-hover:scale-110 transition-transform">⭐</span>
-                  <span className="relative z-10">Ver Planes</span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <span className="text-xl group-hover:scale-110 transition-transform">⭐</span>
+                  <span>Ver Planes</span>
                 </Link>
               </div>
               
-              {/* Características destacadas con iconos SVG */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                <div className="group p-4 sm:p-5 rounded-2xl bg-[color:var(--muted)]/50 hover:bg-[color:var(--muted)] border border-[color:var(--border)] hover:border-[color:var(--accent)]/50 transition-all duration-300 hover:shadow-lg">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                    <svg className="w-6 h-6 sm:w-7 sm:h-7 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {/* Características destacadas */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
-                  <h4 className="font-bold text-[color:var(--foreground)] mb-1 sm:mb-2 text-sm sm:text-base">Participación Fácil</h4>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">Participa con un solo clic</p>
+                  <p className="text-xs font-semibold text-[color:var(--foreground)]">Fácil</p>
                 </div>
                 
-                <div className="group p-4 sm:p-5 rounded-2xl bg-[color:var(--muted)]/50 hover:bg-[color:var(--muted)] border border-[color:var(--border)] hover:border-[color:var(--accent)]/50 transition-all duration-300 hover:shadow-lg">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                    <svg className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-yellow-500/10 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <h4 className="font-bold text-[color:var(--foreground)] mb-1 sm:mb-2 text-sm sm:text-base">Premios Increíbles</h4>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">Miles de dólares en premios</p>
+                  <p className="text-xs font-semibold text-[color:var(--foreground)]">Premios</p>
                 </div>
                 
-                <div className="group p-4 sm:p-5 rounded-2xl bg-[color:var(--muted)]/50 hover:bg-[color:var(--muted)] border border-[color:var(--border)] hover:border-[color:var(--accent)]/50 transition-all duration-300 hover:shadow-lg">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-green-500/10 to-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                    <svg className="w-6 h-6 sm:w-7 sm:h-7 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-green-500/10 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                   </div>
-                  <h4 className="font-bold text-[color:var(--foreground)] mb-1 sm:mb-2 text-sm sm:text-base">100% Transparente</h4>
-                  <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">Sorteos justos y verificables</p>
+                  <p className="text-xs font-semibold text-[color:var(--foreground)]">Seguro</p>
                 </div>
               </div>
             </div>
