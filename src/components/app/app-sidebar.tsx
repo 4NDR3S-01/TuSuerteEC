@@ -22,7 +22,7 @@ import {
 
 type User = {
   id: string;
-  email: string;
+  email?: string;
 };
 
 type Subscription = {
@@ -138,10 +138,10 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-[color:var(--foreground)] truncate">
-                  {user.email}
+                  {user.email ?? user.id}
                 </p>
                 <p className="text-[10px] text-[color:var(--muted-foreground)] font-mono mt-0.5">
-                  ID: {user.id.slice(0, 8)}
+                  ID: {user.id ? user.id.slice(0, 8) : '—'}
                 </p>
                 {subscription ? (
                   <div className="mt-2 flex items-center gap-1.5">
