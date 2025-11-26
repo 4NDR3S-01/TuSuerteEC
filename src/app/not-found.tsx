@@ -161,7 +161,7 @@ export default function NotFound() {
         <div className="pt-4 sm:pt-6 px-4">
           <div className="inline-block px-4 sm:px-6 py-2 sm:py-3 rounded-full bg-[color:var(--accent)]/10 border border-[color:var(--accent)]/20">
             <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">
-              💡 <span className="font-semibold text-[color:var(--foreground)]">Dato curioso:</span> El error 404 se originó en el CERN en 1992
+              🎫 <span className="font-semibold text-[color:var(--foreground)]">Dato curioso:</span> Cada sorteo en TuSuerte tiene las mismas probabilidades para todos
             </p>
           </div>
         </div>
