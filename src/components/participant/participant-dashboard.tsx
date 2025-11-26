@@ -320,7 +320,7 @@ export function ParticipantDashboard({
         </section>
 
         {/* Sistema de Tabs - Solo en móvil */}
-        <section className="lg:hidden sticky top-0 z-30 bg-[color:var(--background)] border-b border-[color:var(--border)] -mx-4 px-4 shadow-md">
+        <section className="lg:hidden sticky top-0 z-10 bg-[color:var(--background)] border-b border-[color:var(--border)] -mx-4 px-4 shadow-md">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setActiveTab('sorteos')}
