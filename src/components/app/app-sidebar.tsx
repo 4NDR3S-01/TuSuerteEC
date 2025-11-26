@@ -2,9 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Logo } from '../ui/logo';
 import { useSidebar } from '../../hooks/use-sidebar';
+import { useTheme } from '../theme/theme-provider';
+import { NotificationsPanel } from '../notifications/notifications-panel';
+import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { 
   Home, 
   Ticket, 
@@ -17,12 +20,15 @@ import {
   Bell,
   User,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 type User = {
   id: string;
   email?: string;
+  fullName?: string;
 };
 
 type Subscription = {
@@ -48,7 +54,89 @@ const NAV_ITEMS = [
 export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Readonly<AppSidebarProps>) {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [notificationsCount, setNotificationsCount] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { isCollapsed, setIsCollapsed } = useSidebar();
+  const { mode, setMode } = useTheme();
+
+  // Obtener full_name desde user_metadata de Supabase
+  const fullName = (user as any)?.user_metadata?.full_name || user.fullName;
+  const userEmail = user.email;
+
+  // Obtener iniciales del usuario
+  const getUserInitials = () => {
+    if (fullName) {
+      const names = fullName.split(' ').filter(Boolean);
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[1][0]}`.toUpperCase();
+      }
+      return names[0].slice(0, 2).toUpperCase();
+    }
+    if (userEmail) {
+      return userEmail.slice(0, 2).toUpperCase();
+    }
+    return 'US';
+  };
+
+  // Cargar notificaciones no leídas desde Supabase
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadNotifications = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        
+        // Intentar cargar desde la tabla notifications
+        const { count, error } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('read', false);
+        
+        if (!error && count !== null) {
+          setNotificationsCount(count);
+        } else {
+          // Si la tabla no existe aún, usar valor de ejemplo
+          setNotificationsCount(0);
+        }
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+        setNotificationsCount(0);
+      }
+    };
+
+    void loadNotifications();
+
+    // Suscribirse a cambios en tiempo real
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel('notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          void loadNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [user?.id]);
+
+  const toggleTheme = () => {
+    setMode(mode === 'light' ? 'dark' : 'light');
+  };
+
+  const getThemeIcon = () => {
+    return mode === 'light' ? Sun : Moon;
+  };
 
   const isActive = (href: string) => {
     if (href === '/app') {
@@ -126,38 +214,64 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
           </div>
         </div>
 
-        {/* User Info Card */}
+        {/* User Info Card - Mejorada */}
         <div className="p-4 border-b border-[color:var(--border)]">
-          <div className={`flex items-start gap-3 p-3 rounded-xl bg-[color:var(--muted)]/50 hover:bg-[color:var(--muted)] transition-colors ${isCollapsed ? 'lg:justify-center lg:p-2' : ''}`}>
-            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[color:var(--accent)] to-orange-500 flex items-center justify-center flex-shrink-0">
-              <User className="w-5 h-5 text-white" />
-              {subscription && (
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-green-500 border-2 border-[color:var(--card)]" />
-              )}
+          {isCollapsed ? (
+            // Modo colapsado: Solo avatar con iniciales
+            <div className="lg:flex justify-center hidden" title={fullName || userEmail || 'Usuario'}>
+              <div className="relative group cursor-pointer">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+                  <span className="text-sm font-black text-white">
+                    {getUserInitials()}
+                  </span>
+                </div>
+                {subscription && (
+                  <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-[color:var(--card)] shadow-lg" />
+                )}
+              </div>
             </div>
-            {!isCollapsed && (
+          ) : (
+            // Modo expandido: Información completa
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-gradient-to-br from-[color:var(--muted)]/50 to-[color:var(--muted)]/30 hover:from-[color:var(--muted)]/70 hover:to-[color:var(--muted)]/50 border border-[color:var(--border)]/50 transition-all duration-300">
+              <div className="relative flex-shrink-0 group">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300">
+                  <span className="text-base font-black text-white">
+                    {getUserInitials()}
+                  </span>
+                </div>
+                {subscription && (
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-[color:var(--card)] shadow-lg flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                  </div>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-[color:var(--foreground)] truncate">
-                  {user.email ?? user.id}
+                {/* Nombre completo - Principal */}
+                <p className="text-sm font-bold text-[color:var(--foreground)] truncate mb-0.5">
+                  {fullName || userEmail?.split('@')[0] || 'Usuario'}
                 </p>
-                <p className="text-[10px] text-[color:var(--muted-foreground)] font-mono mt-0.5">
-                  ID: {user.id ? user.id.slice(0, 8) : '—'}
-                </p>
+                {/* Email - Secundario (siempre se muestra si existe) */}
+                {userEmail && (
+                  <p className="text-[10px] text-[color:var(--muted-foreground)] truncate">
+                    {userEmail}
+                  </p>
+                )}
+                {/* Badge de suscripción */}
                 {subscription ? (
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
                       {subscription.planName}
                     </span>
                   </div>
                 ) : (
-                  <p className="mt-2 text-[10px] text-[color:var(--muted-foreground)]">
-                    Sin suscripción
-                  </p>
+                  <span className="mt-2 inline-block text-[10px] text-[color:var(--muted-foreground)] opacity-60">
+                    Sin plan activo
+                  </span>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -202,27 +316,55 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
             })}
           </div>
 
-          {/* Notifications Badge */}
-          <div className="pt-4 border-t border-[color:var(--border)]">
-            <Link
-              href="/app/notificaciones"
-              onClick={closeMobile}
+          {/* Notifications & Theme */}
+          <div className="pt-4 border-t border-[color:var(--border)] space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                closeMobile();
+                setIsNotificationsOpen(true);
+              }}
               title={isCollapsed ? 'Notificaciones' : undefined}
-              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
             >
               <div className="relative">
                 <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[color:var(--card)] animate-pulse" />
+                {notificationsCount > 0 && (
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[color:var(--card)] animate-pulse" />
+                )}
               </div>
               {!isCollapsed && (
                 <>
                   <span>Notificaciones</span>
-                  <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-red-500 text-white rounded-full">
-                    3
+                  {notificationsCount > 0 && (
+                    <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-red-500 text-white rounded-full">
+                      {notificationsCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+            
+            {/* Theme Toggle */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={isCollapsed ? `Tema: ${mode === 'light' ? 'Claro' : 'Oscuro'}` : undefined}
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+            >
+              {(() => {
+                const ThemeIcon = getThemeIcon();
+                return <ThemeIcon className="w-5 h-5 group-hover:scale-110 group-hover:rotate-12 transition-all" />;
+              })()}
+              {!isCollapsed && (
+                <>
+                  <span>Tema</span>
+                  <span className="ml-auto text-[10px] px-2 py-0.5 bg-[color:var(--muted)] rounded-md font-semibold capitalize">
+                    {mode === 'light' ? 'Claro' : 'Oscuro'}
                   </span>
                 </>
               )}
-            </Link>
+            </button>
           </div>
         </nav>
 
@@ -251,6 +393,14 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
           </button>
         </div>
       </aside>
+
+      {/* Notifications Panel */}
+      <NotificationsPanel
+        userId={user.id}
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onCountChange={setNotificationsCount}
+      />
     </>
   );
 }
