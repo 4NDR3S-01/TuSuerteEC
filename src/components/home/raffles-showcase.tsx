@@ -11,7 +11,7 @@ import {
   DollarSign,
   Home,
   Gamepad2,
-  Football,
+  Volleyball,
   Gift,
   Users,
   Ticket,
@@ -61,7 +61,7 @@ const getCategoryIcon = (category: string | null) => {
     case 'entertainment':
       return <Gamepad2 className="w-12 h-12" />;
     case 'sports':
-      return <Football className="w-12 h-12" />;
+      return <Volleyball className="w-12 h-12" />;
     default:
       return <Gift className="w-12 h-12" />;
   }

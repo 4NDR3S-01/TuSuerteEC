@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -32,16 +32,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
-        get(name: string) {
-          return cookies().get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: any) {
-          cookies().set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          cookies().delete({ name, ...options });
+        setAll(cookiesToSet) {
+          try {
+            for (const cookie of cookiesToSet) {
+              const anyCookie: any = cookie;
+              const name = anyCookie.name;
+              const value = anyCookie.value;
+              if (!name) continue;
+              const opts = anyCookie.options ? { ...anyCookie.options } : { ...anyCookie };
+              delete opts.name;
+              delete opts.value;
+              cookieStore.set({ name, value, ...opts });
+            }
+          } catch {
+            // Ignorar errores de escritura
+          }
         },
       },
     });
