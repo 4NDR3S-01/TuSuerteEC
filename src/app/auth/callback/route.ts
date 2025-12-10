@@ -57,12 +57,23 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError) {
       console.error('Error exchanging code for session:', exchangeError);
+      // Si es un error de código expirado o inválido, redirigir con mensaje específico
+      const errorMessage = exchangeError.message.includes('expired') || exchangeError.message.includes('invalid')
+        ? 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.'
+        : 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
       return NextResponse.redirect(
-        new URL(`/iniciar-sesion?error=${encodeURIComponent('Error al confirmar tu cuenta. El enlace puede haber expirado.')}`, requestUrl.origin)
+        new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
+      );
+    }
+
+    // Verificar que la sesión se estableció correctamente
+    if (!exchangeData.session) {
+      return NextResponse.redirect(
+        new URL('/iniciar-sesion?error=No se pudo establecer la sesión. Intenta nuevamente.', requestUrl.origin)
       );
     }
 

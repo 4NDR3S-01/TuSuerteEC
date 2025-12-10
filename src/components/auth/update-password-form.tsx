@@ -30,34 +30,21 @@ export function UpdatePasswordForm() {
         const client = getSupabaseBrowserClient();
         setSupabase(client);
 
-        let sessionEstablished = false;
+        // Verificar si hay una sesión válida (establecida por el callback)
+        // El callback ya procesó el código y estableció la sesión
+        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        
+        if (sessionError) {
+          throw sessionError;
+        }
 
-        if (typeof window !== 'undefined') {
+        // Verificar que la sesión existe y es válida
+        const sessionEstablished = !!sessionData.session;
+        
+        // Limpiar la URL de parámetros si hay
+        if (typeof window !== 'undefined' && sessionEstablished) {
           const url = new URL(window.location.href);
-          const code = url.searchParams.get('code');
-          const hashParams = parseHashParams(url.hash);
-
-          if (code) {
-            const { error } = await client.auth.exchangeCodeForSession(code);
-            if (error) {
-              throw error;
-            }
-            sessionEstablished = true;
-          } else if (hashParams.accessToken && hashParams.refreshToken) {
-            const { error } = await client.auth.setSession({
-              access_token: hashParams.accessToken,
-              refresh_token: hashParams.refreshToken,
-            });
-            if (error) {
-              throw error;
-            }
-            sessionEstablished = true;
-          } else {
-            const { data } = await client.auth.getSession();
-            sessionEstablished = !!data.session;
-          }
-
-          if (sessionEstablished) {
+          if (url.searchParams.has('token') || url.searchParams.has('code') || url.hash) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         }
@@ -67,7 +54,7 @@ export function UpdatePasswordForm() {
         const message =
           error instanceof Error
             ? error.message
-            : 'No pudimos validar tu enlace de recuperación. Solicita uno nuevo.';
+            : 'No pudimos validar tu enlace de recuperación. El enlace puede haber expirado o ya fue usado. Solicita uno nuevo.';
         showToast({
           type: 'error',
           description: message,
