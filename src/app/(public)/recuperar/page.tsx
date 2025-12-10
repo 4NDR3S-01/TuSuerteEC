@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { ResetPasswordForm } from "../../../components/auth/reset-password-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
@@ -9,12 +10,21 @@ import { getCurrentUser } from "../../../lib/auth/get-user";
 
 export const dynamic = 'force-dynamic';
 
-export default async function RecoverPage() {
+type RecoverPageProps = {
+  searchParams?: Promise<{
+    error?: string;
+  }>;
+};
+
+export default async function RecoverPage({ searchParams }: RecoverPageProps) {
   // Si el usuario ya está autenticado, redirigir al dashboard
   const user = await getCurrentUser();
   if (user) {
     redirect('/app');
   }
+
+  const params = await searchParams;
+  const error = params?.error;
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <SiteHeader
@@ -52,6 +62,16 @@ export default async function RecoverPage() {
                 Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
               </p>
             </div>
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
+                <p className="font-semibold">⚠ Enlace expirado</p>
+                <p className="mt-1">
+                  {error === 'expired' 
+                    ? 'El enlace que utilizaste ha expirado o ya fue usado. Por seguridad, solicita un nuevo correo de recuperación.'
+                    : decodeURIComponent(error)}
+                </p>
+              </div>
+            )}
             <div className="mt-6">
               <ResetPasswordForm />
             </div>

@@ -431,9 +431,9 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
         },
         emailRedirectTo:
           typeof window !== 'undefined' 
-            ? `${window.location.origin}/auth/callback?type=signup&next=/iniciar-sesion`
+            ? `${window.location.origin}/auth/callback?type=signup`
             : process.env.NEXT_PUBLIC_APP_URL 
-              ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=signup&next=/iniciar-sesion`
+              ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=signup`
               : undefined,
       },
     });

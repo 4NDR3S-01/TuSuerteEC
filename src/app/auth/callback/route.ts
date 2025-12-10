@@ -19,11 +19,31 @@ export async function GET(request: NextRequest) {
     url: requestUrl.toString(),
   });
 
-  // Si hay un error, redirigir a login con mensaje de error
+  // Si hay un error, redirigir apropiadamente según el tipo de error
   if (error) {
-    const errorMessage = errorDescription 
-      ? decodeURIComponent(errorDescription)
+    const errorCode = requestUrl.searchParams.get('error_code');
+    let errorMessage = errorDescription 
+      ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
       : 'Error al procesar la autenticación';
+    
+    // Si es un error de OTP expirado, puede ser reset password o cambio de email
+    if (errorCode === 'otp_expired' || error === 'access_denied') {
+      if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
+        errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
+        // Si el tipo era recovery, redirigir a recuperar
+        if (type === 'recovery') {
+          return NextResponse.redirect(
+            new URL(`/recuperar?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
+          );
+        }
+        // Si era email_change, redirigir a settings
+        if (type === 'email_change') {
+          return NextResponse.redirect(
+            new URL(`/iniciar-sesion?error=${encodeURIComponent('El enlace de cambio de correo ha expirado. Solicita uno nuevo desde la configuración.')}`, requestUrl.origin)
+          );
+        }
+      }
+    }
     
     return NextResponse.redirect(
       new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
@@ -143,9 +163,9 @@ export async function GET(request: NextRequest) {
         );
       
       case 'signup':
-        // Confirmación de registro
+        // Confirmación de registro - redirigir a página de confirmación
         return NextResponse.redirect(
-          new URL('/iniciar-sesion?confirmed=true', requestUrl.origin)
+          new URL('/confirmar-registro?confirmed=true', requestUrl.origin)
         );
       
       default:
@@ -177,12 +197,12 @@ export async function GET(request: NextRequest) {
           // Verificar si el usuario tiene email confirmado (puede ser confirmación de registro)
           if (defaultUserData.user.email_confirmed_at) {
             console.log('[AUTH CALLBACK] Usuario con email confirmado, puede ser confirmación de registro');
-            return NextResponse.redirect(new URL('/iniciar-sesion?confirmed=true', requestUrl.origin));
+            return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
           }
           
           // Si no hay new_email pero el usuario está autenticado, puede ser confirmación de registro
-          console.log('[AUTH CALLBACK] Usuario autenticado sin new_email, redirigiendo a login');
-          return NextResponse.redirect(new URL('/iniciar-sesion?confirmed=true', requestUrl.origin));
+          console.log('[AUTH CALLBACK] Usuario autenticado sin new_email, redirigiendo a confirmación de registro');
+          return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
         }
         
         // Si no hay usuario, puede ser que el código no estableció la sesión correctamente

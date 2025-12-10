@@ -1,10 +1,12 @@
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import { HeroSection } from "../../components/home/hero-section";
 import { PlansSection } from "../../components/home/plans-section";
 import { RafflesShowcase } from "../../components/home/raffles-showcase";
 import { SiteHeader } from "../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../config/navigation";
 import { getSupabaseServerClient } from "../../lib/supabase/server";
+import { AuthErrorHandler } from "../../components/auth/auth-error-handler";
 
 const RecentWinnersShowcase = dynamic(() =>
   import("../../components/home/recent-winners-showcase").then((mod) => mod.RecentWinnersShowcase),
@@ -117,6 +119,9 @@ export default async function HomePage() {
 
   return (
     <div className="bg-[color:var(--background)] text-[color:var(--foreground)]">
+      <Suspense fallback={null}>
+        <AuthErrorHandler />
+      </Suspense>
       <SiteHeader navItems={PUBLIC_NAV_ITEMS} />
 
       <main className="mx-auto flex w-full min-h-screen max-w-6xl flex-col gap-16 px-4 pb-20 pt-14 text-base sm:px-6 sm:pb-24 sm:pt-16 md:gap-24 md:px-10">
