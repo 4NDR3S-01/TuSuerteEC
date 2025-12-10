@@ -41,12 +41,12 @@ export function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      const redirectTo =
-        typeof window !== 'undefined' 
-          ? `${window.location.origin}/auth/callback?type=recovery&next=/restablecer-clave`
-          : process.env.NEXT_PUBLIC_APP_URL
-            ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=recovery&next=/restablecer-clave`
-            : undefined;
+      // Usar la URL completa del callback - Supabase necesita la URL completa
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL || 'https://tu-suerte-ec.vercel.app';
+      
+      const redirectTo = `${baseUrl}/auth/callback?type=recovery&next=/restablecer-clave`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,
