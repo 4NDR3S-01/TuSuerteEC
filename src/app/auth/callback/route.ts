@@ -149,10 +149,14 @@ export async function GET(request: NextRequest) {
         );
       
       default:
-        // Si no hay tipo especificado pero hay código, puede ser una confirmación genérica
-        // Intentar obtener información del usuario para determinar el tipo
+        // Si no hay tipo especificado pero hay código, intentar determinar el tipo desde la sesión
         console.log('[AUTH CALLBACK] Tipo no especificado, intentando determinar desde la sesión');
-        const { data: defaultUserData } = await supabase.auth.getUser();
+        const { data: defaultUserData, error: defaultUserError } = await supabase.auth.getUser();
+        
+        if (defaultUserError) {
+          console.error('[AUTH CALLBACK] Error obteniendo usuario:', defaultUserError);
+          return NextResponse.redirect(new URL('/iniciar-sesion?error=Error al obtener información del usuario', requestUrl.origin));
+        }
         
         if (defaultUserData?.user) {
           // Si el usuario tiene new_email, es un cambio de email
@@ -170,14 +174,21 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(confirmUrl);
           }
           
+          // Verificar si el usuario tiene email confirmado (puede ser confirmación de registro)
+          if (defaultUserData.user.email_confirmed_at) {
+            console.log('[AUTH CALLBACK] Usuario con email confirmado, puede ser confirmación de registro');
+            return NextResponse.redirect(new URL('/iniciar-sesion?confirmed=true', requestUrl.origin));
+          }
+          
           // Si no hay new_email pero el usuario está autenticado, puede ser confirmación de registro
           console.log('[AUTH CALLBACK] Usuario autenticado sin new_email, redirigiendo a login');
           return NextResponse.redirect(new URL('/iniciar-sesion?confirmed=true', requestUrl.origin));
         }
         
-        // Por defecto, redirigir según el parámetro next o a login
-        console.log('[AUTH CALLBACK] Redirigiendo a:', next);
-        return NextResponse.redirect(new URL(next, requestUrl.origin));
+        // Si no hay usuario, puede ser que el código no estableció la sesión correctamente
+        // O puede ser un enlace de reset password sin tipo
+        console.log('[AUTH CALLBACK] No se pudo determinar el tipo, redirigiendo a login');
+        return NextResponse.redirect(new URL('/iniciar-sesion?error=No se pudo determinar el tipo de confirmación', requestUrl.origin));
     }
   }
 
