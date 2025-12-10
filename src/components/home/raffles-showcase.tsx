@@ -2,7 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import {ArrowLeft, ArrowRight} from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Smartphone,
+  Car,
+  Plane,
+  DollarSign,
+  Home,
+  Gamepad2,
+  Football,
+  Gift,
+  Users,
+  Ticket,
+  Target,
+  Flame,
+  Trophy
+} from 'lucide-react';
 
 type Raffle = {
   id: string;
@@ -30,32 +46,42 @@ type RafflesShowcaseProps = {
   showLoginCtaIfMore?: boolean;
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  electronics: '📱',
-  vehicles: '🚗',
-  travel: '✈️',
-  cash: '💵',
-  home: '🏠',
-  entertainment: '🎮',
-  sports: '⚽',
-  other: '🎁',
+const getCategoryIcon = (category: string | null) => {
+  switch (category) {
+    case 'electronics':
+      return <Smartphone className="w-12 h-12" />;
+    case 'vehicles':
+      return <Car className="w-12 h-12" />;
+    case 'travel':
+      return <Plane className="w-12 h-12" />;
+    case 'cash':
+      return <DollarSign className="w-12 h-12" />;
+    case 'home':
+      return <Home className="w-12 h-12" />;
+    case 'entertainment':
+      return <Gamepad2 className="w-12 h-12" />;
+    case 'sports':
+      return <Football className="w-12 h-12" />;
+    default:
+      return <Gift className="w-12 h-12" />;
+  }
 };
 
-const ENTRY_MODE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+const ENTRY_MODE_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   subscribers_only: {
     label: 'Solo Suscriptores',
     color: 'bg-red-500',
-    icon: '👥',
+    icon: <Users className="w-4 h-4" />,
   },
   tickets_only: {
     label: 'Compra de Boletos',
     color: 'bg-green-500',
-    icon: '🎫',
+    icon: <Ticket className="w-4 h-4" />,
   },
   hybrid: {
     label: 'Suscriptores + Boletos',
     color: 'bg-purple-500',
-    icon: '🎯',
+    icon: <Target className="w-4 h-4" />,
   },
 };
 
@@ -244,25 +270,30 @@ export function RafflesShowcase({
                         className="h-full w-full object-cover transition-transform group-hover:scale-110"
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <span className="text-6xl opacity-50">{CATEGORY_ICONS[raffle.prize_category || 'other'] || '🎁'}</span>
+                      <div className="flex h-full items-center justify-center opacity-50">
+                        {getCategoryIcon(raffle.prize_category)}
                       </div>
                     )}
 
-                    <div className={`absolute right-3 top-3 rounded-full ${ENTRY_MODE_LABELS[raffle.entry_mode].color} px-3 py-1 text-xs font-bold text-white shadow-lg`}>
-                      {ENTRY_MODE_LABELS[raffle.entry_mode].icon} {ENTRY_MODE_LABELS[raffle.entry_mode].label}
+                    <div className={`absolute right-3 top-3 rounded-full ${ENTRY_MODE_LABELS[raffle.entry_mode].color} px-3 py-1 text-xs font-bold text-white shadow-lg flex items-center gap-1.5`}>
+                      {ENTRY_MODE_LABELS[raffle.entry_mode].icon}
+                      <span>{ENTRY_MODE_LABELS[raffle.entry_mode].label}</span>
                     </div>
 
                     {raffle.is_trending && (
-                      <div className="absolute left-3 top-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 text-xs font-bold text-white shadow-lg animate-pulse">
-                        🔥 Tendencia
+                      <div className="absolute left-3 top-3 rounded-full bg-gradient-to-r from-orange-500 to-red-500 px-3 py-1 text-xs font-bold text-white shadow-lg animate-pulse flex items-center gap-1.5">
+                        <Flame className="w-3 h-3" />
+                        <span>Tendencia</span>
                       </div>
                     )}
                   </div>
 
                   <div className="p-6">
                     <h3 className="text-lg font-bold text-[color:var(--foreground)] line-clamp-1">{raffle.title}</h3>
-                    <p className="mt-1 text-sm font-semibold text-[color:var(--accent)]">🏆 {raffle.prize_description}</p>
+                    <p className="mt-1 text-sm font-semibold text-[color:var(--accent)] flex items-center gap-1">
+                      <Trophy className="w-4 h-4" />
+                      <span>{raffle.prize_description}</span>
+                    </p>
                     {raffle.description && <p className="mt-2 text-xs text-[color:var(--muted-foreground)] line-clamp-2">{raffle.description}</p>}
 
                     <div className="flex items-center justify-between pt-2 text-xs text-[color:var(--muted-foreground)]">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Ticket, CreditCard, Trophy, BarChart3, Clipboard, Clock } from 'lucide-react';
 
 interface ActivityItem {
   readonly id: string;
@@ -18,6 +19,19 @@ interface RecentActivityFeedProps {
 export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const displayedActivities = isExpanded ? activities : activities.slice(0, 5);
+
+  const getIconComponent = (iconName: string) => {
+    switch (iconName) {
+      case 'ticket':
+        return <Ticket className="w-5 h-5 sm:w-6 sm:h-6" />;
+      case 'credit-card':
+        return <CreditCard className="w-5 h-5 sm:w-6 sm:h-6" />;
+      case 'trophy':
+        return <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />;
+      default:
+        return <Ticket className="w-5 h-5 sm:w-6 sm:h-6" />;
+    }
+  };
 
   const getTimeAgo = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -38,26 +52,26 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
   const getActivityColor = (type: string): string => {
     switch (type) {
       case 'win':
-        return 'from-yellow-500 to-orange-500';
+        return 'from-yellow-500 dark:from-yellow-600 to-orange-500 dark:to-orange-600';
       case 'entry':
-        return 'from-blue-500 to-cyan-500';
+        return 'from-blue-500 dark:from-blue-600 to-cyan-500 dark:to-cyan-600';
       case 'subscription':
-        return 'from-purple-500 to-pink-500';
+        return 'from-purple-500 dark:from-purple-600 to-pink-500 dark:to-pink-600';
       default:
-        return 'from-[color:var(--accent)] to-orange-500';
+        return 'from-[color:var(--accent)] to-orange-500 dark:to-orange-600';
     }
   };
 
   const getActivityBadge = (type: string): { text: string; color: string } => {
     switch (type) {
       case 'win':
-        return { text: 'GANASTE', color: 'bg-yellow-500' };
+        return { text: 'GANASTE', color: 'bg-yellow-500 dark:bg-yellow-600' };
       case 'entry':
-        return { text: 'PARTICIPACIÓN', color: 'bg-blue-500' };
+        return { text: 'PARTICIPACIÓN', color: 'bg-blue-500 dark:bg-blue-600' };
       case 'subscription':
-        return { text: 'SUSCRIPCIÓN', color: 'bg-purple-500' };
+        return { text: 'SUSCRIPCIÓN', color: 'bg-purple-500 dark:bg-purple-600' };
       default:
-        return { text: 'ACTIVIDAD', color: 'bg-gray-500' };
+        return { text: 'ACTIVIDAD', color: 'bg-gray-500 dark:bg-gray-600' };
     }
   };
 
@@ -69,7 +83,7 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-              <span className="text-2xl">📊</span>
+              <BarChart3 className="w-5 h-5 text-[color:var(--accent)]" />
               <span>Actividad Reciente</span>
             </h2>
             <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">
@@ -78,7 +92,9 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
           </div>
           
           <div className="text-center py-8">
-            <div className="text-6xl mb-4">📋</div>
+            <div className="mb-4 flex justify-center">
+              <Clipboard className="w-16 h-16 text-[color:var(--muted-foreground)]" />
+            </div>
             <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-2">
               Sin Actividad Reciente
             </h3>
@@ -95,7 +111,7 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
     <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-          <span className="text-2xl">📊</span>
+          <BarChart3 className="w-5 h-5 text-[color:var(--accent)]" />
           <span>Actividad Reciente</span>
         </h2>
         <span className="px-3 py-1 bg-[color:var(--accent)]/10 text-[color:var(--accent)] text-xs font-bold rounded-full flex items-center gap-1.5">
@@ -120,18 +136,18 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
             >
               {/* Punto del timeline con animación */}
               <div className="relative flex-shrink-0 z-10">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br ${getActivityColor(activity.type)} flex items-center justify-center text-base sm:text-xl shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                  {activity.icon}
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br ${getActivityColor(activity.type)} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  {getIconComponent(activity.icon)}
                 </div>
                 
                 {/* Anillo de resplandor para actividades recientes */}
                 {isRecent && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)] to-orange-500 rounded-lg sm:rounded-xl blur-md animate-pulse -z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)] to-orange-500 dark:to-orange-600 rounded-lg sm:rounded-xl blur-md animate-pulse -z-10" />
                 )}
 
                 {/* Indicador de nueva actividad */}
                 {isRecent && (
-                  <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-500 rounded-full border-2 border-[color:var(--card)] animate-bounce" />
+                  <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-500 dark:bg-red-600 rounded-full border-2 border-[color:var(--card)] animate-bounce" />
                 )}
               </div>
 
@@ -157,14 +173,14 @@ export function RecentActivityFeed({ activities }: RecentActivityFeedProps) {
                 {/* Timestamp y detalles adicionales */}
                 <div className="flex items-center justify-between mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-[color:var(--border)]/50">
                   <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-semibold text-[color:var(--accent)]">
-                    <span className="text-xs sm:text-sm">🕐</span>
+                    <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
                     <span>{getTimeAgo(activity.timestamp)}</span>
                   </span>
 
                   {/* Indicador de actividad reciente */}
                   {isRecent && (
-                    <span className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 text-[9px] sm:text-[10px] font-bold rounded-full whitespace-nowrap">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-green-500 rounded-full animate-pulse" />
+                    <span className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 text-[9px] sm:text-[10px] font-bold rounded-full whitespace-nowrap">
+                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-green-500 dark:bg-green-400 rounded-full animate-pulse" />
                       <span className="hidden xs:inline">NUEVO</span>
                       <span className="xs:hidden">•</span>
                     </span>

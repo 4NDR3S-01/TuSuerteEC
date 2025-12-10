@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Gift, Clock, Trophy, Calendar, Ticket, Users, Target, Dices, Flame } from 'lucide-react';
 
 interface Raffle {
   id: string;
@@ -27,7 +28,7 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-              <span className="text-2xl">🎁</span>
+              <Gift className="w-5 h-5 text-[color:var(--accent)]" />
               <span>Próximos Sorteos</span>
             </h2>
             <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">
@@ -36,7 +37,9 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
           </div>
           
           <div className="text-center py-8">
-            <div className="text-6xl mb-4 animate-pulse">⏰</div>
+            <div className="mb-4 animate-pulse flex justify-center">
+              <Clock className="w-16 h-16 text-[color:var(--muted-foreground)]" />
+            </div>
             <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-2">
               Sin Sorteos Activos
             </h3>
@@ -56,11 +59,11 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
     <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-          <span className="text-2xl">🎁</span>
+          <Gift className="w-5 h-5 text-[color:var(--accent)]" />
           <span>Próximos Sorteos</span>
         </h2>
-        <span className="px-3 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
-          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+        <span className="px-3 py-1 bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full flex items-center gap-1">
+          <span className="w-2 h-2 bg-blue-500 dark:bg-blue-400 rounded-full animate-pulse" />
           {raffles.length} Activo{raffles.length > 1 ? 's' : ''}
         </span>
       </div>
@@ -97,7 +100,7 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
                 {/* Badge de tendencia (derecha) */}
                 {isTrending && (
                   <div className="px-2 py-1 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-bold rounded-full flex items-center gap-1 shadow-lg animate-pulse whitespace-nowrap">
-                    <span>🔥</span>
+                    <Flame className="w-3 h-3" />
                     <span className="hidden xs:inline">TRENDING</span>
                   </div>
                 )}
@@ -113,7 +116,7 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
 
                   {/* Premio */}
                   <div className="flex items-start gap-2 mb-3">
-                    <span className="flex-shrink-0 text-base sm:text-lg">🏆</span>
+                    <Trophy className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 text-[color:var(--accent)] mt-0.5" />
                     <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)] line-clamp-2 flex-1">
                       {raffle.prize_description}
                     </p>
@@ -123,7 +126,7 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     {/* Fecha */}
                     <div className="flex items-center gap-1 text-xs">
-                      <span className="text-sm sm:text-base">📅</span>
+                      <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
                       <span className="font-medium text-[color:var(--foreground)]">
                         {drawDate.toLocaleDateString('es-EC', { 
                           day: 'numeric', 
@@ -136,7 +139,7 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
                     {/* Límite de participaciones si existe */}
                     {Boolean(raffle.max_entries_per_user) && (
                       <div className="flex items-center gap-1 text-xs">
-                        <span className="text-sm sm:text-base">🎟️</span>
+                        <Ticket className="w-3 h-3 sm:w-4 sm:h-4" />
                         <span className="font-bold text-[color:var(--accent)]">
                           {raffle.max_entries_per_user} máx
                         </span>
@@ -147,20 +150,35 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
                     {raffle.entry_mode && (
                       <div className={`px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${
                         raffle.entry_mode === 'subscribers_only'
-                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                          ? 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400'
                           : raffle.entry_mode === 'tickets_only'
-                          ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                          ? 'bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400'
+                          : 'bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
                       }`}>
-                        <span className="hidden sm:inline">
-                          {raffle.entry_mode === 'subscribers_only' && '👥 SUSCRIPTORES'}
-                          {raffle.entry_mode === 'tickets_only' && '🎫 BOLETOS'}
-                          {raffle.entry_mode === 'hybrid' && '🎯 HÍBRIDO'}
+                        <span className="hidden sm:inline flex items-center gap-1">
+                          {raffle.entry_mode === 'subscribers_only' && (
+                            <>
+                              <Users className="w-3 h-3" />
+                              <span>SUSCRIPTORES</span>
+                            </>
+                          )}
+                          {raffle.entry_mode === 'tickets_only' && (
+                            <>
+                              <Ticket className="w-3 h-3" />
+                              <span>BOLETOS</span>
+                            </>
+                          )}
+                          {raffle.entry_mode === 'hybrid' && (
+                            <>
+                              <Target className="w-3 h-3" />
+                              <span>HÍBRIDO</span>
+                            </>
+                          )}
                         </span>
                         <span className="sm:hidden">
-                          {raffle.entry_mode === 'subscribers_only' && '👥'}
-                          {raffle.entry_mode === 'tickets_only' && '🎫'}
-                          {raffle.entry_mode === 'hybrid' && '🎯'}
+                          {raffle.entry_mode === 'subscribers_only' && <Users className="w-3 h-3" />}
+                          {raffle.entry_mode === 'tickets_only' && <Ticket className="w-3 h-3" />}
+                          {raffle.entry_mode === 'hybrid' && <Target className="w-3 h-3" />}
                         </span>
                       </div>
                     )}
@@ -171,15 +189,15 @@ export function ActiveRafflesCard({ raffles }: ActiveRafflesCardProps) {
                 <div className="flex-shrink-0 self-end sm:self-start">
                   <div className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-lg ${
                     isUrgent
-                      ? 'bg-gradient-to-br from-red-500 to-orange-500 text-white animate-pulse'
+                      ? 'bg-gradient-to-br from-red-500 dark:from-red-600 to-orange-500 dark:to-orange-600 text-white animate-pulse'
                       : daysUntilDraw <= 7
-                      ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white'
-                      : 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white'
+                      ? 'bg-gradient-to-br from-amber-500 dark:from-amber-600 to-orange-500 dark:to-orange-600 text-white'
+                      : 'bg-gradient-to-br from-blue-500 dark:from-blue-600 to-cyan-500 dark:to-cyan-600 text-white'
                   }`}>
                     {daysUntilDraw <= 0 ? (
                       <div className="flex flex-col items-center min-w-[3rem]">
                         <span className="text-[10px] opacity-90">HOY</span>
-                        <span className="text-xl sm:text-2xl">🎲</span>
+                        <Dices className="w-5 h-5 sm:w-6 sm:h-6" />
                       </div>
                     ) : (
                       <div className="flex flex-col items-center min-w-[3rem]">

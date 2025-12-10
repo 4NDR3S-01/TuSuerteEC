@@ -24,13 +24,13 @@ export function StatCard({ title, value, icon, trend, description, maxValue, col
   return (
     <div className="group relative bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-xl hover:border-[color:var(--accent)]/50 transition-all duration-300 hover:-translate-y-1 overflow-hidden">
       {/* Fondo decorativo con gradiente */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/5 dark:from-[color:var(--accent)]/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
       {/* Barra de progreso inferior si hay maxValue */}
       {shouldShowProgress && (
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-[color:var(--muted)]">
           <div 
-            className="h-full bg-gradient-to-r from-[color:var(--accent)] to-orange-500 transition-all duration-500 ease-out"
+            className="h-full bg-gradient-to-r from-[color:var(--accent)] to-orange-500 dark:to-orange-600 transition-all duration-500 ease-out"
             style={{ width: `${percentage}%` }}
           />
         </div>
@@ -40,7 +40,7 @@ export function StatCard({ title, value, icon, trend, description, maxValue, col
         <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
           {/* Ícono primero en móvil */}
           <div className="flex-shrink-0 order-first sm:order-last">
-            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-[color:var(--accent)]/20 to-[color:var(--accent)]/5 rounded-xl flex items-center justify-center transform group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-lg">
+            <div className="w-11 h-11 sm:w-14 sm:h-14 bg-gradient-to-br from-[color:var(--accent)]/20 dark:from-[color:var(--accent)]/30 to-[color:var(--accent)]/5 dark:to-[color:var(--accent)]/10 rounded-xl flex items-center justify-center transform group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-lg">
               {icon}
             </div>
           </div>
@@ -71,8 +71,8 @@ export function StatCard({ title, value, icon, trend, description, maxValue, col
           <div className="flex items-center gap-2 pt-2 sm:pt-3 border-t border-[color:var(--border)]">
             <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-semibold ${
               trend.isPositive 
-                ? 'bg-green-500/10 text-green-600 dark:text-green-400' 
-                : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                ? 'bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400' 
+                : 'bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400'
             }`}>
               <span className="text-xs sm:text-sm">{trend.isPositive ? '↗' : '↘'}</span>
               <span>{Math.abs(trend.value)}%</span>

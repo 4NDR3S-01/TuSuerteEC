@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Dices, Gift, Clock, Calendar, Ticket } from 'lucide-react';
 
 type Raffle = {
   id: string;
@@ -74,7 +75,10 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-[color:var(--foreground)]">🎲 Sorteos Disponibles</h1>
+            <h1 className="text-3xl font-black text-[color:var(--foreground)] flex items-center gap-2">
+              <Dices className="w-8 h-8 text-[color:var(--accent)]" />
+              <span>Sorteos Disponibles</span>
+            </h1>
             <p className="text-[color:var(--muted-foreground)] mt-1">Explora todos los sorteos activos y participa</p>
           </div>
         </div>
@@ -130,7 +134,9 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
         {/* Raffles Grid */}
         {filteredRaffles.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed border-[color:var(--border)] rounded-2xl">
-            <span className="text-6xl block mb-4">🎲</span>
+            <div className="flex justify-center mb-4">
+              <Dices className="w-16 h-16 text-[color:var(--muted-foreground)]" />
+            </div>
             <h3 className="text-xl font-bold mb-2">No se encontraron sorteos</h3>
             <p className="text-[color:var(--muted-foreground)]">Intenta con otros filtros de búsqueda</p>
           </div>
@@ -153,12 +159,13 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                       <img src={raffle.image_url} alt={raffle.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-6xl">🎁</span>
+                        <Gift className="w-16 h-16 text-white/50" />
                       </div>
                     )}
                     {isEndingSoon && (
-                      <div className="absolute top-3 right-3 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
-                        ⏰ {daysUntil}d restantes
+                      <div className="absolute top-3 right-3 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{daysUntil}d restantes</span>
                       </div>
                     )}
                   </div>
@@ -184,8 +191,14 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-[color:var(--muted-foreground)]">
-                      <span>📅 {drawDate.toLocaleDateString('es-EC')}</span>
-                      <span>🎟️ {raffle.max_entries_per_user || '∞'} por usuario</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{drawDate.toLocaleDateString('es-EC')}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Ticket className="w-3 h-3" />
+                        <span>{raffle.max_entries_per_user || '∞'} por usuario</span>
+                      </span>
                     </div>
                   </div>
                 </Link>

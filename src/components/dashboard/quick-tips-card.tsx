@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { Star, Target, Bell, User } from 'lucide-react';
 
 interface QuickTip {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: 'star' | 'target' | 'bell' | 'user';
   color: string;
   action?: {
     label: string;
@@ -19,8 +20,8 @@ const TIPS: QuickTip[] = [
     id: 'subscribe',
     title: 'Participa Automáticamente',
     description: 'Con una suscripción activa, participas en todos los sorteos sin necesidad de comprar boletos individuales.',
-    icon: '⭐',
-    color: 'from-purple-500 to-pink-500',
+    icon: 'star',
+    color: 'from-purple-500 dark:from-purple-600 to-pink-500 dark:to-pink-600',
     action: {
       label: 'Ver Planes',
       href: '/planes',
@@ -30,8 +31,8 @@ const TIPS: QuickTip[] = [
     id: 'participate',
     title: 'Aumenta tus Probabilidades',
     description: 'Mientras más participaciones tengas, mayores son tus oportunidades de ganar increíbles premios.',
-    icon: '🎯',
-    color: 'from-blue-500 to-cyan-500',
+    icon: 'target',
+    color: 'from-blue-500 dark:from-blue-600 to-cyan-500 dark:to-cyan-600',
     action: {
       label: 'Ver Sorteos',
       href: '/sorteos',
@@ -41,8 +42,8 @@ const TIPS: QuickTip[] = [
     id: 'notifications',
     title: 'Activa Notificaciones',
     description: 'Recibe alertas en tiempo real sobre nuevos sorteos, resultados y eventos especiales en vivo.',
-    icon: '🔔',
-    color: 'from-orange-500 to-red-500',
+    icon: 'bell',
+    color: 'from-orange-500 dark:from-orange-600 to-red-500 dark:to-red-600',
     action: {
       label: 'Configurar',
       href: '/settings',
@@ -52,8 +53,8 @@ const TIPS: QuickTip[] = [
     id: 'profile',
     title: 'Completa tu Perfil',
     description: 'Asegúrate de tener tu información actualizada para recibir tus premios sin problemas.',
-    icon: '👤',
-    color: 'from-green-500 to-emerald-500',
+    icon: 'user',
+    color: 'from-green-500 dark:from-green-600 to-emerald-500 dark:to-emerald-600',
     action: {
       label: 'Mi Perfil',
       href: '/settings',
@@ -88,13 +89,16 @@ export function QuickTipsCard() {
   return (
     <div className="group relative bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/50 border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
       {/* Gradient Background */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${currentTip.color} opacity-5 transition-opacity duration-500`} />
+      <div className={`absolute inset-0 bg-gradient-to-br ${currentTip.color} opacity-5 dark:opacity-10 transition-opacity duration-500`} />
       
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className={`w-10 h-10 bg-gradient-to-br ${currentTip.color} rounded-xl flex items-center justify-center text-xl shadow-md`}>
-            {currentTip.icon}
+          <div className={`w-10 h-10 bg-gradient-to-br ${currentTip.color} rounded-xl flex items-center justify-center shadow-md`}>
+            {currentTip.icon === 'star' && <Star className="w-5 h-5 text-white" />}
+            {currentTip.icon === 'target' && <Target className="w-5 h-5 text-white" />}
+            {currentTip.icon === 'bell' && <Bell className="w-5 h-5 text-white" />}
+            {currentTip.icon === 'user' && <User className="w-5 h-5 text-white" />}
           </div>
           <div>
             <h3 className="text-sm font-bold text-[color:var(--foreground)]">Consejo Rápido</h3>

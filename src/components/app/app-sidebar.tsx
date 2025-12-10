@@ -153,7 +153,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
       {!isMobileOpen && (
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="lg:hidden fixed top-4 right-4 z-30 p-3 rounded-xl bg-gradient-to-br from-[color:var(--accent)] to-orange-500 text-white shadow-lg hover:shadow-2xl transition-all duration-200 active:scale-95"
+          className="lg:hidden fixed top-4 right-4 z-[60] p-3 rounded-xl bg-gradient-to-br from-[color:var(--accent)] to-orange-500 text-white shadow-lg hover:shadow-2xl transition-all duration-200 active:scale-95"
           aria-label="Abrir menú"
         >
           <Menu className="w-5 h-5" />
@@ -163,7 +163,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
       {/* Overlay para móvil */}
       {isMobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-md z-20"
+          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-md z-[55]"
           onClick={closeMobile}
           aria-hidden="true"
         />
@@ -185,7 +185,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
           fixed top-0 left-0 h-full bg-[color:var(--card)] border-r border-[color:var(--border)] 
           flex flex-col transition-all duration-300 ease-in-out
           w-72
-          ${isMobileOpen ? 'translate-x-0 z-40' : '-translate-x-full lg:translate-x-0 lg:z-10'}
+          ${isMobileOpen ? 'translate-x-0 z-[60]' : '-translate-x-full lg:translate-x-0 lg:z-10'}
           ${isCollapsed ? 'lg:w-24' : 'lg:w-72'}
         `}
       >

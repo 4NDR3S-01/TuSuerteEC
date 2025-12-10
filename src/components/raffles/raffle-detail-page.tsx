@@ -14,7 +14,26 @@ import type { PaymentMethod, PaymentMethodConfig } from '../../lib/payments/type
 import StripePaymentForm from '../payments/stripe-payment-form';
 import { useRouter } from 'next/navigation';
 import { useToast } from '../../hooks/use-toast';
-import {Facebook, Link as LinkIcon, MessageCircle} from 'lucide-react'
+import {
+  Facebook,
+  Link as LinkIcon,
+  MessageCircle,
+  Sparkles,
+  Gift,
+  Trophy,
+  Calendar,
+  Ticket,
+  Star,
+  BarChart3,
+  CreditCard,
+  Users,
+  Target,
+  Lock,
+  AlertTriangle,
+  CheckCircle2,
+  Megaphone,
+  X
+} from 'lucide-react';
 
 // Opciones rápidas para selección de boletos
 const QUICK_TICKET_OPTIONS = [1, 2, 5, 10];
@@ -162,7 +181,7 @@ export function RaffleDetailPage({
       case 'completed':
         return '✓ FINALIZADO';
       case 'drawn':
-        return '🎉 SORTEO EJECUTADO';
+        return 'SORTEO EJECUTADO';
       case 'closed':
         return '⏳ SORTEO CERRADO';
       case 'cancelled':
@@ -529,7 +548,7 @@ export function RaffleDetailPage({
 
   const handleShare = (platform: 'facebook' | 'whatsapp' | 'copy') => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-    const shareText = `¡Participa en el sorteo de ${raffle.prize_description}! 🎉`;
+    const shareText = `¡Participa en el sorteo de ${raffle.prize_description}!`;
     
     switch (platform) {
       case 'facebook':
@@ -864,15 +883,18 @@ export function RaffleDetailPage({
                       backgroundSize: '30px 30px'
                     }} />
                   </div>
-                  <span className="text-9xl relative z-10 drop-shadow-2xl">🎁</span>
+                  <Gift className="w-32 h-32 relative z-10 drop-shadow-2xl text-white/80" />
                 </div>
               )}
               {statusOverlayText && (
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
                   <div className="text-center">
-                    <span className="text-white text-4xl font-black block mb-2">
-                      {statusOverlayText}
-                    </span>
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      {raffle.status === 'drawn' && <Sparkles className="w-8 h-8 text-white" />}
+                      <span className="text-white text-4xl font-black">
+                        {statusOverlayText}
+                      </span>
+                    </div>
                     <span className="text-white/80 text-sm">
                       {unavailableMessage}
                     </span>
@@ -887,11 +909,11 @@ export function RaffleDetailPage({
                 <h1 className="text-4xl font-black text-[color:var(--foreground)] mb-4 leading-tight">{raffle.title}</h1>
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white text-sm font-bold rounded-full shadow-lg">
-                    <span className="text-lg">🏆</span>
+                    <Trophy className="w-4 h-4" />
                     {getPrizeCategoryLabel(raffle.prize_category)}
                   </span>
                   <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-bold rounded-full shadow-lg">
-                    <span className="text-lg">📅</span>
+                    <Calendar className="w-4 h-4" />
                     {drawDate.toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric' })}
                   </span>
                   {canParticipate && (
@@ -941,7 +963,7 @@ export function RaffleDetailPage({
               <div className="pt-4 border-t border-[color:var(--border)]">
                 <div className="bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-2 border-amber-500/30 rounded-2xl p-6">
                   <h3 className="text-xl font-black text-[color:var(--foreground)] mb-3 flex items-center gap-3">
-                    <span className="text-3xl">🏆</span>
+                    <Trophy className="w-6 h-6 text-[color:var(--accent)]" />
                     <span>Premio a Ganar</span>
                   </h3>
                   <p className="text-[color:var(--foreground)] text-lg font-semibold">{raffle.prize_description}</p>
@@ -954,7 +976,7 @@ export function RaffleDetailPage({
               <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border border-[color:var(--border)] rounded-3xl p-8 shadow-lg">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
                   <h3 className="text-2xl font-black text-[color:var(--foreground)] flex items-center gap-3">
-                    <span className="text-3xl">🎟️</span>
+                    <Ticket className="w-6 h-6 text-[color:var(--accent)]" />
                     <span>Mis Participaciones</span>
                   </h3>
                   <div className="inline-flex w-full justify-center sm:w-auto px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-sm shadow-lg">
@@ -987,8 +1009,12 @@ export function RaffleDetailPage({
                               {entry.ticket_number || `T-${entry.id.slice(0, 8).toUpperCase()}`}
                             </div>
                           </div>
-                          <div className="text-4xl opacity-80 group-hover:scale-110 transition-transform">
-                            {entry.is_winner ? '🏆' : '🎫'}
+                          <div className="opacity-80 group-hover:scale-110 transition-transform">
+                            {entry.is_winner ? (
+                              <Trophy className="w-8 h-8 text-yellow-500" />
+                            ) : (
+                              <Ticket className="w-8 h-8 text-[color:var(--accent)]" />
+                            )}
                           </div>
                         </div>
 
@@ -999,12 +1025,16 @@ export function RaffleDetailPage({
                               ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30' 
                               : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'
                           }`}>
-                            <span>{entry.entry_source === 'subscription' ? '⭐' : '🎟️'}</span>
+                            {entry.entry_source === 'subscription' ? (
+                              <Star className="w-3 h-3" />
+                            ) : (
+                              <Ticket className="w-3 h-3" />
+                            )}
                             <span>{entry.entry_source === 'subscription' ? 'Suscripción' : 'Boleto'}</span>
                           </span>
                           {entry.is_winner && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-full text-xs font-bold shadow-lg animate-pulse">
-                              <span>�</span>
+                              <Trophy className="w-3 h-3" />
                               <span>Ganador</span>
                             </span>
                           )}
@@ -1012,7 +1042,7 @@ export function RaffleDetailPage({
 
                         {/* Fecha */}
                         <div className="text-xs text-[color:var(--muted-foreground)] flex items-center gap-1">
-                          <span>📅</span>
+                          <Calendar className="w-3 h-3" />
                           <span>{new Date(entry.created_at).toLocaleDateString('es-EC', { 
                             day: 'numeric', 
                             month: 'short',
@@ -1028,7 +1058,7 @@ export function RaffleDetailPage({
                 {/* Mensaje de confirmación */}
                 <div className="p-5 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-2 border-green-500/30 rounded-2xl">
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">✓</span>
+                    <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
                     <div>
                       <p className="text-sm font-bold text-green-600 dark:text-green-400">
                         ¡Participación Confirmada!
@@ -1044,7 +1074,7 @@ export function RaffleDetailPage({
           </div>
 
           {/* Right Column - Actions Modernizado */}
-          <div className="space-y-6 lg:sticky lg:top-28 lg:z-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+          <div className="space-y-6 lg:sticky lg:top-6 lg:z-20 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pb-6">
 
             {/* Participation Card */}
             <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border-2 border-[color:var(--border)] rounded-3xl p-6 shadow-2xl">
@@ -1061,7 +1091,7 @@ export function RaffleDetailPage({
                 </div>
                 {Boolean(raffle.max_entries_per_user) && (
                   <div className="mt-3 inline-flex items-center gap-1 px-3 py-1 bg-blue-500/10 border border-blue-500/30 rounded-full text-xs font-bold text-blue-600 dark:text-blue-400">
-                    <span>📊</span>
+                    <BarChart3 className="w-3 h-3" />
                     <span>Máximo {raffle.max_entries_per_user} {raffle.max_entries_per_user === 1 ? 'entrada' : 'entradas'} por usuario</span>
                   </div>
                 )}
@@ -1073,7 +1103,9 @@ export function RaffleDetailPage({
                   <>
                     {showsAutomaticEntry && (
                       <div className="p-5 bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-2 border-green-500/40 rounded-2xl text-center shadow-lg">
-                        <div className="text-4xl mb-3">✓</div>
+                        <div className="flex justify-center mb-3">
+                          <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
+                        </div>
                         <div className="text-sm font-black text-green-600 dark:text-green-400 mb-2">
                           ¡Participación Automática Activa!
                         </div>
@@ -1089,7 +1121,7 @@ export function RaffleDetailPage({
                         className="w-full py-4 px-6 rounded-2xl font-black text-lg transition-all text-white bg-gradient-to-r from-[color:var(--accent)] to-orange-600 hover:from-[color:var(--accent)]/90 hover:to-orange-700 shadow-2xl hover:shadow-[color:var(--accent)]/50 transform hover:scale-[1.02] active:scale-[0.98]"
                       >
                         <span className="flex items-center justify-center gap-2">
-                          <span>🎫</span>
+                          <Ticket className="w-5 h-5" />
                           <span>Comprar Boleto</span>
                         </span>
                       </button>
@@ -1097,7 +1129,9 @@ export function RaffleDetailPage({
 
                     {allowsManualPurchase && !hasPaymentMethods && (
                       <div className="p-5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 rounded-2xl text-center shadow-lg">
-                        <div className="text-3xl mb-2">⚠️</div>
+                        <div className="flex justify-center mb-2">
+                          <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                        </div>
                         <div className="text-sm font-bold text-amber-600 dark:text-amber-400">
                           No hay métodos de pago disponibles en este momento. Contacta al soporte para completar tu participación.
                         </div>
@@ -1106,7 +1140,9 @@ export function RaffleDetailPage({
 
                     {requiresSubscription && !hasActiveSubscription && (
                       <div className="p-5 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border-2 border-purple-500/40 rounded-2xl text-center shadow-lg">
-                        <div className="text-4xl mb-3">🔒</div>
+                        <div className="flex justify-center mb-3">
+                          <Lock className="w-10 h-10 text-purple-600 dark:text-purple-400" />
+                        </div>
                         <div className="text-sm font-black text-purple-600 dark:text-purple-400 mb-2">
                           Necesitas una Suscripción Activa
                         </div>
@@ -1118,7 +1154,7 @@ export function RaffleDetailPage({
                           className="inline-flex items-center justify-center rounded-xl border-2 border-purple-500/50 bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-5 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 transition-all hover:scale-105 hover:shadow-lg"
                         >
                           <span className="flex items-center gap-2">
-                            <span>⭐</span>
+                            <Star className="w-4 h-4" />
                             <span>Ver Planes Disponibles</span>
                           </span>
                         </Link>
@@ -1130,14 +1166,16 @@ export function RaffleDetailPage({
                         href="/app/planes"
                         className="flex w-full items-center justify-center gap-3 px-6 py-4 text-center text-lg font-black text-[color:var(--accent)] border-2 border-[color:var(--accent)] rounded-2xl hover:bg-[color:var(--accent)] hover:text-white transition-all transform hover:scale-[1.02] shadow-lg"
                       >
-                        <span className="text-xl leading-none">⭐</span>
+                        <Star className="w-5 h-5" />
                         <span>Conocer Planes de Suscripción</span>
                       </Link>
                     )}
                   </>
                 ) : (
                   <div className="p-5 bg-gradient-to-r from-red-500/20 to-rose-500/20 border-2 border-red-500/40 rounded-2xl text-center shadow-lg">
-                    <div className="text-4xl mb-3">⚠️</div>
+                    <div className="flex justify-center mb-3">
+                      <AlertTriangle className="w-10 h-10 text-red-600 dark:text-red-400" />
+                    </div>
                     <div className="text-sm font-black text-red-600 dark:text-red-400">
                       {unavailableMessage}
                     </div>
@@ -1149,7 +1187,7 @@ export function RaffleDetailPage({
               <div className="mt-6 pt-6 border-t-2 border-[color:var(--border)] space-y-3">
                 <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-xl">
                   <span className="text-xs font-bold text-[color:var(--muted-foreground)] flex items-center gap-2">
-                    <span>🎯</span>
+                    <Target className="w-3 h-3" />
                     <span>Modo</span>
                   </span>
                   <span className="text-sm font-black text-blue-600 dark:text-blue-400">
@@ -1158,7 +1196,7 @@ export function RaffleDetailPage({
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl">
                   <span className="text-xs font-bold text-[color:var(--muted-foreground)] flex items-center gap-2">
-                    <span>👥</span>
+                    <Users className="w-3 h-3" />
                     <span>Total Participantes</span>
                   </span>
                   <span className="text-sm font-black text-green-600 dark:text-green-400">
@@ -1168,7 +1206,7 @@ export function RaffleDetailPage({
                 {userEntryCount > 0 && (
                   <div className="flex items-center justify-between p-3 bg-gradient-to-r from-[color:var(--accent)]/10 to-orange-500/10 border border-[color:var(--accent)]/30 rounded-xl">
                     <span className="text-xs font-bold text-[color:var(--muted-foreground)] flex items-center gap-2">
-                      <span>🎟️</span>
+                      <Ticket className="w-3 h-3" />
                       <span>Mis Tickets</span>
                     </span>
                     <span className="text-sm font-black text-[color:var(--accent)]">
@@ -1178,7 +1216,7 @@ export function RaffleDetailPage({
                 )}
                 <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl">
                   <span className="text-xs font-bold text-[color:var(--muted-foreground)] flex items-center gap-2">
-                    <span>📊</span>
+                    <BarChart3 className="w-3 h-3" />
                     <span>Estado</span>
                   </span>
                   <span className={`text-sm font-black ${participationStatusTone}`}>
@@ -1189,9 +1227,9 @@ export function RaffleDetailPage({
             </div>
 
             {/* Share Card - Modernizado */}
-            <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border-2 border-[color:var(--border)] rounded-3xl p-6 shadow-xl relative lg:z-30">
+            <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border-2 border-[color:var(--border)] rounded-3xl p-6 shadow-xl">
               <h3 className="font-black text-xl text-[color:var(--foreground)] mb-5 flex items-center gap-3">
-                <span className="text-3xl">📢</span>
+                <Megaphone className="w-6 h-6 text-[color:var(--accent)]" />
                 <span>Compartir Sorteo</span>
               </h3>
               <div className="grid grid-cols-3 gap-3">
@@ -1235,7 +1273,10 @@ export function RaffleDetailPage({
             {/* Header */}
             <div className="flex items-center justify-between border-b border-[color:var(--border)] p-6">
               <div>
-                <h3 className="text-xl font-bold text-[color:var(--foreground)]">💳 Selecciona un método de pago</h3>
+                <h3 className="text-xl font-bold text-[color:var(--foreground)] flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-[color:var(--accent)]" />
+                  <span>Selecciona un método de pago</span>
+                </h3>
                 <p className="text-sm text-[color:var(--muted-foreground)] mt-1">
                   Precio del boleto: <span className="font-bold text-[color:var(--accent)]">${raffle.ticket_price || '0.00'} USD</span>
                 </p>
@@ -1245,7 +1286,7 @@ export function RaffleDetailPage({
                 className="rounded-lg p-2 text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)]"
                 aria-label="Cerrar"
               >
-                <span className="text-xl">✕</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
 

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { Calendar, Gift, Trophy, Target, X } from 'lucide-react';
 
 interface Raffle {
   id: string;
@@ -57,9 +58,9 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
     const diffTime = targetDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return { label: 'Hoy', color: 'bg-gradient-to-br from-red-500 to-orange-500', textColor: 'text-white', isUrgent: true };
-    if (diffDays === 1) return { label: 'Mañana', color: 'bg-gradient-to-br from-orange-500 to-amber-500', textColor: 'text-white', isUrgent: true };
-    if (diffDays <= 3) return { label: `${diffDays}d`, color: 'bg-amber-500/20 border-amber-500/50', textColor: 'text-amber-700 dark:text-amber-400', isUrgent: false };
+    if (diffDays === 0) return { label: 'Hoy', color: 'bg-gradient-to-br from-red-500 dark:from-red-600 to-orange-500 dark:to-orange-600', textColor: 'text-white', isUrgent: true };
+    if (diffDays === 1) return { label: 'Mañana', color: 'bg-gradient-to-br from-orange-500 dark:from-orange-600 to-amber-500 dark:to-amber-600', textColor: 'text-white', isUrgent: true };
+    if (diffDays <= 3) return { label: `${diffDays}d`, color: 'bg-amber-500/20 dark:bg-amber-500/30 border-amber-500/50 dark:border-amber-500/70', textColor: 'text-amber-700 dark:text-amber-400', isUrgent: false };
     return { label: `${diffDays}d`, color: 'bg-[color:var(--muted)]', textColor: 'text-[color:var(--muted-foreground)]', isUrgent: false };
   };
 
@@ -71,7 +72,9 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
   if (!raffles || raffles.length === 0) {
     return (
       <div className="bg-[color:var(--card)] border-2 border-dashed border-[color:var(--border)] rounded-2xl p-8 text-center">
-        <div className="text-6xl mb-4">📅</div>
+        <div className="mb-4 flex justify-center">
+          <Calendar className="w-16 h-16 text-[color:var(--muted-foreground)]" />
+        </div>
         <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-2">
           Sin Sorteos Programados
         </h3>
@@ -85,10 +88,10 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
   return (
     <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
       {/* Header */}
-      <div className="p-6 bg-gradient-to-r from-[color:var(--accent)]/10 to-orange-500/10 border-b border-[color:var(--border)]">
+      <div className="p-6 bg-gradient-to-r from-[color:var(--accent)]/10 dark:from-[color:var(--accent)]/5 to-orange-500/10 dark:to-orange-500/5 border-b border-[color:var(--border)]">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-            <span className="text-2xl">📅</span>
+            <Calendar className="w-5 h-5 text-[color:var(--accent)]" />
             <span>Calendario de Sorteos</span>
           </h2>
           <span className="px-3 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full">
@@ -135,7 +138,7 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
                     </div>
                     {dayInfo.isUrgent && (
                       <div className="mt-1">
-                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-white/90 text-red-600 rounded-full animate-pulse">
+                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-white/90 dark:bg-white/80 text-red-600 dark:text-red-500 rounded-full animate-pulse">
                           {dayInfo.label}
                         </span>
                       </div>
@@ -146,8 +149,8 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
                   <div className="p-2 min-h-[60px] flex flex-col items-center justify-center">
                     {hasRaffles ? (
                       <>
-                        <div className="text-3xl mb-1 group-hover:scale-110 transition-transform">
-                          🎁
+                        <div className="mb-1 group-hover:scale-110 transition-transform">
+                          <Gift className="w-8 h-8 text-[color:var(--accent)]" />
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent)] animate-pulse"></span>
@@ -178,7 +181,7 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
         {selectedDate && rafflesByDate.has(selectedDate) && (
           <div className="mt-6 pt-6 border-t border-[color:var(--border)] animate-in fade-in duration-300">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-lg">🎯</span>
+              <Target className="w-4 h-4 text-[color:var(--accent)]" />
               <h3 className="font-bold text-[color:var(--foreground)]">
                 Sorteos del {new Date(selectedDate).toLocaleDateString('es-EC', { 
                   day: 'numeric', 
@@ -187,9 +190,10 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
               </h3>
               <button
                 onClick={() => setSelectedDate(null)}
-                className="ml-auto text-xs text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors"
+                className="ml-auto text-xs text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] transition-colors flex items-center gap-1"
               >
-                Cerrar ✕
+                <span>Cerrar</span>
+                <X className="w-3 h-3" />
               </button>
             </div>
             
@@ -201,15 +205,16 @@ export function UpcomingRafflesCalendar({ raffles }: UpcomingRafflesCalendarProp
                   className="block p-4 bg-gradient-to-r from-[color:var(--muted)]/50 to-transparent border border-[color:var(--border)] hover:border-[color:var(--accent)]/50 rounded-xl transition-all duration-300 hover:shadow-md group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-[color:var(--accent)] to-orange-500 rounded-lg flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                      🎁
+                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-[color:var(--accent)] to-orange-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Gift className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-sm text-[color:var(--foreground)] group-hover:text-[color:var(--accent)] transition-colors line-clamp-1">
                         {raffle.title}
                       </h4>
-                      <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5 line-clamp-1">
-                        🏆 {raffle.prize_description}
+                      <p className="text-xs text-[color:var(--muted-foreground)] mt-0.5 line-clamp-1 flex items-center gap-1">
+                        <Trophy className="w-3 h-3 flex-shrink-0" />
+                        <span>{raffle.prize_description}</span>
                       </p>
                     </div>
                     <div className="flex-shrink-0 text-[color:var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity">

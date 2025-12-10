@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Target, Gift, Ticket, Trophy, Calendar, Dices, Sparkles } from 'lucide-react';
 
 interface RaffleEntry {
   id: string;
@@ -38,7 +39,9 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
           
           <div className="text-center py-8">
             <div className="relative inline-block mb-4">
-              <div className="text-6xl animate-pulse">🎯</div>
+              <div className="animate-pulse">
+                <Target className="w-16 h-16 text-[color:var(--accent)]" />
+              </div>
             </div>
             <h3 className="text-lg font-semibold text-[color:var(--foreground)] mb-2">
               Sin Participaciones
@@ -50,7 +53,7 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
               href="/app/sorteos"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
             >
-              <span>🎁</span>
+              <Gift className="w-4 h-4" />
               <span>Ver Sorteos Activos</span>
             </Link>
           </div>
@@ -63,7 +66,7 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
     <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-          <span className="text-2xl">🎫</span>
+          <Ticket className="w-5 h-5 text-[color:var(--accent)]" />
           <span>Mis Participaciones</span>
         </h2>
         <div className="flex items-center gap-2">
@@ -73,7 +76,7 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
           </span>
           {winningEntries.length > 0 && (
             <span className="px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold rounded-full flex items-center gap-1">
-              <span>�</span>
+              <Trophy className="w-3 h-3" />
               {winningEntries.length} Ganador{winningEntries.length > 1 ? 'es' : ''}
             </span>
           )}
@@ -91,20 +94,20 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
               key={entry.id}
               className={`group relative flex items-start gap-4 p-4 rounded-xl border-2 transition-all duration-300 ${
                 isWinner
-                  ? 'bg-gradient-to-r from-yellow-500/10 via-orange-500/5 to-transparent border-yellow-500/30 hover:border-yellow-500/50 shadow-md'
+                  ? 'bg-gradient-to-r from-yellow-500/10 dark:from-yellow-500/20 via-orange-500/5 dark:via-orange-500/10 to-transparent border-yellow-500/30 dark:border-yellow-500/50 hover:border-yellow-500/50 dark:hover:border-yellow-500/70 shadow-md'
                   : 'bg-[color:var(--muted)] border-[color:var(--border)] hover:border-[color:var(--accent)]/50'
               } hover:shadow-lg overflow-hidden`}
             >
               {/* Efecto de brillo para ganadores */}
               {isWinner && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 dark:via-white/5 to-transparent animate-shimmer" />
               )}
 
               {/* Número de boleto */}
               <div className={`relative flex-shrink-0 w-20 h-20 rounded-xl flex flex-col items-center justify-center text-white font-black shadow-lg ${
                 isWinner
-                  ? 'bg-gradient-to-br from-yellow-400 via-orange-500 to-pink-500'
-                  : 'bg-gradient-to-br from-[color:var(--accent)] to-orange-500'
+                  ? 'bg-gradient-to-br from-yellow-400 dark:from-yellow-500 via-orange-500 dark:via-orange-600 to-pink-500 dark:to-pink-600'
+                  : 'bg-gradient-to-br from-[color:var(--accent)] to-orange-500 dark:to-orange-600'
               }`}>
                 <span className="text-[10px] opacity-75">BOLETO</span>
                 <span
@@ -114,8 +117,8 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
                   #{entry.ticket_number}
                 </span>
                 {isWinner && (
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
-                    <span className="text-lg">🏆</span>
+                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 dark:bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                    <Trophy className="w-4 h-4 text-white" />
                   </div>
                 )}
               </div>
@@ -134,14 +137,15 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
                 </div>
 
                 {entry.raffles?.prize_description && (
-                  <p className="text-xs text-[color:var(--muted-foreground)] mb-2 line-clamp-1">
-                    🎁 {entry.raffles.prize_description}
+                  <p className="text-xs text-[color:var(--muted-foreground)] mb-2 line-clamp-1 flex items-center gap-1">
+                    <Gift className="w-3 h-3 flex-shrink-0" />
+                    <span>{entry.raffles.prize_description}</span>
                   </p>
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[color:var(--muted-foreground)]">
                   <span className="flex items-center gap-1">
-                    <span>📅</span>
+                    <Calendar className="w-3 h-3" />
                     <span>Registro: {new Date(entry.created_at).toLocaleDateString('es-EC', {
                       day: 'numeric',
                       month: 'short'
@@ -149,7 +153,7 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
                   </span>
                   {drawDate && (
                     <span className={`flex items-center gap-1 ${isWinner ? 'text-[color:var(--accent)] font-semibold' : ''}`}>
-                      <span>🎲</span>
+                      <Dices className="w-3 h-3" />
                       <span>Sorteo: {drawDate.toLocaleDateString('es-EC', {
                         day: 'numeric',
                         month: 'short'
@@ -160,9 +164,9 @@ export function MyEntriesCard({ entries }: MyEntriesCardProps) {
 
                 {isWinner && (
                   <div className="mt-2 flex items-center gap-1 text-xs font-bold text-yellow-600 dark:text-yellow-400">
-                    <span className="animate-pulse">✨</span>
+                    <Sparkles className="w-3 h-3 animate-pulse" />
                     <span>¡GANADOR! Felicidades</span>
-                    <span className="animate-pulse">✨</span>
+                    <Sparkles className="w-3 h-3 animate-pulse" />
                   </div>
                 )}
               </div>

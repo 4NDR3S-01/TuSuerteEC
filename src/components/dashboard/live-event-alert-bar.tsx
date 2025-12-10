@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Radio, Calendar, Film, X } from 'lucide-react';
 
 type LiveEvent = {
   id: string;
@@ -66,10 +67,10 @@ export function LiveEventAlertBar({ event }: Readonly<LiveEventAlertBarProps>) {
       <div
         className={`border-b shadow-lg ${
           isLive
-            ? 'border-red-500 bg-gradient-to-r from-red-500 via-red-600 to-red-500'
+            ? 'border-red-500 dark:border-red-600 bg-gradient-to-r from-red-500 dark:from-red-600 via-red-600 dark:via-red-700 to-red-500 dark:to-red-600'
             : isUpcoming
-            ? 'border-blue-500 bg-gradient-to-r from-blue-500 via-blue-600 to-blue-500'
-            : 'border-emerald-500 bg-gradient-to-r from-emerald-500 via-emerald-600 to-emerald-500'
+            ? 'border-blue-500 dark:border-blue-600 bg-gradient-to-r from-blue-500 dark:from-blue-600 via-blue-600 dark:via-blue-700 to-blue-500 dark:to-blue-600'
+            : 'border-emerald-500 dark:border-emerald-600 bg-gradient-to-r from-emerald-500 dark:from-emerald-600 via-emerald-600 dark:via-emerald-700 to-emerald-500 dark:to-emerald-600'
         }`}
       >
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
@@ -80,16 +81,16 @@ export function LiveEventAlertBar({ event }: Readonly<LiveEventAlertBarProps>) {
               <div className="flex-shrink-0">
                 {isLive ? (
                   <div className="relative">
-                    <span className="text-2xl sm:text-3xl">🔴</span>
+                    <Radio className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                     <span className="absolute -right-1 -top-1 flex h-3 w-3 sm:h-4 sm:w-4">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
                       <span className="relative inline-flex h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white"></span>
                     </span>
                   </div>
                 ) : isUpcoming ? (
-                  <span className="text-2xl sm:text-3xl">📅</span>
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 ) : (
-                  <span className="text-2xl sm:text-3xl">🎬</span>
+                  <Film className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                 )}
               </div>
 
@@ -117,16 +118,19 @@ export function LiveEventAlertBar({ event }: Readonly<LiveEventAlertBarProps>) {
                   </p>
                 )}
                 
-                <p className="mt-1 text-xs text-white/80">
-                  📅 {eventDate.toLocaleDateString('es-EC', {
+                <p className="mt-1 text-xs text-white/80 flex items-center gap-2">
+                  <Calendar className="w-3 h-3" />
+                  <span>{eventDate.toLocaleDateString('es-EC', {
                     weekday: 'short',
                     day: 'numeric',
                     month: 'short',
                     year: 'numeric'
-                  })} • 🕐 {eventDate.toLocaleTimeString('es-EC', {
+                  })}</span>
+                  <span>•</span>
+                  <span>{eventDate.toLocaleTimeString('es-EC', {
                     hour: '2-digit',
                     minute: '2-digit'
-                  })}
+                  })}</span>
                 </p>
               </div>
             </div>
@@ -140,8 +144,17 @@ export function LiveEventAlertBar({ event }: Readonly<LiveEventAlertBarProps>) {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-gray-900 shadow-md transition-transform hover:scale-105 hover:shadow-lg"
                 >
-                  <span className="hidden sm:inline">{isLive ? '🔴 Ver Ahora' : '🎬 Más Info'}</span>
-                  <span className="sm:hidden">{isLive ? '🔴' : '🎬'}</span>
+                  {isLive ? (
+                    <>
+                      <Radio className="w-4 h-4" />
+                      <span className="hidden sm:inline">Ver Ahora</span>
+                    </>
+                  ) : (
+                    <>
+                      <Film className="w-4 h-4" />
+                      <span className="hidden sm:inline">Más Info</span>
+                    </>
+                  )}
                 </a>
               )}
               
@@ -151,19 +164,7 @@ export function LiveEventAlertBar({ event }: Readonly<LiveEventAlertBarProps>) {
                 aria-label="Cerrar alerta"
                 title="Cerrar alerta"
               >
-                <svg
-                  className="h-4 w-4 sm:h-5 sm:w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>

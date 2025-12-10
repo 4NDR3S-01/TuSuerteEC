@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Hand, Star, Gift, Ticket, CreditCard, Trophy, User, Sparkles, Users } from 'lucide-react';
 import { StatCard } from '../dashboard/stat-card';
 import { SubscriptionCard } from '../dashboard/subscription-card';
 import { MyEntriesCard } from '../dashboard/my-entries-card';
@@ -164,7 +165,7 @@ export function ParticipantDashboard({
       title: 'Nueva participación',
       description: entry.raffles?.title || 'Sorteo Desconocido',
       timestamp: entry.created_at,
-      icon: '🎫'
+      icon: 'ticket'
     })),
     ...activeSubscriptions.slice(0, 2).map(sub => ({
       id: sub.id,
@@ -172,7 +173,7 @@ export function ParticipantDashboard({
       title: 'Suscripción activa',
       description: sub.plans?.name || 'Plan',
       timestamp: sub.created_at || sub.current_period_end,
-      icon: '💳'
+      icon: 'credit-card'
     })),
     ...(winningEntries.length > 0
       ? winningEntries.slice(0, 2).map(entry => ({
@@ -181,7 +182,7 @@ export function ParticipantDashboard({
           title: '¡Ganaste!',
           description: entry.raffles?.title || 'Sorteo',
           timestamp: entry.created_at,
-          icon: '🏆'
+          icon: 'trophy'
         }))
       : recentWinners
           .filter(winner => winner.user_id === user?.id)
@@ -192,7 +193,7 @@ export function ParticipantDashboard({
             title: '¡Ganaste!',
             description: winner.raffles?.title || 'Sorteo',
             timestamp: winner.created_at,
-            icon: '🏆'
+            icon: 'trophy'
           })))
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
@@ -213,7 +214,7 @@ export function ParticipantDashboard({
       {/* Hero Header Rediseñado */}
       <header className="relative border-b border-[color:var(--border)] bg-[color:var(--card)]/50 backdrop-blur-xl overflow-hidden">
         {/* Fondo con gradiente moderno */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/3 via-transparent to-blue-500/3" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[color:var(--accent)]/3 dark:from-[color:var(--accent)]/5 via-transparent to-blue-500/3 dark:to-blue-500/5" />
         
         {/* Grid pattern sutil */}
         <div 
@@ -225,9 +226,9 @@ export function ParticipantDashboard({
           }}
         />
         
-        {/* Gradient orbs más sutiles */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-[color:var(--accent)]/10 to-orange-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl" />
+            {/* Gradient orbs más sutiles */}
+            <div className="absolute -top-24 -right-24 w-64 h-64 bg-gradient-to-br from-[color:var(--accent)]/10 dark:from-[color:var(--accent)]/5 to-orange-500/10 dark:to-orange-500/5 rounded-full blur-3xl" />
+            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-gradient-to-br from-blue-500/10 dark:from-blue-500/5 to-purple-500/10 dark:to-purple-500/5 rounded-full blur-3xl" />
         
         <div className="relative mx-auto max-w-7xl px-4 py-4 sm:py-8 lg:py-10 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -235,16 +236,16 @@ export function ParticipantDashboard({
             <div className="flex items-center gap-4">
               {/* Avatar moderno */}
               <div className="relative group">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 p-0.5 shadow-xl group-hover:shadow-2xl transition-all duration-300">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-2xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 dark:via-orange-600 to-pink-500 dark:to-pink-600 p-0.5 shadow-xl group-hover:shadow-2xl transition-all duration-300">
                   <div className="w-full h-full rounded-2xl bg-[color:var(--card)] flex items-center justify-center">
-                    <span className="text-2xl sm:text-3xl lg:text-4xl">👋</span>
+                    <Hand className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-[color:var(--accent)]" />
                   </div>
                 </div>
                 {/* Status indicator mejorado */}
                 <div className="absolute -bottom-1 -right-1">
                   <span className="relative flex h-5 w-5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-5 w-5 bg-green-500 border-2 border-[color:var(--card)] shadow-lg"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 dark:bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-5 w-5 bg-green-500 dark:bg-green-600 border-2 border-[color:var(--card)] shadow-lg"></span>
                   </span>
                 </div>
               </div>
@@ -268,7 +269,7 @@ export function ParticipantDashboard({
                   href="/app/planes"
                   className="group relative inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--accent)] bg-[color:var(--background)]/50 backdrop-blur-sm px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white hover:border-[color:var(--accent)] transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
                 >
-                  <span className="relative z-10 text-lg sm:text-xl group-hover:scale-110 transition-transform">⭐</span>
+                  <Star className="relative z-10 w-5 h-5 sm:w-6 sm:h-6 text-[color:var(--accent)] group-hover:scale-110 transition-transform" />
                   <span className="relative z-10">Ver Planes</span>
                   <svg className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -277,14 +278,14 @@ export function ParticipantDashboard({
               )}
               <Link
                 href="/app/sorteos"
-                className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] via-orange-500 to-orange-600 px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden"
+                className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] via-orange-500 dark:via-orange-600 to-orange-600 dark:to-orange-700 px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-bold text-white shadow-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden"
               >
-                <span className="relative z-10 text-lg sm:text-xl group-hover:rotate-12 transition-transform">🎁</span>
+                <Gift className="relative z-10 w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:rotate-12 transition-transform" />
                 <span className="relative z-10">Ver Sorteos</span>
                 <svg className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 dark:from-orange-700 to-pink-600 dark:to-pink-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               </Link>
             </div>
           </div>
@@ -342,45 +343,45 @@ export function ParticipantDashboard({
         </section>
 
         {/* Sistema de Tabs - Solo en móvil */}
-        <section className="lg:hidden sticky top-0 z-10 bg-[color:var(--background)] border-b border-[color:var(--border)] -mx-4 px-4 shadow-md">
+        <section className="lg:hidden sticky top-0 z-50 bg-[color:var(--background)] border-b border-[color:var(--border)] -mx-4 px-4 shadow-lg">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setActiveTab('sorteos')}
-              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+              className={`flex-1 min-w-[90px] sm:min-w-[100px] px-2 sm:px-4 py-3 text-xs sm:text-sm font-bold rounded-t-lg transition-all duration-300 ${
                 activeTab === 'sorteos'
                   ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
                   : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
               }`}
             >
-              <span className="flex items-center justify-center gap-1.5">
-                <span>🎁</span>
-                <span>Sorteos</span>
+              <span className="flex items-center justify-center gap-1 sm:gap-1.5">
+                <Gift className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="truncate">Sorteos</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('mi-cuenta')}
-              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+              className={`flex-1 min-w-[90px] sm:min-w-[100px] px-2 sm:px-4 py-3 text-xs sm:text-sm font-bold rounded-t-lg transition-all duration-300 ${
                 activeTab === 'mi-cuenta'
                   ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
                   : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
               }`}
             >
-              <span className="flex items-center justify-center gap-1.5">
-                <span>👤</span>
-                <span>Mi Cuenta</span>
+              <span className="flex items-center justify-center gap-1 sm:gap-1.5">
+                <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="truncate">Mi Cuenta</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('comunidad')}
-              className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold rounded-t-lg transition-all duration-300 ${
+              className={`flex-1 min-w-[90px] sm:min-w-[100px] px-2 sm:px-4 py-3 text-xs sm:text-sm font-bold rounded-t-lg transition-all duration-300 ${
                 activeTab === 'comunidad'
                   ? 'bg-[color:var(--card)] text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]'
                   : 'text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)] hover:bg-[color:var(--muted)]/50'
               }`}
             >
-              <span className="flex items-center justify-center gap-1.5">
-                <span>🏆</span>
-                <span>Comunidad</span>
+              <span className="flex items-center justify-center gap-1 sm:gap-1.5">
+                <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="truncate">Comunidad</span>
               </span>
             </button>
           </div>
@@ -457,13 +458,15 @@ export function ParticipantDashboard({
          activeRaffles.length === 0 && (
           <div className="relative bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-8 sm:p-12 text-center overflow-hidden">
             {/* Gradient orbs más sutiles */}
-            <div className="absolute top-0 left-1/4 w-48 h-48 bg-[color:var(--accent)]/5 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl" />
+            <div className="absolute top-0 left-1/4 w-48 h-48 bg-[color:var(--accent)]/5 dark:bg-[color:var(--accent)]/3 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-blue-500/5 dark:bg-blue-500/3 rounded-full blur-3xl" />
             
             <div className="relative z-10 max-w-md mx-auto">
               {/* Animated icon */}
               <div className="inline-block relative mb-6">
-                <div className="text-6xl animate-bounce">🎉</div>
+                <div className="animate-bounce">
+                  <Sparkles className="w-16 h-16 sm:w-20 sm:h-20 text-[color:var(--accent)]" />
+                </div>
               </div>
               
               <h3 className="text-2xl sm:text-3xl font-black text-[color:var(--foreground)] mb-3">
@@ -477,16 +480,16 @@ export function ParticipantDashboard({
               <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
                 <Link
                   href="/app/sorteos"
-                  className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] to-orange-500 px-6 py-3 text-sm font-bold text-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                  className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--accent)] to-orange-500 dark:to-orange-600 px-6 py-3 text-sm font-bold text-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
                 >
-                  <span className="text-xl group-hover:rotate-12 transition-transform">🎁</span>
+                  <Gift className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
                   <span>Explorar Sorteos</span>
                 </Link>
                 <Link
                   href="/app/planes"
                   className="group inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[color:var(--accent)] bg-[color:var(--background)] hover:bg-[color:var(--accent)] px-6 py-3 text-sm font-bold text-[color:var(--accent)] hover:text-white transition-all duration-300"
                 >
-                  <span className="text-xl group-hover:scale-110 transition-transform">⭐</span>
+                  <Star className="w-5 h-5 text-[color:var(--accent)] group-hover:scale-110 transition-transform" />
                   <span>Ver Planes</span>
                 </Link>
               </div>
@@ -494,8 +497,8 @@ export function ParticipantDashboard({
               {/* Características destacadas */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
-                  <div className="w-10 h-10 mx-auto mb-2 bg-blue-500/10 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-blue-500/10 dark:bg-blue-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
@@ -503,8 +506,8 @@ export function ParticipantDashboard({
                 </div>
                 
                 <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
-                  <div className="w-10 h-10 mx-auto mb-2 bg-yellow-500/10 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-yellow-500/10 dark:bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
@@ -512,8 +515,8 @@ export function ParticipantDashboard({
                 </div>
                 
                 <div className="p-4 rounded-xl bg-[color:var(--muted)]/50 border border-[color:var(--border)]">
-                  <div className="w-10 h-10 mx-auto mb-2 bg-green-500/10 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-10 h-10 mx-auto mb-2 bg-green-500/10 dark:bg-green-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                   </div>

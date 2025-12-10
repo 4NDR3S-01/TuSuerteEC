@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { CreditCard, Package, Star, Calendar, Timer, CheckCircle2, Gift, Settings } from 'lucide-react';
 
 interface Subscription {
   id: string;
@@ -76,7 +77,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-              <span className="text-2xl">💳</span>
+              <CreditCard className="w-5 h-5 text-[color:var(--accent)]" />
               <span>Mi Suscripción</span>
             </h2>
             <span className="px-3 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-semibold rounded-full">
@@ -86,7 +87,9 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
           
           <div className="text-center py-8">
             <div className="relative inline-block mb-4">
-              <div className="text-6xl animate-bounce">📦</div>
+              <div className="animate-bounce">
+                <Package className="w-16 h-16 text-[color:var(--muted-foreground)]" />
+              </div>
               <div className="absolute -top-2 -right-2 w-6 h-6 bg-[color:var(--accent)] rounded-full flex items-center justify-center text-white text-xs font-bold">
                 !
               </div>
@@ -101,7 +104,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
               href="/app/planes"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white rounded-xl text-sm font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
             >
-              <span>⭐</span>
+              <Star className="w-4 h-4" />
               <span>Explorar Planes</span>
             </Link>
           </div>
@@ -118,11 +121,11 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
     <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-bold text-[color:var(--foreground)] flex items-center gap-2">
-          <span className="text-2xl">💳</span>
+          <CreditCard className="w-5 h-5 text-[color:var(--accent)]" />
           <span>Mi Suscripción</span>
         </h2>
-        <span className="px-3 py-1 bg-g}reen-500/10 text-green-600 dark:text-green-400 text-xs font-semibold rounded-full flex items-center gap-1">
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <span className="px-3 py-1 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 text-xs font-semibold rounded-full flex items-center gap-1">
+          <span className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full animate-pulse" />
           {subscriptions.length} Activa{subscriptions.length > 1 ? 's' : ''}
         </span>
       </div>
@@ -150,8 +153,8 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                         {sub.plans?.name || 'Plan Desconocido'}
                       </h3>
                       {isExpiring && (
-                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-full animate-pulse">
-                          ⚠️ Próximo a renovar
+                        <span className="px-2 py-0.5 bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-full animate-pulse">
+                          Próximo a renovar
                         </span>
                       )}
                     </div>
@@ -159,7 +162,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                     {/* Información de renovación */}
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                        <span>📅</span>
+                        <Calendar className="w-3 h-3" />
                         <span>Renueva: {renewalDate.toLocaleDateString('es-EC', {
                           day: 'numeric',
                           month: 'long',
@@ -167,7 +170,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                         })}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs font-medium">
-                        <span>⏱️</span>
+                        <Timer className="w-3 h-3" />
                         <span className={isExpiring ? 'text-amber-600 dark:text-amber-400' : 'text-[color:var(--muted-foreground)]'}>
                           {daysLeft} días restantes
                         </span>
@@ -198,8 +201,8 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${
                         isExpiring 
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
-                          : 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500'
+                          ? 'bg-gradient-to-r from-amber-500 dark:from-amber-600 to-orange-500 dark:to-orange-600' 
+                          : 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500 dark:to-orange-600'
                       }`}
                       style={{ width: `${Math.max(0, Math.min(100, ((30 - daysLeft) / 30) * 100))}%` }}
                     />
@@ -223,10 +226,12 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                   ) : (
                     <>
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
-                        ✅ Participación automática
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Participación automática</span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md">
-                        🎁 Todos los sorteos activos
+                        <Gift className="w-3 h-3" />
+                        <span>Todos los sorteos activos</span>
                       </span>
                     </>
                   )}
@@ -243,7 +248,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
           href="/settings/subscriptions"
           className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[color:var(--muted)] hover:bg-[color:var(--accent)]/10 text-[color:var(--foreground)] font-medium text-sm rounded-lg transition-all duration-300 hover:shadow-md"
         >
-          <span>⚙️</span>
+          <Settings className="w-4 h-4" />
           <span>Gestionar Suscripciones</span>
         </Link>
       </div>
