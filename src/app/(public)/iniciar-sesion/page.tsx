@@ -9,6 +9,8 @@ import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
 import { getCurrentUser } from "../../../lib/auth/get-user";
 import { SessionExpiredMessage } from "../../../components/auth/session-expired-message";
 
+export const dynamic = 'force-dynamic';
+
 type LoginPageProps = {
   searchParams?: Promise<{
     redirectTo?: string;

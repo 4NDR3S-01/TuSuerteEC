@@ -16,7 +16,7 @@ export function SessionExpiredMessage() {
     if (sessionExpired === 'expired' && !hasShown) {
       setHasShown(true);
       showToast({
-        type: 'warning',
+        type: 'info',
         description: 'Tu sesión ha expirado por inactividad. Por favor, inicia sesión nuevamente.',
       });
       

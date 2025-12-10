@@ -21,7 +21,11 @@ export async function getCurrentUser(): Promise<User | null> {
     const { data: { user }, error } = await supabase.auth.getUser();
     
     if (error) {
-      console.error('Error getting user from Supabase:', error);
+      // No registrar errores de sesión faltante como errores críticos
+      // AuthSessionMissingError es esperado en rutas públicas
+      if (error.name !== 'AuthSessionMissingError' && error.message !== 'Auth session missing!') {
+        console.error('Error getting user from Supabase:', error);
+      }
       return null;
     }
     

@@ -7,6 +7,8 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
 import { getCurrentUser } from "../../../lib/auth/get-user";
 
+export const dynamic = 'force-dynamic';
+
 export default async function RecoverPage() {
   // Si el usuario ya está autenticado, redirigir al dashboard
   const user = await getCurrentUser();
