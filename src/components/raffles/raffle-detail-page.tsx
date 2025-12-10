@@ -32,7 +32,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Megaphone,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 
 // Opciones rápidas para selección de boletos
@@ -179,13 +180,13 @@ export function RaffleDetailPage({
   const statusOverlayText = useMemo(() => {
     switch (raffle.status) {
       case 'completed':
-        return '✓ FINALIZADO';
+        return 'FINALIZADO';
       case 'drawn':
         return 'SORTEO EJECUTADO';
       case 'closed':
-        return '⏳ SORTEO CERRADO';
+        return 'SORTEO CERRADO';
       case 'cancelled':
-        return '✕ CANCELADO';
+        return 'CANCELADO';
       default:
         return null;
     }
@@ -530,7 +531,7 @@ export function RaffleDetailPage({
       setPriceValidationError(null);
     } else if (selectedMethod.type === 'manual_transfer' || selectedMethod.type === 'qr_code') {
       if (!raffle.ticket_price || raffle.ticket_price <= 0) {
-        setPriceValidationError('⚠️ Este sorteo no tiene configurado un precio válido. Contacta al administrador.');
+        setPriceValidationError('Este sorteo no tiene configurado un precio válido. Contacta al administrador.');
       } else {
         setPriceValidationError(null);
       }
@@ -887,10 +888,13 @@ export function RaffleDetailPage({
                 </div>
               )}
               {statusOverlayText && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center">
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-2 mb-2">
                       {raffle.status === 'drawn' && <Sparkles className="w-8 h-8 text-white" />}
+                      {raffle.status === 'completed' && <CheckCircle2 className="w-8 h-8 text-white" />}
+                      {raffle.status === 'closed' && <Clock className="w-8 h-8 text-white" />}
+                      {raffle.status === 'cancelled' && <X className="w-8 h-8 text-white" />}
                       <span className="text-white text-4xl font-black">
                         {statusOverlayText}
                       </span>
@@ -1393,8 +1397,9 @@ export function RaffleDetailPage({
                 )}
 
                 {priceValidationError && (
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
-                    {priceValidationError}
+                  <div className="rounded-xl border border-amber-500/30 dark:border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/20 p-4 text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>{priceValidationError}</span>
                   </div>
                 )}
 
@@ -1445,7 +1450,7 @@ export function RaffleDetailPage({
                               <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${
                                 isSelected ? 'border-[color:var(--accent)] text-[color:var(--accent)]' : 'border-[color:var(--border)] text-[color:var(--muted-foreground)]'
                               }`}>
-                                {isSelected ? '✓' : ''}
+                                {isSelected ? <CheckCircle2 className="w-4 h-4" /> : ''}
                               </span>
                             </div>
                           </button>

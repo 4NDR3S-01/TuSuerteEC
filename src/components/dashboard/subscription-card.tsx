@@ -218,7 +218,7 @@ export function SubscriptionCard({ subscriptions }: SubscriptionCardProps) {
                         className="inline-flex items-center gap-1 px-2 py-1 bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-xs font-medium rounded-md"
                       >
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                          ✓
+                          <CheckCircle2 className="w-3 h-3" />
                         </span>
                         {benefit}
                       </span>

@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { Gift, Ticket, Star, User } from 'lucide-react';
+import { ComponentType } from 'react';
 
 interface QuickAction {
   readonly title: string;
   readonly description: string;
-  readonly icon: string;
+  readonly Icon: ComponentType<{ className?: string }>;
   readonly href: string;
   readonly color: string;
   readonly badge?: string;
@@ -20,7 +22,7 @@ const getQuickActions = (activeRafflesCount?: number): QuickAction[] => [
   {
     title: 'Ver Sorteos',
     description: 'Explora sorteos activos',
-    icon: '🎁',
+    Icon: Gift,
     href: '/app/sorteos',
     color: 'from-blue-500 to-cyan-500',
     badge: activeRafflesCount && activeRafflesCount > 0 ? String(activeRafflesCount) : undefined,
@@ -28,14 +30,14 @@ const getQuickActions = (activeRafflesCount?: number): QuickAction[] => [
   {
     title: 'Mis Boletos',
     description: 'Revisa tus participaciones',
-    icon: '🎫',
+    Icon: Ticket,
     href: '/app/boletos',
     color: 'from-purple-500 to-pink-500',
   },
   {
     title: 'Suscribirme',
     description: 'Ver planes disponibles',
-    icon: '⭐',
+    Icon: Star,
     href: '/app/planes',
     color: 'from-orange-500 to-red-500',
     isNew: true,
@@ -43,7 +45,7 @@ const getQuickActions = (activeRafflesCount?: number): QuickAction[] => [
   {
     title: 'Mi Perfil',
     description: 'Actualizar información',
-    icon: '👤',
+    Icon: User,
     href: '/app/settings',
     color: 'from-green-500 to-emerald-500',
   },
@@ -89,9 +91,7 @@ export function QuickActionsGrid({ activeRafflesCount }: QuickActionsGridProps =
             {/* Contenedor del icono con animación - Con margin-top para evitar overlap */}
             <div className="relative z-10 mt-6 sm:mt-4">
               <div className={`relative w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 bg-gradient-to-br ${action.color} rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-lg`}>
-                <span className="text-2xl sm:text-3xl lg:text-4xl group-hover:scale-110 transition-transform duration-300">
-                  {action.icon}
-                </span>
+                <action.Icon className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-white group-hover:scale-110 transition-transform duration-300" />
                 
                 {/* Anillo de resplandor */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${action.color} rounded-xl sm:rounded-2xl blur-md opacity-0 group-hover:opacity-60 transition-opacity duration-300 -z-10`} />

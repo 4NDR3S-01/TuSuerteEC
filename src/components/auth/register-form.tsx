@@ -54,6 +54,9 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [idNumberError, setIdNumberError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [isCheckingCedula, setIsCheckingCedula] = useState(false);
   const router = useRouter();
   const { showToast } = useToast();
   const passwordStrength = useMemo(() => evaluatePasswordStrength(form.password), [form.password]);
@@ -161,10 +164,34 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
         if (sanitized.length === 10) {
           const error = getEcuadorianIdError(sanitized);
           setIdNumberError(error);
+          
+          // Si no hay error de formato, verificar si ya existe
+          if (!error && supabase) {
+            checkCedulaExists(sanitized);
+          }
         } else if (sanitized.length > 0) {
           setIdNumberError('La cédula debe tener 10 dígitos.');
         } else {
           setIdNumberError(null);
+        }
+        return;
+      }
+
+      if (field === 'email') {
+        setForm((prev) => ({ ...prev, email: value }));
+        // Validar formato de email en tiempo real
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (value && !emailRegex.test(value)) {
+          setEmailError('El formato del correo electrónico no es válido');
+        } else if (value && emailRegex.test(value) && supabase) {
+          // Limpiar error de formato si es válido
+          setEmailError(null);
+          // Debounce para verificar si el email existe
+          setTimeout(() => {
+            checkEmailExists(value);
+          }, 500);
+        } else {
+          setEmailError(null);
         }
         return;
       }
@@ -179,6 +206,57 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
   const handleParishChange = (event: ChangeEvent<HTMLSelectElement>) => {
     setForm((prev) => ({ ...prev, parishId: event.target.value }));
+  };
+
+  // Función para verificar si el email ya existe
+  const checkEmailExists = async (email: string) => {
+    if (!supabase || !email) return;
+    
+    setIsCheckingEmail(true);
+    setEmailError(null);
+    
+    try {
+      const { data: exists, error } = await supabase
+        .rpc('check_email_exists', { user_email: email.toLowerCase().trim() });
+      
+      if (error) {
+        console.error('Error checking email:', error);
+        return;
+      }
+      
+      if (exists) {
+        setEmailError('Este correo electrónico ya está registrado');
+      }
+    } catch (error) {
+      console.error('Error checking email:', error);
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  };
+
+  // Función para verificar si la cédula ya existe
+  const checkCedulaExists = async (cedula: string) => {
+    if (!supabase || !cedula || cedula.length !== 10) return;
+    
+    setIsCheckingCedula(true);
+    
+    try {
+      const { data: exists, error } = await supabase
+        .rpc('check_id_number_exists', { id_num: cedula });
+      
+      if (error) {
+        console.error('Error checking cedula:', error);
+        return;
+      }
+      
+      if (exists) {
+        setIdNumberError('Esta cédula ya está registrada en el sistema');
+      }
+    } catch (error) {
+      console.error('Error checking cedula:', error);
+    } finally {
+      setIsCheckingCedula(false);
+    }
   };
 
   const validateForm = () => {
@@ -200,6 +278,11 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
       return idError;
     }
 
+    // Verificar si hay error de cédula duplicada
+    if (idNumberError && idNumberError.includes('ya está registrada')) {
+      return idNumberError;
+    }
+
     if (form.phone.length < 9) {
       return 'El número de celular debe incluir 9 dígitos sin el prefijo.';
     }
@@ -214,6 +297,17 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
 
     if (!form.email.trim()) {
       return 'Ingresa tu correo electrónico.';
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      return 'El formato del correo electrónico no es válido.';
+    }
+
+    // Verificar si hay error de email duplicado
+    if (emailError && emailError.includes('ya está registrado')) {
+      return emailError;
     }
 
     if (form.password.length < 8) {
@@ -521,10 +615,16 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
               <span>{idNumberError}</span>
             </p>
           )}
-          {!idNumberError && form.idNumber.length === 10 && (
+          {isCheckingCedula && form.idNumber.length === 10 && (
+            <p className="text-xs text-[color:var(--muted-foreground)] flex items-center gap-1">
+              <span className="animate-spin">⏳</span>
+              <span>Verificando cédula...</span>
+            </p>
+          )}
+          {!idNumberError && !isCheckingCedula && form.idNumber.length === 10 && (
             <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
               <span>✓</span>
-              <span>Cédula válida</span>
+              <span>Cédula válida y disponible</span>
             </p>
           )}
         </div>
@@ -629,8 +729,30 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
             value={form.email}
             onChange={handleInputChange('email')}
             placeholder="tu@correo.com"
-            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
+            className={`w-full rounded-xl border ${
+              emailError
+                ? 'border-red-500 focus:border-red-500 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
+                : 'border-[color:var(--border)] focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]'
+            } bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow`}
           />
+          {isCheckingEmail && form.email && (
+            <p className="text-xs text-[color:var(--muted-foreground)] flex items-center gap-1">
+              <span className="animate-spin">⏳</span>
+              <span>Verificando correo...</span>
+            </p>
+          )}
+          {emailError && form.email && (
+            <p className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1">
+              <span>⚠️</span>
+              <span>{emailError}</span>
+            </p>
+          )}
+          {!emailError && !isCheckingEmail && form.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email) && (
+            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <span>✓</span>
+              <span>Correo válido y disponible</span>
+            </p>
+          )}
         </div>
 
         <div className="min-w-0 space-y-2 sm:col-span-1 md:col-span-1 lg:col-span-6">

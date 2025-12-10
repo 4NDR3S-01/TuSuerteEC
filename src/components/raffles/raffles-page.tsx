@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Dices, Gift, Clock, Calendar, Ticket } from 'lucide-react';
+import { Dices, Gift, Clock, Calendar, Ticket, ArrowLeft } from 'lucide-react';
 
 type Raffle = {
   id: string;
@@ -65,11 +65,9 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
         {/* Header */}
         <Link
           href="/app"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--accent)] hover:text-orange-500 transition-colors mb-4"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--accent)] hover:text-orange-500 dark:hover:text-orange-400 transition-colors mb-4"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
+          <ArrowLeft className="w-4 h-4" />
           <span>Volver al Dashboard</span>
         </Link>
 
@@ -85,15 +83,15 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/30 rounded-xl">
+          <div className="p-4 bg-gradient-to-br from-blue-500/10 dark:from-blue-500/20 to-blue-600/5 dark:to-blue-600/10 border border-blue-500/30 dark:border-blue-500/40 rounded-xl">
             <div className="text-sm text-blue-600 dark:text-blue-400 font-semibold">Total de Sorteos</div>
             <div className="text-3xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.total}</div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/30 rounded-xl">
+          <div className="p-4 bg-gradient-to-br from-orange-500/10 dark:from-orange-500/20 to-orange-600/5 dark:to-orange-600/10 border border-orange-500/30 dark:border-orange-500/40 rounded-xl">
             <div className="text-sm text-orange-600 dark:text-orange-400 font-semibold">Por Terminar</div>
             <div className="text-3xl font-black text-orange-600 dark:text-orange-400 mt-1">{stats.endingSoon}</div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-[color:var(--accent)]/10 to-purple-600/5 border border-[color:var(--accent)]/30 rounded-xl">
+          <div className="p-4 bg-gradient-to-br from-[color:var(--accent)]/10 dark:from-[color:var(--accent)]/20 to-purple-600/5 dark:to-purple-600/10 border border-[color:var(--accent)]/30 dark:border-[color:var(--accent)]/40 rounded-xl">
             <div className="text-sm text-[color:var(--accent)] font-semibold">Participaciones posibles</div>
             <div className="text-3xl font-black text-[color:var(--accent)] mt-1">∞</div>
           </div>
@@ -107,7 +105,7 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
               placeholder="Buscar sorteos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-3 bg-[color:var(--background)] border-2 border-[color:var(--border)] rounded-xl focus:border-[color:var(--accent)] transition-all"
+              className="w-full px-4 py-3 bg-[color:var(--background)] dark:bg-[color:var(--card)] border-2 border-[color:var(--border)] rounded-xl focus:border-[color:var(--accent)] transition-all text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
             />
           </div>
           <div className="flex gap-2">
@@ -122,7 +120,7 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                 className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                   filterStatus === filter.value
                     ? 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white'
-                    : 'bg-[color:var(--muted)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]/70'
+                    : 'bg-[color:var(--muted)] dark:bg-[color:var(--muted)]/50 text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]/70 dark:hover:bg-[color:var(--muted)]/60'
                 }`}
               >
                 {filter.label}
@@ -151,7 +149,7 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                 <Link
                   key={raffle.id}
                   href={`/app/sorteos/${raffle.id}`}
-                  className="group relative overflow-hidden border-2 border-[color:var(--border)] rounded-2xl hover:border-[color:var(--accent)] transition-all hover:shadow-xl"
+                  className="group relative overflow-hidden border-2 border-[color:var(--border)] dark:border-[color:var(--border)]/80 rounded-2xl hover:border-[color:var(--accent)] dark:hover:border-[color:var(--accent)]/80 transition-all hover:shadow-xl dark:hover:shadow-2xl bg-[color:var(--card)]"
                 >
                   {/* Image */}
                   <div className="aspect-video bg-gradient-to-br from-[color:var(--accent)] to-orange-500 relative overflow-hidden">
@@ -163,7 +161,7 @@ export function RafflesPage({ raffles }: RafflesPageProps) {
                       </div>
                     )}
                     {isEndingSoon && (
-                      <div className="absolute top-3 right-3 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                      <div className="absolute top-3 right-3 px-3 py-1 bg-red-500 dark:bg-red-600 text-white text-xs font-bold rounded-full flex items-center gap-1 shadow-lg">
                         <Clock className="w-3 h-3" />
                         <span>{daysUntil}d restantes</span>
                       </div>
