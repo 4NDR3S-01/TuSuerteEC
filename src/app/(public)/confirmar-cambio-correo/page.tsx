@@ -13,6 +13,8 @@ type ConfirmEmailChangePageProps = {
     oldEmail?: string;
     newEmail?: string;
     confirmed?: string;
+    pending?: string;
+    completed?: string;
     error?: string;
   }>;
 };
@@ -22,6 +24,8 @@ export default async function ConfirmEmailChangePage({ searchParams }: ConfirmEm
   const oldEmail = params?.oldEmail;
   const newEmail = params?.newEmail;
   const confirmed = params?.confirmed === 'true';
+  const pending = params?.pending === 'true';
+  const completed = params?.completed === 'true';
   const error = params?.error;
 
   // Si no hay parámetros necesarios y no está confirmado, redirigir
@@ -60,6 +64,8 @@ export default async function ConfirmEmailChangePage({ searchParams }: ConfirmEm
                 oldEmail={oldEmail}
                 newEmail={newEmail}
                 confirmed={confirmed}
+                pending={pending}
+                completed={completed}
                 error={error}
               />
             </Suspense>

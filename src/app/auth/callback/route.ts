@@ -152,8 +152,18 @@ export async function GET(request: NextRequest) {
         if (userData.user.new_email) {
           oldEmail = userData.user.email;
           newEmail = userData.user.new_email;
+          
+          // Si el cambio está pendiente (hay new_email), significa que se confirmó el primer correo
+          // Redirigir a la página de confirmación con mensaje informativo
+          const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+          confirmUrl.searchParams.set('confirmed', 'true');
+          confirmUrl.searchParams.set('pending', 'true'); // Indicar que falta confirmar el otro correo
+          if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
+          if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
+          
+          return NextResponse.redirect(confirmUrl);
         } else {
-          // Si no hay new_email, el cambio ya se completó
+          // Si no hay new_email, el cambio ya se completó (ambos correos confirmados)
           // Intentar obtener el correo anterior del perfil
           const { data: profile } = await supabase
             .from('profiles')
@@ -165,15 +175,16 @@ export async function GET(request: NextRequest) {
           // Pero en este punto, el email ya debería estar actualizado
           // Por seguridad, usar el email actual como nuevo
           newEmail = userData.user.email;
+          
+          // Redirigir a página de confirmación con los datos del correo
+          const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+          confirmUrl.searchParams.set('confirmed', 'true');
+          confirmUrl.searchParams.set('completed', 'true'); // Indicar que el cambio está completo
+          if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
+          if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
+          
+          return NextResponse.redirect(confirmUrl);
         }
-        
-        // Redirigir a página de confirmación con los datos del correo
-        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-        confirmUrl.searchParams.set('confirmed', 'true');
-        if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
-        if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
-        
-        return NextResponse.redirect(confirmUrl);
       
       case 'recovery':
         // Reset de contraseña
