@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { AppSidebar } from './app-sidebar';
 import { SidebarContext } from '../../hooks/use-sidebar';
@@ -19,13 +19,19 @@ type AppShellProps = {
 export function AppShell({ children, subscription }: AppShellProps) {
   const { user, loading, isProcessing, signOut, error } = useAuth({ required: true });
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   
   const sidebarContextValue = useMemo(
     () => ({ isCollapsed, setIsCollapsed }),
     [isCollapsed]
   );
 
-  if (loading) {
+  // Asegurar que el componente esté montado antes de renderizar
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[color:var(--background)] text-[color:var(--muted-foreground)]">
         <span className="animate-pulse text-sm font-medium">Validando sesión…</span>
@@ -33,12 +39,18 @@ export function AppShell({ children, subscription }: AppShellProps) {
     );
   }
 
-  if (!user) {
+  if (!user && !loading) {
+    // El hook useAuth ya maneja la redirección, solo mostrar el mensaje
     return (
       <div className="flex min-h-screen items-center justify-center bg-[color:var(--background)] text-[color:var(--muted-foreground)]">
         <span className="animate-pulse text-sm font-medium">Redirigiendo al inicio de sesión…</span>
       </div>
     );
+  }
+
+  if (!user) {
+    // Si no hay usuario después de cargar, no renderizar nada
+    return null;
   }
 
   return (

@@ -21,9 +21,16 @@ export function useAuth(options?: UseAuthOptions) {
     }
 
     if (!auth.user) {
-      const redirectTarget =
-        redirectTo ?? `/iniciar-sesion?redirectTo=${encodeURIComponent(pathname)}`;
-      router.replace(redirectTarget);
+      // Solo redirigir si no estamos ya en una página pública
+      if (pathname && 
+          !pathname.includes('/iniciar-sesion') && 
+          !pathname.includes('/registro') && 
+          !pathname.includes('/recuperar') &&
+          !pathname.includes('/restablecer-clave')) {
+        // Redirigir sin parámetros para evitar problemas con RSC
+        // El middleware manejará el redirectTo si es necesario
+        router.replace('/iniciar-sesion');
+      }
     }
   }, [auth.loading, auth.user, pathname, redirectTo, required, router]);
 

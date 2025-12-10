@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { StatCard } from '../dashboard/stat-card';
 import { SubscriptionCard } from '../dashboard/subscription-card';
@@ -93,6 +94,7 @@ export function ParticipantDashboard({
   winsCount = 0,
   alertEvent = null
 }: Readonly<ParticipantDashboardProps>) {
+  const router = useRouter();
   const winningEntries = myEntries.filter(entry => entry.is_winner);
   const totalWins = Math.max(winsCount, winningEntries.length);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
@@ -100,40 +102,60 @@ export function ParticipantDashboard({
   
   // Header sticky colapsable
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleScroll = () => {
-      const scrollY = window.scrollY;
-      setIsHeaderCollapsed(scrollY > 100);
+      try {
+        const scrollY = window.scrollY;
+        setIsHeaderCollapsed(scrollY > 100);
+      } catch (error) {
+        // Ignorar errores de scroll
+      }
     };
 
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('scroll', handleScroll);
+      }
+    };
   }, []);
   
   // Keyboard shortcuts para power users
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleKeyPress = (e: KeyboardEvent) => {
       // Solo activar con Ctrl/Cmd + tecla
       if (!e.ctrlKey && !e.metaKey) return;
       
-      switch(e.key) {
-        case 's':
-          e.preventDefault();
-          globalThis.location.href = '/app/sorteos';
-          break;
-        case 'p':
-          e.preventDefault();
-          globalThis.location.href = '/app/planes';
-          break;
-        case 'b':
-          e.preventDefault();
-          globalThis.location.href = '/app/boletos';
-          break;
+      try {
+        switch(e.key) {
+          case 's':
+            e.preventDefault();
+            router.push('/app/sorteos');
+            break;
+          case 'p':
+            e.preventDefault();
+            router.push('/app/planes');
+            break;
+          case 'b':
+            e.preventDefault();
+            router.push('/app/boletos');
+            break;
+        }
+      } catch (error) {
+        // Ignorar errores de navegación
       }
     };
 
-    globalThis.addEventListener('keydown', handleKeyPress);
-    return () => globalThis.removeEventListener('keydown', handleKeyPress);
-  }, []);
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('keydown', handleKeyPress);
+      }
+    };
+  }, [router]);
   
   const recentActivities = [
     ...myEntries.slice(0, 3).map(entry => ({

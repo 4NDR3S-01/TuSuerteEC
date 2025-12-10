@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -17,6 +18,7 @@ type LoginFormProps = {
 };
 
 export function LoginForm({ redirectTo }: LoginFormProps = {}) {
+  const router = useRouter();
   const [form, setForm] = useState<FormState>({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -166,20 +168,31 @@ export function LoginForm({ redirectTo }: LoginFormProps = {}) {
             access_token: data.session.access_token,
             refresh_token: data.session.refresh_token,
           }),
+          credentials: 'include', // Asegurar que las cookies se incluyan
         });
   
         if (!response.ok) {
           throw new Error('No se pudo sincronizar tu sesión en el servidor.');
         }
+        
+        // Leer la respuesta para evitar errores de stream
+        try {
+          await response.text();
+        } catch {
+          // Ignorar errores al leer la respuesta
+        }
       } catch (syncError) {
-        const description =
-          syncError instanceof Error
-            ? syncError.message
-            : 'No se pudo sincronizar tu sesión en el servidor.';
-        showToast({
-          type: 'error',
-          description,
-        });
+        // Ignorar errores de cookies/stream que no son críticos
+        const errorMessage = syncError instanceof Error ? syncError.message : String(syncError);
+        if (!errorMessage.includes('input stream') && 
+            !errorMessage.includes('__cf_bm') &&
+            !errorMessage.includes('Cookie')) {
+          const description = 'No se pudo sincronizar tu sesión en el servidor.';
+          showToast({
+            type: 'error',
+            description,
+          });
+        }
       }
 
       let destination = safeRedirectTo;
@@ -208,7 +221,11 @@ export function LoginForm({ redirectTo }: LoginFormProps = {}) {
         destination = '/app';
       }
 
-      globalThis.location.href = destination;
+      // Pequeño delay para asegurar que el estado se actualice antes de redirigir
+      // Esto evita problemas de hidratación y errores de RSC
+      setTimeout(() => {
+        router.push(destination);
+      }, 100);
     }
 
     setIsLoading(false);

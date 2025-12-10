@@ -48,10 +48,61 @@ export default function RootLayout({
     })();
   `.trim();
 
+  const errorSuppressionScript = `
+    (function () {
+      // Suprimir errores no críticos de cookies y streams
+      if (typeof window !== 'undefined') {
+        // Suprimir errores de cookies de Cloudflare
+        var originalConsoleError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var message = args.join(' ');
+          
+          // Filtrar errores no críticos
+          if (message && (
+            message.includes('__cf_bm') ||
+            (message.includes('Cookie') && message.includes('rejected') && message.includes('domain')) ||
+            message.includes('Error in input stream') ||
+            message.includes('input stream')
+          )) {
+            return; // No mostrar estos errores
+          }
+          originalConsoleError.apply(console, args);
+        };
+
+        // Capturar errores no manejados relacionados con cookies/streams
+        window.addEventListener('error', function(event) {
+          var message = event.message || '';
+          if (message.includes('__cf_bm') || 
+              message.includes('Cookie') && message.includes('rejected') ||
+              message.includes('input stream') ||
+              message.includes('Error in input stream')) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+          }
+        }, true);
+
+        // Capturar promesas rechazadas no manejadas relacionadas con cookies
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason;
+          var message = reason?.message || reason?.toString() || '';
+          if (message.includes('__cf_bm') || 
+              message.includes('Cookie') && message.includes('rejected') ||
+              message.includes('input stream')) {
+            event.preventDefault();
+            return false;
+          }
+        });
+      }
+    })();
+  `.trim();
+
   return (
     <html lang="es" data-theme="light" data-theme-mode="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: errorSuppressionScript }} />
       </head>
       <body
         className={`app-shell ${geistSans.variable} ${geistMono.variable} antialiased`}

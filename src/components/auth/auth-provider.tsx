@@ -83,12 +83,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
           setError(null);
-          router.refresh();
+          // Solo refrescar si no estamos ya en una página protegida
+          // Para evitar conflictos durante la redirección después del login
+          if (pathname && !pathname.startsWith('/app') && !pathname.startsWith('/administrador') && !pathname.startsWith('/staff')) {
+            router.refresh();
+          }
         }
 
         if (event === 'SIGNED_OUT') {
           setError(null);
-          if (pathname !== '/iniciar-sesion') {
+          setUser(null);
+          setLoading(false);
+          // Si estamos en una ruta protegida, redirigir a login
+          // Pero solo si no estamos ya en una página pública
+          if (pathname && 
+              !pathname.includes('/iniciar-sesion') && 
+              !pathname.includes('/registro') && 
+              !pathname.includes('/recuperar') &&
+              !pathname.includes('/restablecer-clave') &&
+              (pathname.startsWith('/app') || pathname.startsWith('/administrador') || pathname.startsWith('/staff'))) {
+            // Usar replace sin parámetros para evitar problemas con RSC
             router.replace('/iniciar-sesion');
           }
         }
@@ -105,27 +119,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null);
 
     try {
+      // Primero cerrar sesión en el cliente
       const { error: clientError } = await supabase.auth.signOut();
       if (clientError) {
         throw clientError;
       }
 
-      const response = await fetch('/api/auth/sign-out', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Luego cerrar sesión en el servidor
+      try {
+        const response = await fetch('/api/auth/sign-out', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to sign out on server');
+        if (!response.ok) {
+          // No lanzar error si falla el servidor, ya cerramos en el cliente
+          console.warn('Failed to sign out on server, but client session cleared');
+        }
+      } catch (serverError) {
+        // Ignorar errores del servidor, la sesión del cliente ya está cerrada
+        console.warn('Server sign-out error (non-critical):', serverError);
       }
 
+      // Limpiar el estado inmediatamente
+      setUser(null);
+      setLoading(false);
+      
       showToast({
         type: 'success',
         description: 'Sesión cerrada correctamente.',
       });
-      router.refresh();
+      
+      // Redirigir usando replace sin parámetros para evitar problemas con RSC
+      router.replace('/iniciar-sesion');
     } catch (signOutError) {
       console.error('Error signing out:', signOutError);
       const description =
@@ -137,7 +165,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         type: 'error',
         description,
       });
-    } finally {
       setIsProcessing(false);
     }
   }, [router, showToast, supabase]);
