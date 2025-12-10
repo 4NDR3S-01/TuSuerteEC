@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings as SettingsIcon, User, Lock, CreditCard, Bell } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Settings as SettingsIcon, User, Lock, CreditCard, Bell, CheckCircle2, X } from 'lucide-react';
 import { ProfileSettings } from './profile-settings';
 import { SecuritySettings } from './security-settings';
 import { SubscriptionSettings } from './subscription-settings';
@@ -41,12 +42,31 @@ interface SettingsPageProps {
   user: User;
   profile: Profile | null;
   subscriptions: Subscription[];
+  emailChanged?: boolean;
 }
 
 type Tab = 'profile' | 'security' | 'subscriptions' | 'notifications';
 
-export function SettingsPage({ user, profile, subscriptions }: Readonly<SettingsPageProps>) {
+export function SettingsPage({ user, profile, subscriptions, emailChanged = false }: Readonly<SettingsPageProps>) {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [showEmailSuccess, setShowEmailSuccess] = useState(emailChanged);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Verificar si hay parámetro de email_changed en la URL
+  useEffect(() => {
+    const emailChangedParam = searchParams.get('email_changed');
+    if (emailChangedParam === 'true') {
+      setShowEmailSuccess(true);
+      // Limpiar el parámetro de la URL después de mostrarlo
+      const newSearchParams = new URLSearchParams(searchParams.toString());
+      newSearchParams.delete('email_changed');
+      const newUrl = newSearchParams.toString() 
+        ? `${globalThis.window.location.pathname}?${newSearchParams.toString()}`
+        : globalThis.window.location.pathname;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, [searchParams, router]);
 
   const tabs = [
     { id: 'profile' as Tab, label: 'Perfil', icon: User, description: 'Información personal' },
@@ -152,6 +172,24 @@ export function SettingsPage({ user, profile, subscriptions }: Readonly<Settings
           {/* Content Area */}
           <div className="lg:col-span-3">
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 shadow-lg">
+              {showEmailSuccess && activeTab === 'profile' && (
+                <div className="mb-4 sm:mb-6 rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 text-sm text-green-600 dark:text-green-400 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1">
+                    <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold mb-1">✓ Cambio de correo completado</p>
+                      <p className="text-xs opacity-90">Tu correo electrónico ha sido actualizado exitosamente.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowEmailSuccess(false)}
+                    className="p-1 hover:bg-green-500/20 rounded transition-colors flex-shrink-0"
+                    aria-label="Cerrar mensaje"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {activeTab === 'profile' && <ProfileSettings user={user} profile={profile} />}
               {activeTab === 'security' && <SecuritySettings user={user} />}
               {activeTab === 'subscriptions' && <SubscriptionSettings subscriptions={subscriptions} />}

@@ -5,12 +5,21 @@ import { SettingsPage } from '../../../../components/settings/settings-page';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Settings() {
+type SettingsPageProps = {
+  searchParams?: Promise<{
+    email_changed?: string;
+  }>;
+};
+
+export default async function Settings({ searchParams }: SettingsPageProps) {
   const user = await getCurrentUser();
   
   if (!user) {
     redirect('/iniciar-sesion');
   }
+
+  const params = await searchParams;
+  const emailChanged = params?.email_changed === 'true';
 
   const supabase = await getSupabaseServerClient();
   
@@ -35,6 +44,7 @@ export default async function Settings() {
       user={user}
       profile={profile}
       subscriptions={subscriptions || []}
+      emailChanged={emailChanged}
     />
   );
 }

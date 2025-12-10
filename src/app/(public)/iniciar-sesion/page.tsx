@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic';
 type LoginPageProps = {
   searchParams?: Promise<{
     redirectTo?: string;
+    confirmed?: string;
+    error?: string;
   }>;
 };
 
@@ -29,6 +31,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     typeof params?.redirectTo === "string" && params.redirectTo.startsWith("/")
       ? params.redirectTo
       : undefined;
+  const confirmed = params?.confirmed === 'true';
+  const error = params?.error;
+  
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <SiteHeader
@@ -69,6 +74,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <Suspense fallback={null}>
               <SessionExpiredMessage />
             </Suspense>
+            {confirmed && (
+              <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-600 dark:text-green-400">
+                <p className="font-semibold">✓ Email confirmado</p>
+                <p className="mt-1">Tu cuenta ha sido verificada exitosamente. Ahora puedes iniciar sesión.</p>
+              </div>
+            )}
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
+                <p className="font-semibold">⚠ Error</p>
+                <p className="mt-1">{decodeURIComponent(error)}</p>
+              </div>
+            )}
             <div className="mt-6">
               <LoginForm redirectTo={redirectTo} />
             </div>

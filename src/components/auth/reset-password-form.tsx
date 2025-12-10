@@ -42,7 +42,11 @@ export function ResetPasswordForm() {
 
     try {
       const redirectTo =
-        typeof window !== 'undefined' ? `${window.location.origin}/restablecer-clave` : undefined;
+        typeof window !== 'undefined' 
+          ? `${window.location.origin}/auth/callback?type=recovery&next=/restablecer-clave`
+          : process.env.NEXT_PUBLIC_APP_URL
+            ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=recovery&next=/restablecer-clave`
+            : undefined;
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,

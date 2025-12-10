@@ -132,9 +132,16 @@ export function ProfileSettings({ user, profile }: any) {
           return;
         }
 
-        // Actualizar email en Supabase Auth
+        // Obtener URL base para redirección
+        const baseUrl = typeof window !== 'undefined' 
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_APP_URL || 'https://tu-suerte-ec.vercel.app';
+        
+        // Actualizar email en Supabase Auth con URL de callback
         const { error: emailError } = await supabase.auth.updateUser({
           email: formData.email.trim(),
+        }, {
+          emailRedirectTo: `${baseUrl}/auth/callback?type=email_change&next=/app/settings`,
         });
 
         if (emailError) {
