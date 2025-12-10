@@ -33,6 +33,8 @@ export function ConfirmEmailChangeForm({
   const [completed, setCompleted] = useState(initialCompleted);
   const [error, setError] = useState<string | null>(initialError || null);
   const [isResending, setIsResending] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [changeCompleted, setChangeCompleted] = useState(false);
   const [emailData, setEmailData] = useState<{ oldEmail?: string; newEmail?: string } | null>(
     oldEmail && newEmail ? { oldEmail, newEmail } : null
   );
@@ -59,9 +61,35 @@ export function ConfirmEmailChangeForm({
         setCompleted(urlCompleted);
         setIsValidating(false);
       } else {
-        // Si no hay datos, mostrar error
-        setError('No se encontraron los datos del cambio de correo. El enlace puede haber expirado.');
-        setIsValidating(false);
+        // Si no hay datos en la URL, verificar si el cambio ya se completó
+        const checkEmailChangeStatus = async () => {
+          try {
+            const supabase = getSupabaseBrowserClient();
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            
+            if (!userError && user) {
+              // Si no hay new_email, el cambio ya se completó
+              if (!user.new_email) {
+                setEmailData({ 
+                  oldEmail: user.email, // Puede ser el anterior o nuevo
+                  newEmail: user.email 
+                });
+                setConfirmed(true);
+                setCompleted(true);
+                setIsValidating(false);
+                return;
+              }
+            }
+          } catch (error) {
+            console.error('Error verificando estado del cambio:', error);
+          }
+          
+          // Si no se pudo verificar, mostrar error
+          setError('No se encontraron los datos del cambio de correo. El enlace puede haber expirado.');
+          setIsValidating(false);
+        };
+        
+        checkEmailChangeStatus();
       }
     }
   }, [initialConfirmed, initialError, emailData]);
@@ -155,8 +183,132 @@ export function ConfirmEmailChangeForm({
     );
   }
 
+  // Verificar si el cambio se completó cuando hay error de expiración
+  useEffect(() => {
+    if (error && !isCheckingStatus && !changeCompleted) {
+      const isExpiredError = error.includes('expirado') || error.includes('ya fue usado');
+      if (isExpiredError) {
+        setIsCheckingStatus(true);
+        const checkStatus = async () => {
+          try {
+            const supabase = getSupabaseBrowserClient();
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            
+            if (!userError && user) {
+              // Si no hay new_email, el cambio ya se completó
+              if (!user.new_email) {
+                setChangeCompleted(true);
+                setError(null);
+                setConfirmed(true);
+                setCompleted(true);
+                // Intentar obtener los correos
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('email')
+                  .eq('id', user.id)
+                  .single();
+                
+                if (profile?.email && profile.email !== user.email) {
+                  setEmailData({ oldEmail: profile.email, newEmail: user.email });
+                } else {
+                  setEmailData({ oldEmail: user.email, newEmail: user.email });
+                }
+              }
+            }
+          } catch (checkError) {
+            console.error('Error verificando estado:', checkError);
+          } finally {
+            setIsCheckingStatus(false);
+          }
+        };
+        
+        checkStatus();
+      }
+    }
+  }, [error, isCheckingStatus, changeCompleted]);
+
   if (error) {
-    const isExpiredError = error.includes('expirado') || error.includes('expirado') || error.includes('ya fue usado');
+    const isExpiredError = error.includes('expirado') || error.includes('ya fue usado');
+    
+    // Si el cambio se completó, mostrar mensaje de éxito en lugar de error
+    if (changeCompleted && emailData) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
+            <div className="flex justify-center mb-4">
+              <CheckCircle2 className="w-16 h-16 text-green-500" />
+            </div>
+            <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
+              ✓ Cambio de correo completado
+            </h2>
+            <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
+              Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.
+            </p>
+            {/* Mostrar información de los correos si está disponible */}
+            {emailData.oldEmail && emailData.newEmail && emailData.oldEmail !== emailData.newEmail && (
+              <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                        Correo anterior:
+                      </p>
+                      <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
+                        {emailData.oldEmail}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t border-[color:var(--border)] pt-3">
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                          Nuevo correo:
+                        </p>
+                        <p className="text-sm font-bold text-[color:var(--accent)] break-all">
+                          {emailData.newEmail}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="space-y-3">
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Serás redirigido automáticamente a la página de inicio de sesión en unos segundos.
+              </p>
+              <div className="flex gap-3 justify-center pt-2">
+                <Link
+                  href="/iniciar-sesion?email_changed=true"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                >
+                  Ir a iniciar sesión ahora
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Si está verificando, mostrar loading
+    if (isCheckingStatus) {
+      return (
+        <div className="space-y-4 text-center">
+          <div className="flex justify-center">
+            <Loader2 className="w-12 h-12 animate-spin text-[color:var(--accent)]" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold">Verificando estado del cambio...</h2>
+            <p className="text-sm text-[color:var(--muted-foreground)]">
+              Por favor espera mientras verificamos si el cambio se completó.
+            </p>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div className="space-y-4">

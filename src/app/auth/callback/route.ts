@@ -96,6 +96,41 @@ export async function GET(request: NextRequest) {
         type,
       });
       
+      // Para email_change, verificar si el cambio ya se completó antes de mostrar error
+      if (type === 'email_change') {
+        try {
+          // Intentar obtener el usuario para verificar el estado del cambio
+          const { data: userCheck, error: userCheckError } = await supabase.auth.getUser();
+          
+          if (!userCheckError && userCheck?.user) {
+            // Si no hay new_email, el cambio ya se completó
+            if (!userCheck.user.new_email) {
+              console.log('[AUTH CALLBACK] Cambio de email ya completado, redirigiendo a confirmación exitosa');
+              const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+              confirmUrl.searchParams.set('confirmed', 'true');
+              confirmUrl.searchParams.set('completed', 'true');
+              // Intentar obtener los correos del perfil
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('id', userCheck.user.id)
+                .single();
+              
+              if (profile?.email && profile.email !== userCheck.user.email) {
+                confirmUrl.searchParams.set('oldEmail', profile.email);
+                confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+              } else {
+                confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+              }
+              
+              return NextResponse.redirect(confirmUrl);
+            }
+          }
+        } catch (checkError) {
+          console.error('[AUTH CALLBACK] Error verificando estado del cambio:', checkError);
+        }
+      }
+      
       // Si es un error de cรณdigo expirado o invรกlido, redirigir con mensaje especรญfico
       let errorMessage = 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
       let redirectPath = '/iniciar-sesion';
