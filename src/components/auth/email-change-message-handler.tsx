@@ -78,6 +78,14 @@ export function EmailChangeMessageHandler() {
                   Has confirmado tu nuevo correo electrónico. Para completar el cambio,{' '}
                   <strong>debes confirmar también el correo que se envió a tu dirección anterior</strong>.
                 </p>
+                <div className="mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+                    💡 Recomendación:
+                  </p>
+                  <p className="text-xs text-blue-700/90 dark:text-blue-300/90">
+                    Si aún no confirmaste el correo anterior, hazlo primero desde un dispositivo donde <strong>no estés logueado</strong>. Este orden ayuda a evitar problemas con los enlaces.
+                  </p>
+                </div>
                 <div className="mt-3 flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Revisa tu bandeja de entrada del correo anterior</span>

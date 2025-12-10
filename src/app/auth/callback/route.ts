@@ -106,10 +106,18 @@ export async function GET(request: NextRequest) {
         if (type === 'recovery') {
           redirectPath = '/recuperar?error=expired';
         }
+        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error y opción de reenviar
+        if (type === 'email_change') {
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuración de tu cuenta.');
+        }
       } else if (exchangeError.message.includes('token')) {
         errorMessage = 'El enlace no es válido. Solicita uno nuevo.';
         if (type === 'recovery') {
           redirectPath = '/recuperar?error=invalid';
+        }
+        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
+        if (type === 'email_change') {
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es válido. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuración de tu cuenta.');
         }
       }
       

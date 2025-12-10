@@ -160,7 +160,7 @@ export function ProfileSettings({ user, profile }: any) {
 
         showToast({
           type: 'info',
-          description: 'Se enviaron correos a ambas direcciones. Debes aceptar ambos para completar el cambio.',
+          description: 'Se enviaron correos a ambas direcciones. Debes aceptar ambos para completar el cambio. Recomendamos confirmar primero el correo anterior (donde no estás logueado) y luego el nuevo.',
         });
       }
 
