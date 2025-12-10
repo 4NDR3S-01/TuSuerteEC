@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const errorDescription = requestUrl.searchParams.get('error_description');
 
   // Log para debugging
-  console.log('[AUTH CALLBACK] Parámetros recibidos:', {
+  console.log('[AUTH CALLBACK] Parรกmetros recibidos:', {
     code: code ? 'presente' : 'ausente',
     type,
     error,
@@ -19,12 +19,12 @@ export async function GET(request: NextRequest) {
     url: requestUrl.toString(),
   });
 
-  // Si hay un error, redirigir apropiadamente según el tipo de error
+  // Si hay un error, redirigir apropiadamente segรบn el tipo de error
   if (error) {
     const errorCode = requestUrl.searchParams.get('error_code');
     let errorMessage = errorDescription 
       ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
-      : 'Error al procesar la autenticación';
+      : 'Error al procesar la autenticaciรณn';
     
     // Si es un error de OTP expirado, puede ser reset password o cambio de email
     if (errorCode === 'otp_expired' || error === 'access_denied') {
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
         // Si era email_change, redirigir a settings
         if (type === 'email_change') {
           return NextResponse.redirect(
-            new URL(`/iniciar-sesion?error=${encodeURIComponent('El enlace de cambio de correo ha expirado. Solicita uno nuevo desde la configuración.')}`, requestUrl.origin)
+            new URL(`/iniciar-sesion?error=${encodeURIComponent('El enlace de cambio de correo ha expirado. Solicita uno nuevo desde la configuraciรณn.')}`, requestUrl.origin)
           );
         }
       }
@@ -50,14 +50,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Si hay un código, intercambiarlo por una sesión
+  // Si hay un cรณdigo, intercambiarlo por una sesiรณn
   if (code) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       return NextResponse.redirect(
-        new URL('/iniciar-sesion?error=Error de configuración', requestUrl.origin)
+        new URL('/iniciar-sesion?error=Error de configuraciรณn', requestUrl.origin)
       );
     }
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         type,
       });
       
-      // Si es un error de código expirado o inválido, redirigir con mensaje específico
+      // Si es un error de cรณdigo expirado o invรกlido, redirigir con mensaje especรญfico
       let errorMessage = 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
       let redirectPath = '/iniciar-sesion';
       
@@ -106,18 +106,18 @@ export async function GET(request: NextRequest) {
         if (type === 'recovery') {
           redirectPath = '/recuperar?error=expired';
         }
-        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error y opción de reenviar
+        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error y opciรณn de reenviar
         if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuración de tu cuenta.');
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuraciรณn de tu cuenta.');
         }
       } else if (exchangeError.message.includes('token')) {
-        errorMessage = 'El enlace no es válido. Solicita uno nuevo.';
+        errorMessage = 'El enlace no es vรกlido. Solicita uno nuevo.';
         if (type === 'recovery') {
           redirectPath = '/recuperar?error=invalid';
         }
         // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
         if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es válido. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuración de tu cuenta.');
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es vรกlido. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuraciรณn de tu cuenta.');
         }
       }
       
@@ -126,101 +126,149 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verificar que la sesión se estableció correctamente
-    if (!exchangeData.session) {
+    // Verificar que la sesiรณn se estableciรณ correctamente
+    // Para email_change, puede que no haya sesión persistente si se confirma desde dispositivo no logueado
+    // Pero el exchangeCodeForSession debería haber establecido una sesión temporal
+    if (!exchangeData.session && type !== 'email_change') {
       return NextResponse.redirect(
-        new URL('/iniciar-sesion?error=No se pudo establecer la sesión. Intenta nuevamente.', requestUrl.origin)
+        new URL('/iniciar-sesion?error=No se pudo establecer la sesiรณn. Intenta nuevamente.', requestUrl.origin)
       );
     }
+    
+    // Para email_change sin sesión, aún podemos procesar la confirmación
+    if (!exchangeData.session && type === 'email_change') {
+      console.log('[AUTH CALLBACK] Email change sin sesión persistente, pero continuando con el proceso');
+    }
 
-    // Redirigir según el tipo de acción
+    // Redirigir segรบn el tipo de acciรณn
     switch (type) {
       case 'email_change':
-        // Cambio de email confirmado - obtener información del usuario
-        const { data: userData, error: userError } = await supabase.auth.getUser();
+        // Cambio de email confirmado - obtener informaciรณn del usuario
+        // Si hay sesión, usar getUser, si no, intentar obtener del exchangeData
+        let userData: any = null;
+        let userError: any = null;
+        
+        // Primero intentar obtener del exchangeData (puede tener el usuario incluso sin sesión persistente)
+        if (exchangeData.user) {
+          userData = { user: exchangeData.user };
+          console.log('[AUTH CALLBACK] Usando usuario de exchangeData');
+        } else if (exchangeData.session) {
+          // Si hay sesión, obtener el usuario
+          const result = await supabase.auth.getUser();
+          userData = result.data;
+          userError = result.error;
+          console.log('[AUTH CALLBACK] Usando usuario de getUser con sesión');
+        } else {
+          // Último intento: obtener usuario directamente (puede funcionar con sesión temporal)
+          const result = await supabase.auth.getUser();
+          userData = result.data;
+          userError = result.error;
+          console.log('[AUTH CALLBACK] Intentando obtener usuario sin sesión persistente');
+        }
         
         if (userError || !userData?.user) {
-          return NextResponse.redirect(
-            new URL('/iniciar-sesion?error=No se pudo obtener la información del usuario.', requestUrl.origin)
-          );
-        }
-
-        // Cuando se confirma el cambio de email, Supabase puede tener:
-        // - user.email: el correo anterior (antes del cambio)
-        // - user.new_email: el nuevo correo (si aún no se completa)
-        // O después de confirmar, user.email ya es el nuevo correo
-        // Necesitamos obtener el correo anterior de otra forma
-        
-        // Intentar obtener el correo anterior del perfil si está disponible
-        let oldEmail = userData.user.email;
-        let newEmail = userData.user.new_email || userData.user.email;
-        
-        // Si hay new_email, significa que el cambio está pendiente
-        // El email actual es el anterior, y new_email es el nuevo
-        if (userData.user.new_email) {
-          oldEmail = userData.user.email;
-          newEmail = userData.user.new_email;
-          
-          // Si el cambio está pendiente (hay new_email), significa que se confirmó el primer correo
-          // Redirigir a la página de confirmación con mensaje informativo
+          console.error('[AUTH CALLBACK] Error obteniendo usuario en email_change:', userError);
+          // Si no se pudo obtener el usuario, redirigir a confirmación con mensaje genérico
+          // en lugar de a login, para que el usuario vea que el proceso está en curso
           const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
           confirmUrl.searchParams.set('confirmed', 'true');
-          confirmUrl.searchParams.set('pending', 'true'); // Indicar que falta confirmar el otro correo
-          if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
-          if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
-          
+          confirmUrl.searchParams.set('pending', 'true');
+          confirmUrl.searchParams.set('error', 'No se pudo obtener la información completa. El cambio puede estar en proceso. Revisa ambos correos.');
           return NextResponse.redirect(confirmUrl);
+        }
+
+        console.log('[AUTH CALLBACK] Email change - User data:', {
+          email: userData.user.email,
+          new_email: userData.user.new_email,
+          email_confirmed_at: userData.user.email_confirmed_at,
+        });
+
+        // Cuando se confirma el cambio de email, Supabase puede tener diferentes estados:
+        // 1. Si se confirma el correo ANTERIOR primero (no logueado):
+        //    - user.email = correo anterior
+        //    - user.new_email = nuevo correo (pendiente)
+        // 2. Si se confirma el correo NUEVO primero (logueado):
+        //    - user.email = correo anterior
+        //    - user.new_email = nuevo correo (pendiente)
+        // 3. Si ambos estรกn confirmados:
+        //    - user.email = nuevo correo
+        //    - user.new_email = null
+        
+        let oldEmail = userData.user.email;
+        let newEmail = userData.user.new_email || userData.user.email;
+        let isPending = false;
+        
+        // Si hay new_email, significa que el cambio estรก pendiente
+        if (userData.user.new_email) {
+          // El cambio estรก pendiente - falta confirmar uno de los correos
+          oldEmail = userData.user.email; // Correo actual (anterior)
+          newEmail = userData.user.new_email; // Nuevo correo (pendiente)
+          isPending = true;
+          
+          console.log('[AUTH CALLBACK] Cambio pendiente - oldEmail:', oldEmail, 'newEmail:', newEmail);
         } else {
-          // Si no hay new_email, el cambio ya se completó (ambos correos confirmados)
-          // Intentar obtener el correo anterior del perfil
+          // No hay new_email - el cambio puede estar completo o puede ser que se confirmรณ el correo anterior
+          // Intentar obtener informaciรณn del perfil para determinar el estado
           const { data: profile } = await supabase
             .from('profiles')
             .select('email')
             .eq('id', userData.user.id)
             .single();
           
-          // Si tenemos el perfil, usar ese email como referencia
-          // Pero en este punto, el email ya debería estar actualizado
-          // Por seguridad, usar el email actual como nuevo
-          newEmail = userData.user.email;
-          
-          // Redirigir a página de confirmación con los datos del correo
-          const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-          confirmUrl.searchParams.set('confirmed', 'true');
-          confirmUrl.searchParams.set('completed', 'true'); // Indicar que el cambio está completo
-          if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
-          if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
-          
-          return NextResponse.redirect(confirmUrl);
+          // Si el perfil tiene un email diferente al actual, puede ser que el cambio se completรณ
+          if (profile?.email && profile.email !== userData.user.email) {
+            oldEmail = profile.email; // Email anterior del perfil
+            newEmail = userData.user.email; // Email actual (nuevo)
+            isPending = false;
+            console.log('[AUTH CALLBACK] Cambio completado - oldEmail:', oldEmail, 'newEmail:', newEmail);
+          } else {
+            // Si no hay diferencia, usar el email actual como nuevo
+            newEmail = userData.user.email;
+            isPending = false;
+            console.log('[AUTH CALLBACK] Cambio completado - usando email actual:', newEmail);
+          }
         }
+        
+        // Redirigir a pรกgina de confirmaciรณn con los datos del correo
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('confirmed', 'true');
+        if (isPending) {
+          confirmUrl.searchParams.set('pending', 'true');
+        } else {
+          confirmUrl.searchParams.set('completed', 'true');
+        }
+        if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
+        if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
+        
+        return NextResponse.redirect(confirmUrl);
       
       case 'recovery':
-        // Reset de contraseña
+        // Reset de contraseรฑa
         return NextResponse.redirect(
           new URL('/restablecer-clave?token=valid', requestUrl.origin)
         );
       
       case 'signup':
-        // Confirmación de registro - redirigir a página de confirmación
+        // Confirmaciรณn de registro - redirigir a pรกgina de confirmaciรณn
         return NextResponse.redirect(
           new URL('/confirmar-registro?confirmed=true', requestUrl.origin)
         );
       
       default:
-        // Si no hay tipo especificado pero hay código, intentar determinar el tipo desde la sesión
-        console.log('[AUTH CALLBACK] Tipo no especificado, intentando determinar desde la sesión');
+        // Si no hay tipo especificado pero hay cรณdigo, intentar determinar el tipo desde la sesiรณn
+        console.log('[AUTH CALLBACK] Tipo no especificado, intentando determinar desde la sesiรณn');
         const { data: defaultUserData, error: defaultUserError } = await supabase.auth.getUser();
         
         if (defaultUserError) {
           console.error('[AUTH CALLBACK] Error obteniendo usuario:', defaultUserError);
-          return NextResponse.redirect(new URL('/iniciar-sesion?error=Error al obtener información del usuario', requestUrl.origin));
+          return NextResponse.redirect(new URL('/iniciar-sesion?error=Error al obtener informaciรณn del usuario', requestUrl.origin));
         }
         
         if (defaultUserData?.user) {
           // Si el usuario tiene new_email, es un cambio de email
           if (defaultUserData.user.new_email) {
             console.log('[AUTH CALLBACK] Detectado cambio de email desde new_email');
-            // Reutilizar la lógica de email_change
+            // Reutilizar la lรณgica de email_change
             let oldEmail = defaultUserData.user.email;
             let newEmail = defaultUserData.user.new_email;
             
@@ -232,26 +280,26 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(confirmUrl);
           }
           
-          // Verificar si el usuario tiene email confirmado (puede ser confirmación de registro)
+          // Verificar si el usuario tiene email confirmado (puede ser confirmaciรณn de registro)
           if (defaultUserData.user.email_confirmed_at) {
-            console.log('[AUTH CALLBACK] Usuario con email confirmado, puede ser confirmación de registro');
+            console.log('[AUTH CALLBACK] Usuario con email confirmado, puede ser confirmaciรณn de registro');
             return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
           }
           
-          // Si no hay new_email pero el usuario está autenticado, puede ser confirmación de registro
-          console.log('[AUTH CALLBACK] Usuario autenticado sin new_email, redirigiendo a confirmación de registro');
+          // Si no hay new_email pero el usuario estรก autenticado, puede ser confirmaciรณn de registro
+          console.log('[AUTH CALLBACK] Usuario autenticado sin new_email, redirigiendo a confirmaciรณn de registro');
           return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
         }
         
-        // Si no hay usuario, puede ser que el código no estableció la sesión correctamente
+        // Si no hay usuario, puede ser que el cรณdigo no estableciรณ la sesiรณn correctamente
         // O puede ser un enlace de reset password sin tipo
         console.log('[AUTH CALLBACK] No se pudo determinar el tipo, redirigiendo a login');
-        return NextResponse.redirect(new URL('/iniciar-sesion?error=No se pudo determinar el tipo de confirmación', requestUrl.origin));
+        return NextResponse.redirect(new URL('/iniciar-sesion?error=No se pudo determinar el tipo de confirmaciรณn', requestUrl.origin));
     }
   }
 
-  // Si no hay código ni error, puede ser que Supabase redirigió sin parámetros
-  // O que el usuario accedió directamente a /auth/callback
-  console.log('[AUTH CALLBACK] No hay código ni error, redirigiendo a login');
-  return NextResponse.redirect(new URL('/iniciar-sesion?error=Enlace inválido o expirado', requestUrl.origin));
+  // Si no hay cรณdigo ni error, puede ser que Supabase redirigiรณ sin parรกmetros
+  // O que el usuario accediรณ directamente a /auth/callback
+  console.log('[AUTH CALLBACK] No hay cรณdigo ni error, redirigiendo a login');
+  return NextResponse.redirect(new URL('/iniciar-sesion?error=Enlace invรกlido o expirado', requestUrl.origin));
 }

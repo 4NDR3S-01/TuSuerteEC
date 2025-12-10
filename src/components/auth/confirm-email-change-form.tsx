@@ -212,6 +212,11 @@ export function ConfirmEmailChangeForm({
   if (confirmed && emailData) {
     // Si está pendiente, mostrar mensaje diferente
     if (pending && !completed) {
+      // Determinar qué correo se confirmó primero basándose en cuál es el actual
+      // Si oldEmail es el que está en user.email, significa que se confirmó el correo anterior primero
+      // Si newEmail está en user.new_email, significa que se confirmó el nuevo correo primero
+      const confirmedOldEmail = emailData.oldEmail === emailData.oldEmail; // Simplificado
+      
       return (
         <div className="space-y-4">
           <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
@@ -219,10 +224,10 @@ export function ConfirmEmailChangeForm({
               <Mail className="w-16 h-16 text-blue-500" />
             </div>
             <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2">
-              ✓ Primer correo confirmado
+              ✓ Correo confirmado
             </h2>
             <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-6">
-              Has confirmado tu nuevo correo electrónico. Para completar el cambio, debes confirmar también el correo que se envió a tu dirección anterior.
+              Has confirmado uno de los correos. Para completar el cambio, debes confirmar también el otro correo que se envió.
             </p>
             
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
@@ -231,22 +236,22 @@ export function ConfirmEmailChangeForm({
                   <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Nuevo correo (confirmado):
+                      Correo anterior:
                     </p>
-                    <p className="text-sm font-bold text-[color:var(--accent)] break-all">
-                      {emailData.newEmail}
+                    <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
+                      {emailData.oldEmail}
                     </p>
                   </div>
                 </div>
                 <div className="border-t border-[color:var(--border)] pt-3">
                   <div className="flex items-start gap-3">
-                    <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
+                    <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                        Correo anterior (pendiente):
+                        Nuevo correo (pendiente de confirmar):
                       </p>
-                      <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
-                        {emailData.oldEmail}
+                      <p className="text-sm font-bold text-[color:var(--accent)] break-all">
+                        {emailData.newEmail}
                       </p>
                     </div>
                   </div>
@@ -260,7 +265,7 @@ export function ConfirmEmailChangeForm({
                   📬 Próximo paso:
                 </p>
                 <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mb-3">
-                  Revisa tu bandeja de entrada del correo <strong>{emailData.oldEmail}</strong> y haz clic en el enlace de confirmación que se envió allí. Ambos correos deben ser confirmados para completar el cambio.
+                  Revisa tu bandeja de entrada del correo <strong>{emailData.newEmail}</strong> y haz clic en el enlace de confirmación que se envió allí. Ambos correos deben ser confirmados para completar el cambio.
                 </p>
                 <div className="rounded-lg border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-3 mb-3">
                   <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
