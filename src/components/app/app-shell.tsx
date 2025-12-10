@@ -5,6 +5,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { AppSidebar } from './app-sidebar';
 import { SidebarContext } from '../../hooks/use-sidebar';
+import { SessionTimeoutProvider } from '../auth/session-timeout-provider';
 
 type AppShellProps = {
   readonly children: ReactNode;
@@ -42,6 +43,7 @@ export function AppShell({ children, subscription }: AppShellProps) {
 
   return (
     <SidebarContext.Provider value={sidebarContextValue}>
+      <SessionTimeoutProvider />
       <div className="flex min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
         {/* Sidebar */}
         <AppSidebar 
@@ -52,7 +54,7 @@ export function AppShell({ children, subscription }: AppShellProps) {
         />
         
         {/* Main Content Area */}
-        <div className={`flex-1 flex flex-col min-h-screen w-full lg:w-auto transition-all duration-300 ${isCollapsed ? 'lg:ml-16' : 'lg:ml-72'}`}>
+        <div className={`flex-1 flex flex-col min-h-screen w-full lg:w-auto transition-all duration-300 ${isCollapsed ? 'lg:ml-24' : 'lg:ml-72'}`}>
           {/* Error Banner */}
           {error && (
             <div className="bg-red-50 text-red-900 dark:bg-red-950/60 dark:text-red-100 border-b border-red-200 dark:border-red-900">

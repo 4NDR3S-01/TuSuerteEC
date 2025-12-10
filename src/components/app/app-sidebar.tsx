@@ -173,7 +173,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="hidden lg:block fixed top-4 z-50 p-2 rounded-r-xl bg-[color:var(--card)] border border-l-0 border-[color:var(--border)] shadow-lg hover:shadow-xl transition-all duration-300"
-        style={{ left: isCollapsed ? '64px' : '288px' }}
+        style={{ left: isCollapsed ? '96px' : '288px' }}
         aria-label="Toggle sidebar"
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -186,7 +186,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
           flex flex-col transition-all duration-300 ease-in-out
           w-72
           ${isMobileOpen ? 'translate-x-0 z-40' : '-translate-x-full lg:translate-x-0 lg:z-10'}
-          ${isCollapsed ? 'lg:w-16' : 'lg:w-72'}
+          ${isCollapsed ? 'lg:w-24' : 'lg:w-72'}
         `}
       >
         {/* Header con Logo */}
@@ -194,9 +194,7 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
           <div className="flex items-center justify-between gap-3">
             {isCollapsed ? (
               <div className="hidden lg:flex justify-center w-full">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[color:var(--accent)] to-orange-500 flex items-center justify-center">
-                  <span className="text-xl font-black text-white">T</span>
-                </div>
+                <Logo href="/app" size="md" showText={false} />
               </div>
             ) : (
               <>
@@ -220,8 +218,8 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
             // Modo colapsado: Solo avatar con iniciales
             <div className="lg:flex justify-center hidden" title={fullName || userEmail || 'Usuario'}>
               <div className="relative group cursor-pointer">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-                  <span className="text-sm font-black text-white">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[color:var(--accent)] via-orange-500 to-pink-500 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+                  <span className="text-base font-black text-white">
                     {getUserInitials()}
                   </span>
                 </div>
@@ -295,14 +293,14 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
                   className={`
                     group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                     transition-all duration-200
-                    ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}
+                    ${isCollapsed ? 'lg:justify-center lg:px-3 lg:py-3' : ''}
                     ${active 
                       ? 'bg-gradient-to-r from-[color:var(--accent)] to-orange-500 text-white shadow-lg shadow-[color:var(--accent)]/25' 
                       : 'text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)]'
                     }
                   `}
                 >
-                  <Icon className={`w-5 h-5 flex-shrink-0 ${active ? '' : 'group-hover:scale-110 transition-transform'}`} />
+                  <Icon className={`${isCollapsed ? 'lg:w-6 lg:h-6 w-5 h-5' : 'w-5 h-5'} flex-shrink-0 ${active ? '' : 'group-hover:scale-110 transition-transform'}`} />
                   {!isCollapsed && (
                     <>
                       <span>{item.label}</span>
@@ -325,10 +323,10 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
                 setIsNotificationsOpen(true);
               }}
               title={isCollapsed ? 'Notificaciones' : undefined}
-              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-3 lg:py-3' : ''}`}
             >
               <div className="relative">
-                <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                <Bell className={`${isCollapsed ? 'lg:w-6 lg:h-6 w-5 h-5' : 'w-5 h-5'} group-hover:scale-110 transition-transform`} />
                 {notificationsCount > 0 && (
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[color:var(--card)] animate-pulse" />
                 )}
@@ -350,11 +348,11 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
               type="button"
               onClick={toggleTheme}
               title={isCollapsed ? `Tema: ${mode === 'light' ? 'Claro' : 'Oscuro'}` : undefined}
-              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-2' : ''}`}
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--accent)] transition-all duration-200 w-full ${isCollapsed ? 'lg:justify-center lg:px-3 lg:py-3' : ''}`}
             >
               {(() => {
                 const ThemeIcon = getThemeIcon();
-                return <ThemeIcon className="w-5 h-5 group-hover:scale-110 group-hover:rotate-12 transition-all" />;
+                return <ThemeIcon className={`${isCollapsed ? 'lg:w-6 lg:h-6 w-5 h-5' : 'w-5 h-5'} group-hover:scale-110 group-hover:rotate-12 transition-all`} />;
               })()}
               {!isCollapsed && (
                 <>
@@ -386,9 +384,9 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
             onClick={onSignOut}
             disabled={isProcessing}
             title={isCollapsed ? 'Cerrar Sesión' : undefined}
-            className={`w-full group flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[color:var(--background)] border-2 border-[color:var(--border)] text-sm font-semibold text-[color:var(--foreground)] hover:border-red-500 hover:bg-red-500/5 hover:text-red-600 dark:hover:text-red-400 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${isCollapsed ? 'px-2' : 'px-4'}`}
+            className={`w-full group flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[color:var(--background)] border-2 border-[color:var(--border)] text-sm font-semibold text-[color:var(--foreground)] hover:border-red-500 hover:bg-red-500/5 hover:text-red-600 dark:hover:text-red-400 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${isCollapsed ? 'px-3 py-3' : 'px-4'}`}
           >
-            <LogOut className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            <LogOut className={`${isCollapsed ? 'lg:w-5 lg:h-5 w-4 h-4' : 'w-4 h-4'} group-hover:translate-x-0.5 transition-transform`} />
             {!isCollapsed && <span>{isProcessing ? 'Cerrando...' : 'Cerrar Sesión'}</span>}
           </button>
         </div>

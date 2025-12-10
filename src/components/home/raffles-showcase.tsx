@@ -213,8 +213,12 @@ export function RafflesShowcase({
                             Registrarme
                           </Link>
                         </div>
-                        {typeof totalCount === 'number' && (
-                          <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">Hay {totalCount} sorteos activos.</p>
+                        {typeof totalCount === 'number' && totalCount > 0 && (
+                          <p className="mt-3 text-xs text-[color:var(--muted-foreground)]">
+                            {totalCount === 1 
+                              ? 'Hay 1 sorteo disponible' 
+                              : `Hay ${totalCount} sorteos disponibles`}
+                          </p>
                         )}
                       </div>
                     </div>

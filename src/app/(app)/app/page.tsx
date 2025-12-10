@@ -34,6 +34,7 @@ export default async function DashboardHomePage() {
       .from('raffles')
       .select('id, title, description, prize_description, prize_category, draw_date, entry_mode, max_entries_per_user, status')
       .eq('status', 'active')
+      .gt('draw_date', now) // Solo sorteos con fecha de sorteo futura
       .order('draw_date', { ascending: true }),
     supabase
       .from('raffle_entries')

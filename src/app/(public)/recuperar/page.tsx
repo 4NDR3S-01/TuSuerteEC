@@ -1,11 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { ResetPasswordForm } from "../../../components/auth/reset-password-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
+import { getCurrentUser } from "../../../lib/auth/get-user";
 
-export default function RecoverPage() {
+export default async function RecoverPage() {
+  // Si el usuario ya está autenticado, redirigir al dashboard
+  const user = await getCurrentUser();
+  if (user) {
+    redirect('/app');
+  }
   return (
     <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <SiteHeader

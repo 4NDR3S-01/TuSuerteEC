@@ -29,14 +29,24 @@ export default async function HomePage() {
     .eq('is_active', true)
     .order('price', { ascending: true });
 
-  // Obtener sorteos activos (pedimos el count exacto para saber si debemos mostrar CTA de "ver más")
-  const { data: activeRaffles, count: totalRafflesCount } = await supabase
+  // Obtener sorteos activos y futuros (pedimos el count exacto para saber si debemos mostrar CTA de "ver más")
+  const now = new Date().toISOString();
+  
+  // Primero obtener el conteo total de sorteos futuros (sin límite)
+  const { count: totalRafflesCount } = await supabase
+    .from('raffles')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'active')
+    .gt('draw_date', now); // Solo sorteos con fecha de sorteo futura
+  
+  // Luego obtener los primeros 6 sorteos para mostrar
+  const { data: activeRaffles } = await supabase
     .from('raffles')
     .select(
-      'id, title, description, prize_description, prize_category, image_url, start_date, end_date, draw_date, status, entry_mode, is_trending',
-      { count: 'exact' }
+      'id, title, description, prize_description, prize_category, image_url, start_date, end_date, draw_date, status, entry_mode, is_trending'
     )
     .eq('status', 'active')
+    .gt('draw_date', now) // Solo sorteos con fecha de sorteo futura
     .order('is_trending', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(6);

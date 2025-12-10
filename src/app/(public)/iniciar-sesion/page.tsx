@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { LoginForm } from "../../../components/auth/login-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
+import { getCurrentUser } from "../../../lib/auth/get-user";
+import { SessionExpiredMessage } from "../../../components/auth/session-expired-message";
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -12,6 +16,12 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  // Si el usuario ya está autenticado, redirigir al dashboard
+  const user = await getCurrentUser();
+  if (user) {
+    redirect('/app');
+  }
+
   const params = await searchParams;
   const redirectTo =
     typeof params?.redirectTo === "string" && params.redirectTo.startsWith("/")
@@ -54,6 +64,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 Ingresa tus credenciales para continuar con tu experiencia en TuSuerte.
               </p>
             </div>
+            <Suspense fallback={null}>
+              <SessionExpiredMessage />
+            </Suspense>
             <div className="mt-6">
               <LoginForm redirectTo={redirectTo} />
             </div>
