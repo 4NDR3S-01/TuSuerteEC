@@ -973,25 +973,29 @@ export function RaffleDetailPage({
 
             {/* User's Entries - Rediseñado */}
             {userEntries.length > 0 && (
-              <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 border border-[color:var(--border)] rounded-3xl p-8 shadow-lg">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-                  <h3 className="text-2xl font-black text-[color:var(--foreground)] flex items-center gap-3">
-                    <Ticket className="w-6 h-6 text-[color:var(--accent)]" />
+              <div className="bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/30 dark:to-[color:var(--muted)]/20 border border-[color:var(--border)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 shadow-lg">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6">
+                  <h3 className="text-xl sm:text-2xl font-black text-[color:var(--foreground)] flex items-center gap-2 sm:gap-3">
+                    <Ticket className="w-5 h-5 sm:w-6 sm:h-6 text-[color:var(--accent)] flex-shrink-0" />
                     <span>Mis Participaciones</span>
                   </h3>
-                  <div className="inline-flex w-full justify-center sm:w-auto px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-full font-bold text-sm shadow-lg">
+                  <div className="inline-flex w-full justify-center sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-green-500 dark:from-green-600 to-emerald-600 dark:to-emerald-700 text-white rounded-full font-bold text-xs sm:text-sm shadow-lg">
                     {userEntries.length} {userEntries.length === 1 ? 'Ticket' : 'Tickets'}
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
                   {userEntries.map((entry, index) => (
                     <div 
                       key={entry.id} 
-                      className="relative p-5 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800 border-2 border-[color:var(--accent)]/30 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group overflow-hidden"
+                      className={`relative p-4 sm:p-5 bg-gradient-to-br from-[color:var(--card)] to-[color:var(--muted)]/20 dark:to-[color:var(--muted)]/10 border-2 rounded-xl sm:rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group overflow-hidden ${
+                        entry.is_winner 
+                          ? 'border-yellow-500/50 dark:border-yellow-500/60 bg-gradient-to-br from-yellow-500/5 dark:from-yellow-500/10 via-orange-500/5 dark:via-orange-500/10 to-transparent' 
+                          : 'border-[color:var(--accent)]/30 dark:border-[color:var(--accent)]/40'
+                      }`}
                     >
                       {/* Patrón de fondo decorativo */}
-                      <div className="absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <div className="absolute inset-0 opacity-5 dark:opacity-3 group-hover:opacity-10 dark:group-hover:opacity-5 transition-opacity">
                         <div className="w-full h-full" style={{
                           backgroundImage: 'repeating-linear-gradient(45deg, currentColor 0, currentColor 1px, transparent 0, transparent 50%)',
                           backgroundSize: '10px 10px'
@@ -1001,49 +1005,49 @@ export function RaffleDetailPage({
                       {/* Número de ticket destacado */}
                       <div className="relative z-10">
                         <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                              #{index + 1}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] sm:text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                              Participación #{index + 1}
                             </div>
-                            <div className="font-black text-lg text-[color:var(--accent)] mb-1 font-mono tracking-tight">
-                              {entry.ticket_number || `T-${entry.id.slice(0, 8).toUpperCase()}`}
+                            <div className="font-black text-base sm:text-lg text-[color:var(--accent)] mb-1 font-mono tracking-tight break-all">
+                              {entry.ticket_number || entry.id}
                             </div>
                           </div>
-                          <div className="opacity-80 group-hover:scale-110 transition-transform">
+                          <div className="opacity-80 group-hover:scale-110 transition-transform flex-shrink-0 ml-2">
                             {entry.is_winner ? (
-                              <Trophy className="w-8 h-8 text-yellow-500" />
+                              <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500 dark:text-yellow-400" />
                             ) : (
-                              <Ticket className="w-8 h-8 text-[color:var(--accent)]" />
+                              <Ticket className="w-6 h-6 sm:w-8 sm:h-8 text-[color:var(--accent)]" />
                             )}
                           </div>
                         </div>
 
                         {/* Tipo de entrada */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className={`inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold ${
                             entry.entry_source === 'subscription' 
-                              ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30' 
-                              : 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                              ? 'bg-purple-500/20 dark:bg-purple-500/30 text-purple-600 dark:text-purple-400 border border-purple-500/30 dark:border-purple-500/50' 
+                              : 'bg-blue-500/20 dark:bg-blue-500/30 text-blue-600 dark:text-blue-400 border border-blue-500/30 dark:border-blue-500/50'
                           }`}>
                             {entry.entry_source === 'subscription' ? (
-                              <Star className="w-3 h-3" />
+                              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                             ) : (
-                              <Ticket className="w-3 h-3" />
+                              <Ticket className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                             )}
                             <span>{entry.entry_source === 'subscription' ? 'Suscripción' : 'Boleto'}</span>
                           </span>
                           {entry.is_winner && (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-full text-xs font-bold shadow-lg animate-pulse">
-                              <Trophy className="w-3 h-3" />
+                            <span className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 bg-gradient-to-r from-amber-500 dark:from-amber-600 to-yellow-500 dark:to-yellow-600 text-white rounded-full text-[10px] sm:text-xs font-bold shadow-lg animate-pulse">
+                              <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                               <span>Ganador</span>
                             </span>
                           )}
                         </div>
 
                         {/* Fecha */}
-                        <div className="text-xs text-[color:var(--muted-foreground)] flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(entry.created_at).toLocaleDateString('es-EC', { 
+                        <div className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] flex items-center gap-1">
+                          <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" />
+                          <span className="truncate">{new Date(entry.created_at).toLocaleDateString('es-EC', { 
                             day: 'numeric', 
                             month: 'short',
                             hour: '2-digit',
@@ -1056,14 +1060,14 @@ export function RaffleDetailPage({
                 </div>
 
                 {/* Mensaje de confirmación */}
-                <div className="p-5 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-2 border-green-500/30 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
-                    <div>
-                      <p className="text-sm font-bold text-green-600 dark:text-green-400">
+                <div className="p-4 sm:p-5 bg-gradient-to-r from-green-500/10 dark:from-green-500/20 to-emerald-500/10 dark:to-emerald-500/20 border-2 border-green-500/30 dark:border-green-500/50 rounded-xl sm:rounded-2xl">
+                  <div className="flex items-start sm:items-center gap-2 sm:gap-3">
+                    <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-green-600 dark:text-green-400">
                         ¡Participación Confirmada!
                       </p>
-                      <p className="text-xs text-[color:var(--muted-foreground)] mt-1">
+                      <p className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] mt-1">
                         Tienes {userEntries.length} {userEntries.length === 1 ? 'oportunidad' : 'oportunidades'} de ganar {raffle.prize_description}
                       </p>
                     </div>
