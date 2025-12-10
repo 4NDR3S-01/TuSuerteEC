@@ -16,6 +16,7 @@ type LoginPageProps = {
     redirectTo?: string;
     confirmed?: string;
     error?: string;
+    email_changed?: string;
   }>;
 };
 
@@ -32,6 +33,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       ? params.redirectTo
       : undefined;
   const confirmed = params?.confirmed === 'true';
+  const emailChanged = params?.email_changed === 'true';
   const error = params?.error;
   
   return (
@@ -78,6 +80,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-600 dark:text-green-400">
                 <p className="font-semibold">✓ Email confirmado</p>
                 <p className="mt-1">Tu cuenta ha sido verificada exitosamente. Ahora puedes iniciar sesión.</p>
+              </div>
+            )}
+            {emailChanged && (
+              <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-600 dark:text-green-400">
+                <p className="font-semibold">✓ Cambio de correo completado</p>
+                <p className="mt-1">Tu correo electrónico ha sido actualizado. Inicia sesión con tu nuevo correo.</p>
               </div>
             )}
             {error && (

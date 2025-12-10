@@ -141,7 +141,7 @@ export function ProfileSettings({ user, profile }: any) {
         const { error: emailError } = await supabase.auth.updateUser({
           email: formData.email.trim(),
         }, {
-          emailRedirectTo: `${baseUrl}/auth/callback?type=email_change&next=/app/settings`,
+          emailRedirectTo: `${baseUrl}/auth/callback?type=email_change`,
         });
 
         if (emailError) {
