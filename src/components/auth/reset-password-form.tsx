@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
+import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
 
 export function ResetPasswordForm() {
   const [email, setEmail] = useState('');
@@ -41,12 +42,14 @@ export function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      // Usar la URL completa del callback - Supabase necesita la URL completa
-      const baseUrl = typeof window !== 'undefined' 
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_APP_URL || 'https://tu-suerte-ec.vercel.app';
-      
-      const redirectTo = `${baseUrl}/auth/callback?type=recovery&next=/restablecer-clave`;
+      // SIEMPRE usar la URL de producción para emails, incluso en desarrollo local
+      // Esto asegura que los enlaces en los emails funcionen correctamente
+      const redirectTo = getEmailAuthRedirectUrl('/auth/callback', {
+        type: 'recovery',
+        next: '/restablecer-clave',
+      });
+
+      console.log('[RESET PASSWORD] Enviando email con redirectTo:', redirectTo);
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo,

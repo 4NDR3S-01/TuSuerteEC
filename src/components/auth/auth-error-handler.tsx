@@ -35,10 +35,30 @@ export function AuthErrorHandler() {
 
     // Si hay un código, redirigir al callback (Supabase redirigió directamente a la home)
     if (finalCode) {
-      console.log('[AUTH ERROR HANDLER] Código detectado en URL, redirigiendo al callback');
-      // Determinar el tipo basándose en el contexto o usar recovery por defecto si viene de reset password
-      const callbackType = finalType || 'recovery'; // Por defecto recovery si no hay tipo
-      const callbackUrl = `/auth/callback?code=${finalCode}&type=${callbackType}`;
+      console.log('[AUTH ERROR HANDLER] Código detectado en URL, redirigiendo al callback', {
+        code: finalCode.substring(0, 20) + '...',
+        type: finalType,
+      });
+      // Determinar el tipo basándose en el contexto
+      // Si no hay tipo, intentar inferirlo del contexto de la URL o usar recovery por defecto
+      let callbackType = finalType;
+      
+      // Si no hay tipo pero hay código, puede ser recovery (reset password) o signup (registro)
+      // Por defecto asumimos recovery ya que es el caso más común cuando Supabase redirige a la home
+      if (!callbackType) {
+        // Verificar si la URL anterior tenía información sobre el tipo
+        const referrer = typeof window !== 'undefined' ? document.referrer : '';
+        if (referrer.includes('recovery') || referrer.includes('reset') || referrer.includes('password')) {
+          callbackType = 'recovery';
+        } else if (referrer.includes('signup') || referrer.includes('register')) {
+          callbackType = 'signup';
+        } else {
+          callbackType = 'recovery'; // Por defecto recovery
+        }
+      }
+      
+      const callbackUrl = `/auth/callback?code=${encodeURIComponent(finalCode)}&type=${callbackType}`;
+      console.log('[AUTH ERROR HANDLER] Redirigiendo a:', callbackUrl);
       router.replace(callbackUrl);
       return;
     }

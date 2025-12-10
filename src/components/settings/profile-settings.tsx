@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Save, Loader2, Mail, Lock } from 'lucide-react';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
+import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
 
 export function ProfileSettings({ user, profile }: any) {
   const router = useRouter();
@@ -132,16 +133,19 @@ export function ProfileSettings({ user, profile }: any) {
           return;
         }
 
-        // Obtener URL base para redirección
-        const baseUrl = typeof window !== 'undefined' 
-          ? window.location.origin
-          : process.env.NEXT_PUBLIC_APP_URL || 'https://tu-suerte-ec.vercel.app';
+        // SIEMPRE usar la URL de producción para emails, incluso en desarrollo local
+        // Esto asegura que los enlaces en los emails funcionen correctamente
+        const emailRedirectTo = getEmailAuthRedirectUrl('/auth/callback', {
+          type: 'email_change',
+        });
+        
+        console.log('[CHANGE EMAIL] Enviando email con redirectTo:', emailRedirectTo);
         
         // Actualizar email en Supabase Auth con URL de callback
         const { error: emailError } = await supabase.auth.updateUser({
           email: formData.email.trim(),
         }, {
-          emailRedirectTo: `${baseUrl}/auth/callback?type=email_change`,
+          emailRedirectTo,
         });
 
         if (emailError) {

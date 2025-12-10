@@ -89,13 +89,32 @@ export async function GET(request: NextRequest) {
     const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError) {
-      console.error('Error exchanging code for session:', exchangeError);
+      console.error('[AUTH CALLBACK] Error exchanging code for session:', {
+        message: exchangeError.message,
+        status: exchangeError.status,
+        code: code.substring(0, 20) + '...',
+        type,
+      });
+      
       // Si es un error de código expirado o inválido, redirigir con mensaje específico
-      const errorMessage = exchangeError.message.includes('expired') || exchangeError.message.includes('invalid')
-        ? 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.'
-        : 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
+      let errorMessage = 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
+      let redirectPath = '/iniciar-sesion';
+      
+      if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
+        errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
+        // Si es recovery, redirigir a recuperar
+        if (type === 'recovery') {
+          redirectPath = '/recuperar?error=expired';
+        }
+      } else if (exchangeError.message.includes('token')) {
+        errorMessage = 'El enlace no es válido. Solicita uno nuevo.';
+        if (type === 'recovery') {
+          redirectPath = '/recuperar?error=invalid';
+        }
+      }
+      
       return NextResponse.redirect(
-        new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
+        new URL(`${redirectPath}?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
       );
     }
 

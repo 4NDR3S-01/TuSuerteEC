@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
 import { getEcuadorianIdError } from '../../lib/validators/ecuador-id';
+import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
 import { Eye, EyeOff } from 'lucide-react';
 
 type RegisterFormState = {
@@ -429,12 +430,9 @@ export function RegisterForm({ containerClassName }: RegisterFormProps = {}) {
           address: form.address,
           role: 'participant',
         },
-        emailRedirectTo:
-          typeof window !== 'undefined' 
-            ? `${window.location.origin}/auth/callback?type=signup`
-            : process.env.NEXT_PUBLIC_APP_URL 
-              ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?type=signup`
-              : undefined,
+        emailRedirectTo: getEmailAuthRedirectUrl('/auth/callback', {
+          type: 'signup',
+        }),
       },
     });
 
