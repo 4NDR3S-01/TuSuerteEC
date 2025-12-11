@@ -442,7 +442,21 @@ export function ConfirmEmailChangeForm({
           });
           
           if (!userError && user) {
+            // Leer hash de error si existe (el hash no se envía al servidor, solo al cliente)
+            const hash = globalThis.window?.location.hash || '';
+            const hashHasError = hash.includes('error=');
+            
             // PRIMERO: Verificar si hay new_email (cambio pendiente)
+            // Si NO hay new_email, el cambio está REALMENTE completado
+            const isReallyCompleted = !user.new_email;
+            
+            // Si el cambio está realmente completado, ignorar el hash de error
+            // El hash puede venir de Supabase pero el cambio ya se procesó
+            if (isReallyCompleted && hashHasError) {
+              console.log('[CONFIRM EMAIL CHANGE] Cambio realmente completado - ignorando hash de error');
+              setError(null); // Limpiar cualquier error del hash
+            }
+            
             if (user.new_email) {
               // Hay new_email, el cambio está pendiente
               // Intentar obtener previous_email del perfil para tener el correo anterior correcto
@@ -741,6 +755,11 @@ export function ConfirmEmailChangeForm({
 
   // Si el cambio se complet? (verificado), mostrar ?xito incluso si hab?a error
   if (changeCompleted && emailData) {
+    // Determinar si realmente está completado o pendiente
+    const isReallyCompleted = completed && !pending;
+    const hash = globalThis.window?.location.hash || '';
+    const hashHasError = hash.includes('error=');
+    
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
@@ -750,12 +769,34 @@ export function ConfirmEmailChangeForm({
           <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
             ✓ Cambio de correo completado
           </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
-            {initialError 
-              ? 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.'
-              : 'Tu correo electrónico ha sido actualizado exitosamente.'
-            }
+          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
+            {(() => {
+              // Solo mostrar "enlace expirado" si realmente hay error Y el cambio no está completado
+              if (initialError && hashHasError && !isReallyCompleted) {
+                return 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.';
+              } else if (isReallyCompleted) {
+                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
+              } else {
+                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
+              }
+            })()}
           </p>
+          {(() => {
+            const shouldShowNextStep = !isReallyCompleted && (!initialError || (initialError && hashHasError && !isReallyCompleted));
+            if (shouldShowNextStep) {
+              return (
+                <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
+                  <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
+                    📧 Próximo paso:
+                  </p>
+                  <p className="text-xs text-green-700/90 dark:text-green-300/90">
+                    Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })()}
           {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
               <div className="space-y-3">
@@ -907,9 +948,25 @@ export function ConfirmEmailChangeForm({
           <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
             Cambio de correo completado
           </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
-            Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.
+          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
+            {(() => {
+              // Verificar si realmente está completado o pendiente
+              const isReallyCompleted = changeCompleted && completed && !pending;
+              if (isReallyCompleted) {
+                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
+              } else {
+                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
+              }
+            })()}
           </p>
+          <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
+            <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
+              📧 Próximo paso:
+            </p>
+            <p className="text-xs text-green-700/90 dark:text-green-300/90">
+              Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
+            </p>
+          </div>
           <div className="space-y-3">
             <p className="text-xs text-[color:var(--muted-foreground)]">
               Por favor, inicia sesión con tu nuevo correo electrónico para acceder a tu cuenta.
@@ -981,8 +1038,8 @@ export function ConfirmEmailChangeForm({
               Primer correo confirmado
             </h2>
             <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-6">
-              Has confirmado tu nuevo correo electrónico. Para completar el cambio,{' '}
-              <strong>debes confirmar también el correo que se envió a tu dirección anterior</strong>.
+              Has confirmado este correo correctamente. Para completar el cambio,{' '}
+              <strong>debes confirmar también el correo que se envió al otro correo electrónico</strong>.
             </p>
             
             {/* Mostrar ambos correos */}
@@ -1063,6 +1120,11 @@ export function ConfirmEmailChangeForm({
     }
 
     // Si está completado, mostrar mensaje de éxito simplificado
+    // Determinar si realmente está completado o pendiente
+    const isReallyCompleted = completed && !pending;
+    const hash = globalThis.window?.location.hash || '';
+    const hashHasError = hash.includes('error=');
+    
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
@@ -1072,12 +1134,34 @@ export function ConfirmEmailChangeForm({
           <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
             ✓ Cambio de correo completado
           </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
-            {initialError 
-              ? 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.'
-              : 'Tu correo electrónico ha sido actualizado exitosamente.'
-            }
+          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
+            {(() => {
+              // Solo mostrar "enlace expirado" si realmente hay error Y el cambio no está completado
+              if (initialError && hashHasError && !isReallyCompleted) {
+                return 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.';
+              } else if (isReallyCompleted) {
+                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
+              } else {
+                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
+              }
+            })()}
           </p>
+          {(() => {
+            const shouldShowNextStep = !isReallyCompleted && (!initialError || (initialError && hashHasError && !isReallyCompleted));
+            if (shouldShowNextStep) {
+              return (
+                <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
+                  <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
+                    📧 Próximo paso:
+                  </p>
+                  <p className="text-xs text-green-700/90 dark:text-green-300/90">
+                    Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })()}
           
           {/* Mostrar ambos correos si están disponibles */}
           {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (

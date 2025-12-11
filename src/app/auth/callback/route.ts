@@ -596,8 +596,13 @@ export async function GET(request: NextRequest) {
         confirmUrl.searchParams.set('confirmed', 'true');
         confirmUrl.searchParams.set('code_processed', 'true'); // SIEMPRE indicar que el código fue procesado
         
+        // CRÍTICO: Asegurar que pending y completed sean mutuamente excluyentes
+        // Si hay new_email → PENDIENTE (primer correo confirmado)
+        // Si NO hay new_email → COMPLETADO (ambos correos confirmados)
         if (isPending) {
           confirmUrl.searchParams.set('pending', 'true');
+          // Asegurar que NO se pase completed
+          confirmUrl.searchParams.delete('completed');
           // Detectar si es el primer correo confirmado y el usuario está logueado
           const hasActiveSession = !!exchangeData.session;
           if (hasActiveSession) {
@@ -606,6 +611,9 @@ export async function GET(request: NextRequest) {
           }
         } else {
           confirmUrl.searchParams.set('completed', 'true');
+          // Asegurar que NO se pase pending
+          confirmUrl.searchParams.delete('pending');
+          console.log('[AUTH CALLBACK] Cambio completado - ambos correos confirmados');
         }
         
         // SIEMPRE pasar oldEmail y newEmail si están disponibles
