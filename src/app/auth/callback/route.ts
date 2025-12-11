@@ -417,6 +417,13 @@ export async function GET(request: NextRequest) {
           isPending = true;
           
           console.log('[AUTH CALLBACK] Cambio pendiente - oldEmail:', oldEmail, 'newEmail:', newEmail);
+          
+          // Detectar si el usuario está logueado (tiene sesión activa)
+          // Si hay sesión, es el primer correo confirmado desde un dispositivo logueado
+          const hasActiveSession = !!exchangeData.session;
+          if (hasActiveSession) {
+            console.log('[AUTH CALLBACK] Usuario logueado - primer correo confirmado');
+          }
         } else {
           // No hay new_email - el cambio está completo (ambos correos confirmados)
           // El trigger sync_email_to_profiles_trigger debería haber sincronizado automáticamente
@@ -479,23 +486,38 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Redirigir a pรกgina de confirmaciรณn con los datos del correo
+        // Redirigir SIEMPRE a página de confirmación con los datos del correo
+        // Esto unifica el flujo para usuarios logueados y no logueados
         const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
         confirmUrl.searchParams.set('confirmed', 'true');
+        
         if (isPending) {
           confirmUrl.searchParams.set('pending', 'true');
+          // Detectar si es el primer correo confirmado y el usuario está logueado
+          const hasActiveSession = !!exchangeData.session;
+          if (hasActiveSession) {
+            confirmUrl.searchParams.set('first_confirmed', 'true');
+            console.log('[AUTH CALLBACK] Primer correo confirmado por usuario logueado');
+          }
         } else {
           confirmUrl.searchParams.set('completed', 'true');
         }
-        // SIEMPRE pasar oldEmail si está disponible, incluso si es undefined (la página lo manejará)
+        
+        // SIEMPRE pasar oldEmail y newEmail si están disponibles
         if (oldEmail) {
           confirmUrl.searchParams.set('oldEmail', oldEmail);
         }
         if (newEmail) {
           confirmUrl.searchParams.set('newEmail', newEmail);
         }
-        // Si no hay oldEmail pero el cambio está completo, la página intentará obtenerlo desde previous_email
-        console.log('[AUTH CALLBACK] Redirigiendo con oldEmail:', oldEmail || 'no disponible', 'newEmail:', newEmail);
+        
+        console.log('[AUTH CALLBACK] Redirigiendo a /confirmar-cambio-correo con:', {
+          pending: isPending,
+          completed: !isPending,
+          first_confirmed: isPending && !!exchangeData.session,
+          oldEmail: oldEmail || 'no disponible',
+          newEmail: newEmail
+        });
         
         return NextResponse.redirect(confirmUrl);
       

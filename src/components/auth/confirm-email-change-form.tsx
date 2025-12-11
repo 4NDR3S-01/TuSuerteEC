@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, XCircle, Loader2, Mail, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
 import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
@@ -32,13 +32,35 @@ export function ConfirmEmailChangeForm({
   const [pending, setPending] = useState(initialPending);
   const [completed, setCompleted] = useState(initialCompleted);
   const [error, setError] = useState<string | null>(initialError || null);
-  const [isResending, setIsResending] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [changeCompleted, setChangeCompleted] = useState(false);
   const [hasCheckedStatus, setHasCheckedStatus] = useState(false);
   const [emailData, setEmailData] = useState<{ oldEmail?: string; newEmail?: string } | null>(
     oldEmail && newEmail ? { oldEmail, newEmail } : null
   );
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean | null>(null);
+
+  // Detectar si el usuario está logueado desde la URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+    const firstConfirmed = urlParams.get('first_confirmed') === 'true';
+    setIsUserLoggedIn(firstConfirmed);
+    
+    // También intentar verificar desde Supabase
+    if (isUserLoggedIn === null) {
+      const checkUserSession = async () => {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          setIsUserLoggedIn(!!user);
+        } catch {
+          setIsUserLoggedIn(false);
+        }
+      };
+      void checkUserSession();
+    }
+  }, []);
 
   // Cargar datos iniciales de la URL o props
   useEffect(() => {
@@ -507,58 +529,6 @@ export function ConfirmEmailChangeForm({
     }
   }, [error, emailData, isCheckingStatus, changeCompleted, hasCheckedStatus, isValidating, oldEmail, newEmail]);
 
-  // Funci?n para reenviar el correo al correo anterior
-  const handleResendEmail = async () => {
-    if (!emailData?.oldEmail || !emailData?.newEmail) return;
-    
-    setIsResending(true);
-    try {
-      const supabase = getSupabaseBrowserClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('No se pudo obtener la informaci?n del usuario. Inicia sesi?n nuevamente.');
-      }
-      
-      if (!user.new_email) {
-        showToast({
-          type: 'info',
-          description: 'El cambio de correo ya se complet? o no est? pendiente. Si necesitas cambiar tu correo, ve a Configuraci?n ? Perfil.',
-        });
-        setIsResending(false);
-        return;
-      }
-      
-      const emailRedirectTo = getEmailAuthRedirectUrl('/auth/callback', {
-        type: 'email_change',
-      });
-      
-      const { error: resendError } = await supabase.auth.updateUser({
-        email: emailData.newEmail,
-      }, {
-        emailRedirectTo,
-      });
-      
-      if (resendError) {
-        throw new Error('No se pudo reenviar el correo. El cambio puede estar parcialmente completado. Ve a Configuraci?n ? Perfil para solicitar un nuevo cambio.');
-      }
-      
-      showToast({
-        type: 'success',
-        description: 'Se reenvi? el correo de confirmaci?n al correo anterior. Revisa tu bandeja de entrada.',
-      });
-    } catch (error) {
-      const message = error instanceof Error 
-        ? error.message 
-        : 'Error al reenviar el correo. Intenta nuevamente.';
-      showToast({
-        type: 'error',
-        description: message,
-      });
-    } finally {
-      setIsResending(false);
-    }
-  };
 
   // Refrescar sesión y limpiar previous_email cuando el cambio se completa
   useEffect(() => {
@@ -611,15 +581,6 @@ export function ConfirmEmailChangeForm({
     }
   }, [changeCompleted, completed, pending, router]);
 
-  // Redirigir a login después de 5 segundos si está confirmado y completado
-  useEffect(() => {
-    if (confirmed && completed && !error && !pending) {
-      const timer = setTimeout(() => {
-        router.push('/iniciar-sesion?email_changed=true');
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [confirmed, completed, error, pending, router]);
 
   // Verificar si viene verify_only para mostrar UI especial
   const urlParamsForUI = new URLSearchParams(globalThis.window?.location.search || '');
@@ -906,9 +867,9 @@ export function ConfirmEmailChangeForm({
     );
   }
 
-  // Si est? confirmado y hay datos, mostrar estado
+  // Si está confirmado y hay datos, mostrar estado
   if (confirmed && emailData) {
-    // Si est? pendiente, mostrar mensaje diferente
+    // Si está pendiente, mostrar mensaje simplificado con instrucciones integradas
     if (pending && !completed) {
       return (
         <div className="space-y-4">
@@ -917,16 +878,113 @@ export function ConfirmEmailChangeForm({
               <Mail className="w-16 h-16 text-blue-500" />
             </div>
             <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2">
-              ? Correo confirmado
+              Primer correo confirmado
             </h2>
             <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-6">
-              Has confirmado uno de los correos. Para completar el cambio, debes confirmar tambi?n el otro correo que se envi?.
+              Has confirmado tu nuevo correo electrónico. Para completar el cambio,{' '}
+              <strong>debes confirmar también el correo que se envió a tu dirección anterior</strong>.
             </p>
             
+            {/* Mostrar ambos correos */}
+            {emailData.oldEmail && emailData.newEmail && emailData.oldEmail !== emailData.newEmail ? (
+              <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                        Correo anterior:
+                      </p>
+                      <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
+                        {emailData.oldEmail}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t border-[color:var(--border)] pt-3">
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
+                          Nuevo correo:
+                        </p>
+                        <p className="text-sm font-bold text-[color:var(--accent)] break-all">
+                          {emailData.newEmail}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Instrucciones integradas del EmailChangeMessageHandler */}
+            <div className="space-y-3">
+              <div className="rounded-lg border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-4 text-left">
+                <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-2">
+                  💡 Recomendación:
+                </p>
+                <p className="text-xs text-blue-700/90 dark:text-blue-300/90">
+                  Si aún no confirmaste el correo anterior, hazlo primero desde un dispositivo donde <strong>no estés logueado</strong>. Este orden ayuda a evitar problemas con los enlaces.
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300 justify-center">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Revisa tu bandeja de entrada del correo anterior</span>
+              </div>
+              
+              {redirectCountdown !== null && redirectCountdown > 0 && (
+                <p className="text-xs text-[color:var(--muted-foreground)]">
+                  Serás redirigido automáticamente en {redirectCountdown} segundo{redirectCountdown !== 1 ? 's' : ''}...
+                </p>
+              )}
+              
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                {isUserLoggedIn ? (
+                  <Link
+                    href="/app"
+                    className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                  >
+                    Ir al dashboard ahora
+                  </Link>
+                ) : (
+                  <Link
+                    href="/iniciar-sesion"
+                    className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                  >
+                    Ir a iniciar sesión ahora
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Si está completado, mostrar mensaje de éxito simplificado
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
+          <div className="flex justify-center mb-4">
+            <CheckCircle2 className="w-16 h-16 text-green-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
+            ✓ Cambio de correo completado
+          </h2>
+          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
+            {initialError 
+              ? 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.'
+              : 'Tu correo electrónico ha sido actualizado exitosamente.'
+            }
+          </p>
+          
+          {/* Mostrar ambos correos si están disponibles */}
+          {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
+                  <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
                       Correo anterior:
@@ -941,7 +999,7 @@ export function ConfirmEmailChangeForm({
                     <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                        Nuevo correo (pendiente de confirmar):
+                        Nuevo correo:
                       </p>
                       <p className="text-sm font-bold text-[color:var(--accent)] break-all">
                         {emailData.newEmail}
@@ -951,109 +1009,48 @@ export function ConfirmEmailChangeForm({
                 </div>
               </div>
             </div>
-
-            <div className="space-y-3">
-              <div className="rounded-lg border border-amber-500/30 dark:border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/20 p-4">
-                <p className="text-sm text-amber-700 dark:text-amber-300 font-medium mb-2">
-                  ?? Pr?ximo paso:
-                </p>
-                <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mb-3">
-                  Revisa tu bandeja de entrada del correo <strong>{emailData.newEmail}</strong> y haz clic en el enlace de confirmaci?n que se envi? all?. Ambos correos deben ser confirmados para completar el cambio.
-                </p>
-                <div className="rounded-lg border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-3 mb-3">
-                  <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
-                    ?? Recomendaci?n:
-                  </p>
-                  <p className="text-xs text-blue-700/90 dark:text-blue-300/90">
-                    Si a?n no has confirmado el correo anterior, hazlo primero desde un dispositivo donde <strong>no est?s logueado</strong>. Luego confirma este correo nuevo. Este orden ayuda a evitar problemas con los enlaces.
-                  </p>
-                </div>
-                <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mb-3">
-                  ?? <strong>Importante:</strong> Si el enlace del correo anterior expir? o ya fue usado, puedes intentar reenviarlo. Si eso no funciona, ve a Configuraci?n ? Perfil para solicitar un nuevo cambio.
-                </p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleResendEmail}
-                    disabled={isResending}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-amber-600 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/50 px-4 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/70 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isResending ? 'animate-spin' : ''}`} />
-                    {isResending ? 'Reenviando...' : 'Intentar reenviar correo al correo anterior'}
-                  </button>
-                  <Link
-                    href="/app/settings"
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--muted)] transition-colors"
-                  >
-                    Ir a Configuraci?n para solicitar nuevo cambio
-                  </Link>
-                </div>
-              </div>
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Puedes cerrar esta p?gina. El cambio se completar? cuando confirmes el otro correo.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Si est? completado, mostrar mensaje de ?xito
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
-          <div className="flex justify-center mb-4">
-            <CheckCircle2 className="w-16 h-16 text-green-500" />
-          </div>
-          <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
-            ? Cambio de correo confirmado
-          </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
-            Tu correo electr?nico ha sido actualizado exitosamente.
-          </p>
-          
-          <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
-            <div className="space-y-3">
+          ) : emailData?.newEmail ? (
+            // Si solo tenemos el nuevo email, mostrar solo ese
+            <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
               <div className="flex items-start gap-3">
-                <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
+                <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                    Correo anterior:
+                    Nuevo correo:
                   </p>
-                  <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
-                    {emailData.oldEmail}
+                  <p className="text-sm font-bold text-[color:var(--accent)] break-all">
+                    {emailData.newEmail}
                   </p>
-                </div>
-              </div>
-              <div className="border-t border-[color:var(--border)] pt-3">
-                <div className="flex items-start gap-3">
-                  <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Nuevo correo:
-                    </p>
-                    <p className="text-sm font-bold text-[color:var(--accent)] break-all">
-                      {emailData.newEmail}
-                    </p>
-                  </div>
                 </div>
               </div>
             </div>
-          </div>
-
+          ) : null}
+          
           <div className="space-y-3">
+            {redirectCountdown !== null && redirectCountdown > 0 && (
+              <p className="text-xs text-[color:var(--muted-foreground)]">
+                Serás redirigido automáticamente en {redirectCountdown} segundo{redirectCountdown !== 1 ? 's' : ''}...
+              </p>
+            )}
             <p className="text-xs text-[color:var(--muted-foreground)]">
-              Ser?s redirigido autom?ticamente a la p?gina de inicio de sesi?n en unos segundos.
-            </p>
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              Ahora puedes iniciar sesi?n con tu nuevo correo electr?nico: <strong className="text-[color:var(--foreground)]">{emailData.newEmail}</strong>
+              Ahora puedes iniciar sesión con tu nuevo correo electrónico{emailData?.newEmail ? `: ${emailData.newEmail}` : ''}
             </p>
             <div className="flex gap-3 justify-center pt-2">
-              <Link
-                href="/iniciar-sesion?email_changed=true"
-                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
-              >
-                Ir a iniciar sesi?n ahora
-              </Link>
+              {isUserLoggedIn ? (
+                <Link
+                  href="/app"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                >
+                  Ir al dashboard ahora
+                </Link>
+              ) : (
+                <Link
+                  href="/iniciar-sesion?email_changed=true"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                >
+                  Ir a iniciar sesión ahora
+                </Link>
+              )}
             </div>
           </div>
         </div>

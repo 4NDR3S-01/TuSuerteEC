@@ -13,7 +13,6 @@ import { RecentActivityFeed } from '../dashboard/recent-activity-feed';
 import { UpcomingRafflesCalendar } from '../dashboard/upcoming-raffles-calendar';
 import { QuickTipsCard } from '../dashboard/quick-tips-card';
 import LiveEventAlertBar from '../dashboard/live-event-alert-bar';
-import { EmailChangeMessageHandler } from '../auth/email-change-message-handler';
 
 type User = {
   id: string;
@@ -209,8 +208,6 @@ export function ParticipantDashboard({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[color:var(--background)] via-[color:var(--background)] to-[color:var(--muted)]/10">
-      {/* Handler para mensajes de cambio de correo */}
-      <EmailChangeMessageHandler />
       {/* Barra de alerta de evento en vivo */}
       <LiveEventAlertBar event={alertEvent} />
       
