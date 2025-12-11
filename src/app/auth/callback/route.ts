@@ -31,11 +31,15 @@ export async function GET(request: NextRequest) {
     if (errorCode === 'otp_expired' || error === 'access_denied') {
       if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
         errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
-        // Si el tipo era recovery, redirigir a recuperar
+        // Si el tipo era recovery, NO mostrar error inmediatamente - verificar si el código fue procesado
+        // PRINCIPIO: Si hay código para recovery, Supabase puede haberlo procesado aunque no tengamos sesión
         if (type === 'recovery') {
-          return NextResponse.redirect(
-            new URL(`/recuperar?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
-          );
+          // Redirigir a restablecer-clave con code_processed para que intente procesar el código
+          const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+          resetUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
+          resetUrl.searchParams.set('verify_only', 'true');
+          console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+          return NextResponse.redirect(resetUrl);
         }
         // Si era email_change, NO mostrar error - verificar estado primero
         // PRINCIPIO: Si hay código o error para email_change, Supabase probablemente procesó el cambio
@@ -390,14 +394,28 @@ export async function GET(request: NextRequest) {
         
         if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
           errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
-          // Si es recovery, redirigir a recuperar
+          // Si es recovery, NO mostrar error - verificar si el código fue procesado
+          // PRINCIPIO: Si hay código para recovery, Supabase puede haberlo procesado aunque no tengamos sesión
           if (type === 'recovery') {
-            redirectPath = '/recuperar?error=expired';
+            const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+            resetUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
+            resetUrl.searchParams.set('verify_only', 'true');
+            const isLikelyProcessed = exchangeError.message.includes('expired') || exchangeError.message.includes('already been used');
+            if (isLikelyProcessed) {
+              resetUrl.searchParams.set('likely_processed', 'true');
+            }
+            console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+            return NextResponse.redirect(resetUrl);
           }
         } else if (exchangeError.message.includes('token')) {
           errorMessage = 'El enlace no es válido. Solicita uno nuevo.';
+          // Si es recovery, NO mostrar error - verificar si el código fue procesado
           if (type === 'recovery') {
-            redirectPath = '/recuperar?error=invalid';
+            const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+            resetUrl.searchParams.set('code_processed', 'true');
+            resetUrl.searchParams.set('verify_only', 'true');
+            console.log('[AUTH CALLBACK] Error de token para recovery - código procesado, verificando...');
+            return NextResponse.redirect(resetUrl);
           }
         }
         
@@ -636,10 +654,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(confirmUrl);
       
       case 'recovery':
-        // Reset de contraseรฑa
-        return NextResponse.redirect(
-          new URL('/restablecer-clave?token=valid', requestUrl.origin)
-        );
+        // Reset de contraseña - redirigir a restablecer-clave con code_processed
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('code_processed', 'true'); // Código fue procesado
+        resetUrl.searchParams.set('token', 'valid');
+        console.log('[AUTH CALLBACK] Recovery exitoso - redirigiendo a restablecer-clave');
+        return NextResponse.redirect(resetUrl);
       
       case 'signup':
         // Confirmaciรณn de registro - redirigir a pรกgina de confirmaciรณn

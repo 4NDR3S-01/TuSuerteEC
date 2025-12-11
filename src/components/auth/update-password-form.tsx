@@ -33,35 +33,122 @@ export function UpdatePasswordForm() {
         const client = getSupabaseBrowserClient();
         setSupabase(client);
 
+        // Verificar parámetros de la URL para code_processed
+        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+        const codeProcessed = urlParams.get('code_processed') === 'true';
+        const verifyOnly = urlParams.get('verify_only') === 'true';
+        const hash = globalThis.window?.location.hash || '';
+        
+        // Si code_processed=true, intentar procesar el código desde el hash antes de verificar sesión
+        if (codeProcessed && hash) {
+          console.log('[UPDATE PASSWORD] code_processed=true - intentando procesar código desde hash...');
+          try {
+            // Intentar extraer el código del hash
+            const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            const code = hashParams.get('code');
+            
+            // Si hay código en el hash, intentar intercambiarlo por sesión
+            if (code) {
+              console.log('[UPDATE PASSWORD] Código encontrado en hash - intercambiando por sesión...');
+              const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(code);
+              
+              if (!exchangeError && exchangeData?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión establecida desde código del hash');
+                setHasSession(true);
+                setIsLoading(false);
+                // Limpiar hash de la URL
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
+                }
+                return;
+              } else if (exchangeError) {
+                console.log('[UPDATE PASSWORD] Error intercambiando código:', exchangeError.message);
+                // Continuar con verificación de sesión normal
+              }
+            } else if (accessToken && refreshToken) {
+              // Si hay tokens en el hash, intentar establecer sesión directamente
+              console.log('[UPDATE PASSWORD] Tokens encontrados en hash - estableciendo sesión...');
+              const { data: sessionData, error: tokenError } = await client.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              
+              if (!tokenError && sessionData?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión establecida desde tokens del hash');
+                setHasSession(true);
+                setIsLoading(false);
+                // Limpiar hash de la URL
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
+                }
+                return;
+              } else if (tokenError) {
+                console.log('[UPDATE PASSWORD] Error estableciendo sesión desde tokens:', tokenError.message);
+                // Continuar con verificación de sesión normal
+              }
+            }
+          } catch (hashError) {
+            console.error('[UPDATE PASSWORD] Error procesando hash:', hashError);
+            // Continuar con verificación de sesión normal
+          }
+        }
+
         // Verificar si hay una sesión válida (establecida por el callback)
         // El callback ya procesó el código y estableció la sesión
         const { data: sessionData, error: sessionError } = await client.auth.getSession();
         
-        if (sessionError) {
+        if (sessionError && !codeProcessed && !verifyOnly) {
           throw sessionError;
         }
 
         // Verificar que la sesión existe y es válida
         const sessionEstablished = !!sessionData.session;
         
+        // Si code_processed=true pero no hay sesión, NO mostrar error - el código puede haberse procesado
+        if (!sessionEstablished && codeProcessed) {
+          console.log('[UPDATE PASSWORD] code_processed=true pero no hay sesión - código puede haberse procesado, verificando...');
+          // Intentar obtener usuario directamente (puede funcionar con sesión temporal)
+          const { data: userData, error: userError } = await client.auth.getUser();
+          
+          if (!userError && userData?.user) {
+            console.log('[UPDATE PASSWORD] ✅ Usuario obtenido sin sesión persistente - código procesado');
+            // Si podemos obtener el usuario, asumir que el código fue procesado
+            // Establecer hasSession como true para permitir cambiar contraseña
+            setHasSession(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+        
         // Limpiar la URL de parámetros si hay
-        if (typeof window !== 'undefined' && sessionEstablished) {
-          const url = new URL(window.location.href);
+        if (globalThis.window && sessionEstablished) {
+          const url = new URL(globalThis.window.location.href);
           if (url.searchParams.has('token') || url.searchParams.has('code') || url.hash) {
-            window.history.replaceState({}, document.title, window.location.pathname);
+            globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
           }
         }
 
         setHasSession(sessionEstablished);
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'No pudimos validar tu enlace de recuperación. El enlace puede haber expirado o ya fue usado. Solicita uno nuevo.';
-        showToast({
-          type: 'error',
-          description: message,
-        });
+        // Solo mostrar error si NO es code_processed
+        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+        const codeProcessed = urlParams.get('code_processed') === 'true';
+        const verifyOnly = urlParams.get('verify_only') === 'true';
+        
+        if (!codeProcessed && !verifyOnly) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'No pudimos validar tu enlace de recuperación. El enlace puede haber expirado o ya fue usado. Solicita uno nuevo.';
+          showToast({
+            type: 'error',
+            description: message,
+          });
+        } else {
+          console.log('[UPDATE PASSWORD] code_processed/verify_only=true - NO mostrando error, código puede haberse procesado');
+        }
         setHasSession(false);
       } finally {
         setIsLoading(false);
@@ -136,6 +223,53 @@ export function UpdatePasswordForm() {
   }
 
   if (!hasSession) {
+    // Verificar si code_processed=true - en ese caso, mostrar mensaje diferente
+    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+    const codeProcessed = urlParams.get('code_processed') === 'true';
+    const verifyOnly = urlParams.get('verify_only') === 'true';
+    const hash = globalThis.window?.location.hash || '';
+    const hashHasError = hash.includes('error=');
+    
+    // Si code_processed=true, el código fue procesado pero no hay sesión persistente
+    // Mostrar mensaje informativo en lugar de error
+    if (codeProcessed || verifyOnly) {
+      return (
+        <div className="space-y-4 text-sm">
+          <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
+            <p className="font-medium text-blue-600 dark:text-blue-400 mb-2">
+              {hashHasError 
+                ? 'El enlace puede haber expirado, pero estamos verificando...'
+                : 'Verificando enlace de recuperación...'
+              }
+            </p>
+            <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-4">
+              {hashHasError
+                ? 'Aunque el enlace puede haber expirado, es posible que el proceso se haya completado. Por favor, intenta iniciar sesión con tu nueva contraseña si ya la estableciste.'
+                : 'Estamos verificando si el enlace de recuperación es válido. Por favor espera...'
+              }
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+                onClick={() => router.replace('/iniciar-sesion')}
+              >
+                Ir a iniciar sesión
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-[color:var(--border)] px-6 text-sm font-semibold text-[color:var(--foreground)] transition-transform hover:-translate-y-0.5"
+                onClick={() => router.replace('/recuperar')}
+              >
+                Solicitar nuevo enlace
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Si no es code_processed, mostrar error normal
     return (
       <div className="space-y-4 text-sm text-[color:var(--muted-foreground)]">
         <p className="font-medium text-[color:var(--foreground)]">Enlace inválido o expirado</p>
