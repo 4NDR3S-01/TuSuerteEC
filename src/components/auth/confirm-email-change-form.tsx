@@ -62,46 +62,131 @@ export function ConfirmEmailChangeForm({
     }
   }, []);
 
-  // Cargar datos iniciales de la URL o props
+  // Verificar token y cargar datos iniciales
   useEffect(() => {
-    if (initialConfirmed || initialError) {
-      setIsValidating(false);
-    }
+    const initialize = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        
+        // Obtener token de la URL
+        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+        const token = urlParams.get('token');
+        const hash = globalThis.window?.location.hash || '';
+        
+        // Intentar obtener token del hash también
+        let emailChangeToken = token;
+        if (!emailChangeToken && hash) {
+          const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+          emailChangeToken = hashParams.get('code') || hashParams.get('token');
+        }
 
-    if (!emailData) {
-      // PRIORIDAD 1: Emails de la URL
-      const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-      const urlOldEmail = urlParams.get('oldEmail');
-      const urlNewEmail = urlParams.get('newEmail');
-      const urlPending = urlParams.get('pending') === 'true';
-      const urlCompleted = urlParams.get('completed') === 'true';
-      
-      if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
-        // Usar emails de la URL si están disponibles y son diferentes
-        setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
-        setConfirmed(true);
-        setPending(urlPending);
-        setCompleted(urlCompleted);
+        // Si hay token, intentar verificar con verifyOtp
+        // Nota: Para email_change, Supabase puede requerir token_hash en lugar de token
+        if (emailChangeToken) {
+          console.log('[CONFIRM EMAIL CHANGE] Procesando token...');
+          try {
+            // Intentar usar exchangeCodeForSession primero (método estándar de Supabase)
+            const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(emailChangeToken);
+            
+            if (!exchangeError && exchangeData?.user) {
+              const user = exchangeData.user;
+              console.log('[CONFIRM EMAIL CHANGE] ✅ Token procesado exitosamente');
+              
+              // Determinar estado del cambio
+              if (user.new_email) {
+                // Cambio pendiente
+                setEmailData({ 
+                  oldEmail: user.email, 
+                  newEmail: user.new_email 
+                });
+                setConfirmed(true);
+                setPending(true);
+                setCompleted(false);
+              } else {
+                // Cambio completado
+                // Intentar obtener previous_email del perfil
+                try {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('previous_email')
+                    .eq('id', user.id)
+                    .single();
+                  
+                  if (profile?.previous_email) {
+                    setEmailData({ 
+                      oldEmail: profile.previous_email, 
+                      newEmail: user.email 
+                    });
+                  } else {
+                    setEmailData({ 
+                      newEmail: user.email 
+                    });
+                  }
+                } catch {
+                  setEmailData({ newEmail: user.email });
+                }
+                setConfirmed(true);
+                setPending(false);
+                setCompleted(true);
+                setChangeCompleted(true);
+              }
+              
+              setIsValidating(false);
+              // Limpiar URL
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+              return;
+            } else if (exchangeError) {
+              console.log('[CONFIRM EMAIL CHANGE] Error procesando token:', exchangeError.message);
+            }
+          } catch (error) {
+            console.error('[CONFIRM EMAIL CHANGE] Error procesando token:', error);
+          }
+        }
+
+        // Si no hay token o verifyOtp falló, usar datos de URL/props
+        if (initialConfirmed || initialError) {
+          setIsValidating(false);
+        }
+
+        if (!emailData) {
+          // PRIORIDAD 1: Emails de la URL
+          const urlOldEmail = urlParams.get('oldEmail');
+          const urlNewEmail = urlParams.get('newEmail');
+          const urlPending = urlParams.get('pending') === 'true';
+          const urlCompleted = urlParams.get('completed') === 'true';
+          
+          if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
+            setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
+            setConfirmed(true);
+            setPending(urlPending);
+            setCompleted(urlCompleted);
+            setIsValidating(false);
+            console.log('[CONFIRM EMAIL CHANGE] Inicializando desde URL');
+          } else if (oldEmail && newEmail && oldEmail !== newEmail) {
+            setEmailData({ oldEmail, newEmail });
+            setConfirmed(initialConfirmed);
+            setPending(initialPending);
+            setCompleted(initialCompleted);
+            setIsValidating(false);
+            console.log('[CONFIRM EMAIL CHANGE] Inicializando desde props');
+          } else if (urlNewEmail || newEmail) {
+            setEmailData({ oldEmail: urlOldEmail || oldEmail || undefined, newEmail: urlNewEmail || newEmail || '' });
+            setConfirmed(initialConfirmed || urlOldEmail !== null);
+            setPending(urlPending || initialPending);
+            setCompleted(urlCompleted || initialCompleted);
+            setIsValidating(false);
+            console.log('[CONFIRM EMAIL CHANGE] Inicializando con solo nuevo email');
+          }
+        }
+      } catch (error) {
+        console.error('[CONFIRM EMAIL CHANGE] Error inicializando:', error);
         setIsValidating(false);
-        console.log('[CONFIRM EMAIL CHANGE] Inicializando desde URL');
-      } else if (oldEmail && newEmail && oldEmail !== newEmail) {
-        // PRIORIDAD 2: Emails de los props
-        setEmailData({ oldEmail, newEmail });
-        setConfirmed(initialConfirmed);
-        setPending(initialPending);
-        setCompleted(initialCompleted);
-        setIsValidating(false);
-        console.log('[CONFIRM EMAIL CHANGE] Inicializando desde props');
-      } else if (urlNewEmail || newEmail) {
-        // Si solo tenemos el nuevo email, establecerlo pero sin oldEmail
-        setEmailData({ oldEmail: urlOldEmail || oldEmail || undefined, newEmail: urlNewEmail || newEmail || '' });
-        setConfirmed(initialConfirmed || urlOldEmail !== null);
-        setPending(urlPending || initialPending);
-        setCompleted(urlCompleted || initialCompleted);
-        setIsValidating(false);
-        console.log('[CONFIRM EMAIL CHANGE] Inicializando con solo nuevo email');
       }
-    }
+    };
+    
+    void initialize();
   }, [initialConfirmed, initialError, emailData, oldEmail, newEmail, initialPending, initialCompleted]);
 
   // Verificar estado del cambio cuando hay error o no hay datos
