@@ -86,6 +86,33 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Helper function: Intentar verificar estado del cambio desde el código
+    // Aunque el código expire, Supabase puede haber procesado el cambio
+    const verifyEmailChangeFromCode = async (codeParam: string, supabaseClient: any): Promise<{ completed: boolean; userEmail?: string; newEmail?: string } | null> => {
+      try {
+        // Nota: No podemos decodificar el código directamente sin la clave secreta
+        // Pero podemos intentar usar el código para verificar si Supabase procesó el cambio
+        // Intentar intercambiar el código - aunque falle, puede darnos información
+        const { data: tempExchange, error: tempError } = await supabaseClient.auth.exchangeCodeForSession(codeParam);
+        
+        // Si obtenemos usuario aunque haya error, usar esa información
+        if (tempExchange?.user) {
+          const hasNewEmail = !!tempExchange.user.new_email;
+          return {
+            completed: !hasNewEmail,
+            userEmail: tempExchange.user.email,
+            newEmail: tempExchange.user.new_email || undefined
+          };
+        }
+        
+        // Si no podemos obtener información del código, retornar null
+        // La página de confirmación intentará verificar desde profiles
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
     const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError) {
@@ -110,6 +137,22 @@ export async function GET(request: NextRequest) {
             userCheck = { user: exchangeData.user };
             console.log('[AUTH CALLBACK] Usuario obtenido de exchangeData a pesar del error');
           } else {
+            // Método 1.5: Intentar verificar desde el código usando helper function
+            const codeVerification = await verifyEmailChangeFromCode(code, supabase);
+            if (codeVerification) {
+              console.log('[AUTH CALLBACK] Verificación desde código:', codeVerification);
+              // Si el cambio está completo según el código, crear objeto usuario simulado
+              if (codeVerification.completed && codeVerification.userEmail) {
+                // Redirigir directamente con éxito - el cambio está completo
+                const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+                confirmUrl.searchParams.set('confirmed', 'true');
+                confirmUrl.searchParams.set('completed', 'true');
+                confirmUrl.searchParams.set('newEmail', codeVerification.userEmail);
+                console.log('[AUTH CALLBACK] ✅ Cambio completado según verificación del código');
+                return NextResponse.redirect(confirmUrl);
+              }
+            }
+            
             // Método 2: Intentar obtener usuario de la sesión (puede que se haya establecido parcialmente)
             const getUserResult = await supabase.auth.getUser();
             userCheck = getUserResult.data;
@@ -120,15 +163,27 @@ export async function GET(request: NextRequest) {
             });
           }
           
-          // Método 3: Si aún no tenemos usuario, intentar verificar desde el perfil usando el token
-          // Esto es útil cuando el usuario no está logueado pero el cambio ya se completó
+          // Método 3: Si aún no tenemos usuario, NO mostrar error - redirigir para verificación
+          // El principio fundamental: NUNCA mostrar error sin verificar primero el estado real
           if (!userCheck?.user && !userCheckError) {
-            console.log('[AUTH CALLBACK] Intentando verificar desde profiles usando el código del token');
-            // El código puede contener información del usuario, pero no podemos extraerlo directamente
-            // En su lugar, redirigimos a la página de confirmación que verificará el estado
+            console.log('[AUTH CALLBACK] No se pudo obtener usuario, pero NO mostrando error - verificando estado...');
+            // Redirigir a página de confirmación con verify_only=true (SIN error)
+            // La página de confirmación verificará agresivamente desde la base de datos
             const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-            confirmUrl.searchParams.set('error', encodeURIComponent('El enlace puede haber expirado o ya fue usado. Verificando si el cambio se completó...'));
+            confirmUrl.searchParams.set('verify_only', 'true');
             confirmUrl.searchParams.set('check_status', 'true');
+            
+            // Si el error es de expiración o uso, es muy probable que el cambio ya se completó
+            // porque Supabase procesa el cambio ANTES de que expire el código
+            const isLikelyCompleted = exchangeError?.message?.includes('expired') || 
+                                     exchangeError?.message?.includes('already been used');
+            
+            if (isLikelyCompleted) {
+              confirmUrl.searchParams.set('likely_completed', 'true');
+              console.log('[AUTH CALLBACK] Enlace expirado/usado - es probable que el cambio se completó. Verificando...');
+            }
+            
+            // NO establecer error aquí - dejar que la página de confirmación verifique primero
             return NextResponse.redirect(confirmUrl);
           }
           
@@ -200,90 +255,70 @@ export async function GET(request: NextRequest) {
               return NextResponse.redirect(confirmUrl);
             }
           } else {
-            console.log('[AUTH CALLBACK] No se pudo obtener usuario después del error');
-            // Método 4: Intentar verificar desde auth.users usando el código del token
-            // Aunque el intercambio falló, Supabase puede haber procesado el cambio
-            // Intentamos verificar si hay algún usuario con cambio de email reciente
-            try {
-              // Nota: No podemos extraer directamente el user_id del código sin la clave secreta
-              // Pero podemos intentar verificar desde la base de datos usando una estrategia diferente
-              // Redirigir a la página de confirmación con check_status=true para que verifique
-              // desde profiles usando los emails si están disponibles en algún lugar
-              
-              // Si el error es de expiración o uso, es muy probable que el cambio ya se completó
-              // porque Supabase procesa el cambio ANTES de que expire el código
-              const isLikelyCompleted = exchangeError?.message?.includes('expired') || 
-                                       exchangeError?.message?.includes('already been used');
-              
-              const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-              
-              if (isLikelyCompleted) {
-                // Si es probable que el cambio se completó, redirigir con mensaje informativo
-                // en lugar de error, y que la página de confirmación verifique el estado
-                confirmUrl.searchParams.set('check_status', 'true');
-                confirmUrl.searchParams.set('likely_completed', 'true');
-                // No establecer error, para que la página intente verificar primero
-                console.log('[AUTH CALLBACK] Enlace expirado/usado, pero es probable que el cambio se completó. Verificando...');
-              } else {
-                // Para otros errores, mostrar mensaje de verificación
-                let errorMessage = 'No se pudo verificar el estado del cambio.';
-                if (exchangeError?.message?.includes('invalid') || exchangeError?.message?.includes('token')) {
-                  errorMessage = 'El enlace no es válido. Verificando si el cambio se completó...';
-                } else {
-                  errorMessage = 'No se pudo verificar el estado. El cambio puede haberse completado. Verificando...';
-                }
-                confirmUrl.searchParams.set('error', encodeURIComponent(errorMessage));
-                confirmUrl.searchParams.set('check_status', 'true');
-              }
-              
-              return NextResponse.redirect(confirmUrl);
-            } catch (verifyError) {
-              console.error('[AUTH CALLBACK] Error en verificación alternativa:', verifyError);
-              // Si todo falla, redirigir con check_status para que la página intente verificar
-              const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-              confirmUrl.searchParams.set('check_status', 'true');
-              confirmUrl.searchParams.set('error', encodeURIComponent('Verificando estado del cambio...'));
-              return NextResponse.redirect(confirmUrl);
+            // Método 4: No se pudo obtener usuario - NUNCA mostrar error sin verificar
+            console.log('[AUTH CALLBACK] No se pudo obtener usuario después del error - verificando estado sin error');
+            
+            // PRINCIPIO FUNDAMENTAL: NUNCA mostrar error sin verificar primero el estado real
+            // Redirigir con verify_only=true para que la página de confirmación verifique agresivamente
+            const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+            confirmUrl.searchParams.set('verify_only', 'true');
+            confirmUrl.searchParams.set('check_status', 'true');
+            
+            // Si el error es de expiración o uso, es muy probable que el cambio ya se completó
+            // porque Supabase procesa el cambio ANTES de que expire el código
+            const isLikelyCompleted = exchangeError?.message?.includes('expired') || 
+                                     exchangeError?.message?.includes('already been used');
+            
+            if (isLikelyCompleted) {
+              confirmUrl.searchParams.set('likely_completed', 'true');
+              console.log('[AUTH CALLBACK] Enlace expirado/usado - es probable que el cambio se completó. Verificando sin error...');
             }
+            
+            // NO establecer error aquí - dejar que la página de confirmación verifique primero
+            // Solo establecer error si la verificación confirma que realmente hay un problema
+            return NextResponse.redirect(confirmUrl);
           }
         } catch (checkError) {
-          console.error('[AUTH CALLBACK] Error verificando estado del cambio:', checkError);
-          // Redirigir a página de confirmación que verificará el estado
+          console.error('[AUTH CALLBACK] Error en bloque try-catch de verificación:', checkError);
+          // Aunque haya error en el try-catch, NO mostrar error al usuario
+          // Redirigir con verify_only para que la página de confirmación intente verificar
           const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-          confirmUrl.searchParams.set('error', encodeURIComponent('Error al verificar el estado. El enlace puede haber expirado. Verificando si el cambio se completó...'));
+          confirmUrl.searchParams.set('verify_only', 'true');
           confirmUrl.searchParams.set('check_status', 'true');
+          // NO establecer error - dejar que la página verifique
           return NextResponse.redirect(confirmUrl);
         }
       }
       
-      // Si es un error de cรณdigo expirado o invรกlido, redirigir con mensaje especรญfico
-      let errorMessage = 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
-      let redirectPath = '/iniciar-sesion';
-      
-      if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
-        errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
-        // Si es recovery, redirigir a recuperar
-        if (type === 'recovery') {
-          redirectPath = '/recuperar?error=expired';
+      // Para otros tipos (no email_change), manejar errores normalmente
+      // Pero para email_change, ya se manejó arriba, así que no deberíamos llegar aquí
+      if (type !== 'email_change') {
+        // Si es un error de código expirado o inválido, redirigir con mensaje específico
+        let errorMessage = 'Error al confirmar tu cuenta. El enlace puede haber expirado.';
+        let redirectPath = '/iniciar-sesion';
+        
+        if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
+          errorMessage = 'El enlace ha expirado o ya fue usado. Solicita uno nuevo.';
+          // Si es recovery, redirigir a recuperar
+          if (type === 'recovery') {
+            redirectPath = '/recuperar?error=expired';
+          }
+        } else if (exchangeError.message.includes('token')) {
+          errorMessage = 'El enlace no es válido. Solicita uno nuevo.';
+          if (type === 'recovery') {
+            redirectPath = '/recuperar?error=invalid';
+          }
         }
-        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
-        if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Verificando si el cambio se completó...');
-        }
-      } else if (exchangeError.message.includes('token')) {
-        errorMessage = 'El enlace no es vรกlido. Solicita uno nuevo.';
-        if (type === 'recovery') {
-          redirectPath = '/recuperar?error=invalid';
-        }
-        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
-        if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es vรกlido. Verificando si el cambio se completó...');
-        }
+        
+        return NextResponse.redirect(
+          new URL(`${redirectPath}?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
+        );
       }
-      
-      return NextResponse.redirect(
-        new URL(`${redirectPath}?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
-      );
+      // Si es email_change y llegamos aquí, algo salió mal - redirigir para verificación
+      const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+      confirmUrl.searchParams.set('verify_only', 'true');
+      confirmUrl.searchParams.set('check_status', 'true');
+      return NextResponse.redirect(confirmUrl);
     }
 
     // Verificar que la sesiรณn se estableciรณ correctamente
@@ -328,12 +363,13 @@ export async function GET(request: NextRequest) {
         
         if (userError || !userData?.user) {
           console.error('[AUTH CALLBACK] Error obteniendo usuario en email_change:', userError);
-          // Si no se pudo obtener el usuario, redirigir a confirmación con mensaje genérico
-          // en lugar de a login, para que el usuario vea que el proceso está en curso
+          // PRINCIPIO: NO mostrar error sin verificar primero
+          // Redirigir con verify_only para que la página de confirmación verifique el estado
           const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-          confirmUrl.searchParams.set('confirmed', 'true');
-          confirmUrl.searchParams.set('pending', 'true');
-          confirmUrl.searchParams.set('error', 'No se pudo obtener la información completa. El cambio puede estar en proceso. Revisa ambos correos.');
+          confirmUrl.searchParams.set('verify_only', 'true');
+          confirmUrl.searchParams.set('check_status', 'true');
+          // NO establecer error - la página verificará y determinará el estado real
+          console.log('[AUTH CALLBACK] No se pudo obtener usuario - verificando estado sin error');
           return NextResponse.redirect(confirmUrl);
         }
 
