@@ -376,19 +376,39 @@ export function ConfirmEmailChangeForm({
     }
   };
 
-  // Refrescar sesión automáticamente cuando el cambio se completa
+  // Refrescar sesión y limpiar previous_email cuando el cambio se completa
   useEffect(() => {
     if (changeCompleted && completed && !pending) {
-      const refreshSession = async () => {
+      const refreshSessionAndCleanup = async () => {
         try {
           const supabase = getSupabaseBrowserClient();
+          
+          // 1. Refrescar la sesión
           const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
           
           if (refreshError) {
             console.log('[CONFIRM EMAIL CHANGE] No se pudo refrescar la sesión (puede que no haya sesión activa):', refreshError.message);
           } else if (session) {
             console.log('[CONFIRM EMAIL CHANGE] Sesión refrescada exitosamente, nuevo email:', session.user.email);
-            // Si estamos en una página de la app, refrescar también el router
+            
+            // 2. Limpiar previous_email después de que el usuario vea la confirmación
+            // Esto es ético: solo guardamos el email anterior temporalmente para mostrar la confirmación
+            try {
+              const { error: cleanupError } = await supabase
+                .from('profiles')
+                .update({ previous_email: null })
+                .eq('id', session.user.id);
+              
+              if (cleanupError) {
+                console.warn('[CONFIRM EMAIL CHANGE] No se pudo limpiar previous_email:', cleanupError);
+              } else {
+                console.log('[CONFIRM EMAIL CHANGE] previous_email limpiado exitosamente (buena práctica de privacidad)');
+              }
+            } catch (cleanupErr) {
+              console.error('[CONFIRM EMAIL CHANGE] Error limpiando previous_email:', cleanupErr);
+            }
+            
+            // 3. Si estamos en una página de la app, refrescar también el router
             if (typeof globalThis.window !== 'undefined' && globalThis.window.location.pathname.startsWith('/app')) {
               router.refresh();
             }
@@ -398,8 +418,12 @@ export function ConfirmEmailChangeForm({
         }
       };
       
-      // Refrescar inmediatamente cuando se detecta que el cambio está completo
-      void refreshSession();
+      // Ejecutar después de un pequeño delay para asegurar que el usuario vea la confirmación
+      const timer = setTimeout(() => {
+        void refreshSessionAndCleanup();
+      }, 2000); // 2 segundos después de mostrar la confirmación
+      
+      return () => clearTimeout(timer);
     }
   }, [changeCompleted, completed, pending, router]);
 
