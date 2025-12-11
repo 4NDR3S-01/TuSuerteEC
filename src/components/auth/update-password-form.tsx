@@ -45,34 +45,46 @@ export function UpdatePasswordForm() {
         }
 
         // Verificar si el código es un UUID (token de recovery de Supabase)
-        // Los UUIDs NO son códigos PKCE válidos, no intentar exchangeCodeForSession
+        // Los UUIDs son tokens de recovery que deben verificarse con verifyOtp
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
         
         if (isUUID) {
-          // Para tokens UUID de recovery, Supabase establece la sesión automáticamente
-          // cuando procesa el token PKCE original. Solo necesitamos verificar la sesión.
-          // Esperar un momento para que Supabase procese el token
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // Verificar la sesión múltiples veces (Supabase puede tardar un poco)
-          for (let i = 0; i < 5; i++) {
+          // Para tokens UUID de recovery, usar verifyOtp para establecer la sesión
+          console.log('[UPDATE PASSWORD] Procesando token UUID de recovery con verifyOtp...');
+          const { data: verifyData, error: verifyError } = await client.auth.verifyOtp({
+            token: code,
+            type: 'recovery',
+          });
+
+          if (!verifyError && verifyData?.session) {
+            // Éxito: sesión establecida
+            console.log('[UPDATE PASSWORD] ✅ Token de recovery verificado - sesión establecida');
+            setHasSession(true);
+            // Limpiar URL
+            if (globalThis.window) {
+              globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+            }
+            setIsLoading(false);
+            return;
+          }
+
+          // Si verifyOtp falla, verificar si la sesión se estableció de todas formas
+          if (verifyError) {
+            console.error('[UPDATE PASSWORD] Error verificando token:', verifyError.message);
+            // A veces Supabase establece la sesión aunque haya un error
             const { data: sessionCheck } = await client.auth.getSession();
             if (sessionCheck?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error');
               setHasSession(true);
-              // Limpiar URL
               if (globalThis.window) {
                 globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
               }
               setIsLoading(false);
               return;
             }
-            // Esperar antes del siguiente intento
-            if (i < 4) {
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
           }
-          
-          // Si después de todos los intentos no hay sesión, mostrar error
+
+          // Si no hay sesión, mostrar error
           setHasSession(false);
           setIsLoading(false);
           return;
