@@ -83,12 +83,11 @@ export function UpdatePasswordForm() {
                 }
                 return;
               }
-              // Si el token expiró y no hay sesión, mostrar mensaje informativo
-              if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
-                setIsLoading(false);
-                setHasSession(false);
-                return;
-              }
+              // Si el token expiró o es inválido, mostrar mensaje informativo
+              console.log('[UPDATE PASSWORD] Token inválido o expirado - mostrando mensaje informativo');
+              setIsLoading(false);
+              setHasSession(false);
+              return;
             }
           } catch (error) {
             console.error('[UPDATE PASSWORD] Error procesando token:', error);
@@ -103,19 +102,26 @@ export function UpdatePasswordForm() {
               }
               return;
             }
+            // Si no hay sesión, mostrar mensaje informativo
+            console.log('[UPDATE PASSWORD] No se pudo procesar token ni encontrar sesión');
+            setIsLoading(false);
+            setHasSession(false);
+            return;
           }
         }
 
-        // Si no hay token ni sesión, verificar una vez más por si acaso
+        // Si no hay token, verificar una vez más si hay sesión
         if (!recoveryToken) {
           const { data: finalSessionData } = await client.auth.getSession();
           const sessionEstablished = !!finalSessionData?.session;
           setHasSession(sessionEstablished);
+          setIsLoading(false);
           
           if (sessionEstablished) {
             console.log('[UPDATE PASSWORD] ✅ Sesión encontrada en verificación final');
           }
         } else {
+          // Si había token pero no se procesó correctamente, ya se estableció isLoading=false arriba
           setHasSession(false);
         }
       } catch (error) {
