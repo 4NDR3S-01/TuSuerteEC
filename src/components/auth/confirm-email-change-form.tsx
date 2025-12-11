@@ -187,20 +187,29 @@ export function ConfirmEmailChangeForm({
                   });
                   
                   // Lógica mejorada para determinar el estado del cambio:
-                  // 1. Si hay previous_email, el cambio está pendiente
+                  // 1. Si hay previous_email, el cambio está pendiente o completado recientemente
                   // 2. Si no hay previous_email y tenemos emails en la URL, verificar si coinciden
                   // 3. Si el email del perfil coincide con urlNewEmail, el cambio está completo
                   if (profileByEmail.previous_email) {
-                    // Cambio pendiente: hay previous_email guardado
-                    const newEmail = profileByEmail.email || urlNewEmail || '';
+                    // Hay previous_email: usar previous_email como oldEmail
+                    // El newEmail debe ser el email actual del perfil o el de la URL
+                    const newEmailToUse = urlNewEmail || profileByEmail.email || '';
                     setEmailData({ 
                       oldEmail: profileByEmail.previous_email, 
-                      newEmail: newEmail
+                      newEmail: newEmailToUse
                     });
                     setConfirmed(true);
-                    setPending(true);
+                    // Si el perfil tiene el nuevo email, el cambio está completo
+                    // Si no, está pendiente
+                    if (profileByEmail.email && profileByEmail.email !== profileByEmail.previous_email) {
+                      setCompleted(true);
+                      setChangeCompleted(true);
+                      console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completado detectado desde perfil (previous_email disponible)');
+                    } else {
+                      setPending(true);
+                      console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente detectado desde perfil (previous_email disponible)');
+                    }
                     setError(null);
-                    console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente detectado desde perfil');
                   } else if (urlNewEmail && profileByEmail.email === urlNewEmail) {
                     // Cambio completo: el perfil tiene el nuevo email y coincide con la URL
                     const oldEmail = urlOldEmail || profileByEmail.previous_email || (urlOldEmail || urlNewEmail);
@@ -368,12 +377,33 @@ export function ConfirmEmailChangeForm({
             // PRIMERO: Verificar si hay new_email (cambio pendiente)
             if (user.new_email) {
               // Hay new_email, el cambio está pendiente
-              console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - oldEmail:', user.email, 'newEmail:', user.new_email);
+              // Intentar obtener previous_email del perfil para tener el correo anterior correcto
               if (!emailData) {
-                setEmailData({ 
-                  oldEmail: user.email, 
-                  newEmail: user.new_email 
-                });
+                try {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('previous_email')
+                    .eq('id', user.id)
+                    .single();
+                  
+                  // Si hay previous_email, usarlo como oldEmail (más confiable)
+                  // Si no, usar email actual de auth.users
+                  const oldEmailToUse = profile?.previous_email || user.email;
+                  
+                  setEmailData({ 
+                    oldEmail: oldEmailToUse, 
+                    newEmail: user.new_email 
+                  });
+                  console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - oldEmail:', oldEmailToUse, 'newEmail:', user.new_email, profile?.previous_email ? '(desde previous_email)' : '(desde auth.users)');
+                } catch (profileError) {
+                  // Si falla, usar email de auth.users
+                  setEmailData({ 
+                    oldEmail: user.email, 
+                    newEmail: user.new_email 
+                  });
+                  console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - error obteniendo perfil, usando auth.users:', user.email);
+                }
+                
                 setConfirmed(true);
                 setPending(true);
                 setError(null); // Limpiar error si el cambio está pendiente
@@ -653,8 +683,8 @@ export function ConfirmEmailChangeForm({
           </h2>
           <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
             {initialError 
-              ? 'Aunque el enlace expir?, el cambio de correo se complet? exitosamente. Tu nuevo correo electr?nico ya est? activo.'
-              : 'Tu correo electr?nico ha sido actualizado exitosamente.'
+              ? 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.'
+              : 'Tu correo electrónico ha sido actualizado exitosamente.'
             }
           </p>
           {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (
@@ -704,14 +734,14 @@ export function ConfirmEmailChangeForm({
           ) : null}
           <div className="space-y-3">
             <p className="text-xs text-[color:var(--muted-foreground)]">
-              Ser?s redirigido autom?ticamente a la p?gina de inicio de sesi?n en unos segundos.
+              Serás redirigido automáticamente a la página de inicio de sesión en unos segundos.
             </p>
             <div className="flex gap-3 justify-center pt-2">
               <Link
                 href="/iniciar-sesion?email_changed=true"
                 className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
               >
-                Ir a iniciar sesi?n ahora
+                Ir a iniciar sesión ahora
               </Link>
             </div>
           </div>
@@ -748,15 +778,15 @@ export function ConfirmEmailChangeForm({
                   {isSessionError ? (
                     <>
                       <li>El enlace puede haber expirado o ya fue usado, pero el cambio puede haberse completado.</li>
-                      <li>Intenta iniciar sesi?n con tu <strong>nuevo correo electr?nico</strong> para verificar si el cambio se complet?.</li>
-                      <li>Si no puedes iniciar sesi?n con el nuevo correo, intenta con el correo anterior.</li>
-                      <li>Si el cambio est? pendiente, confirma ambos correos (anterior y nuevo) para completarlo.</li>
+                      <li>Intenta iniciar sesión con tu <strong>nuevo correo electrónico</strong> para verificar si el cambio se completó.</li>
+                      <li>Si no puedes iniciar sesión con el nuevo correo, intenta con el correo anterior.</li>
+                      <li>Si el cambio está pendiente, confirma ambos correos (anterior y nuevo) para completarlo.</li>
                     </>
                   ) : (
                     <>
                       <li>Si ya confirmaste el primer correo, el cambio puede estar parcialmente completado.</li>
                       <li>El enlace puede haber expirado pero el cambio puede haberse completado de todas formas.</li>
-                      <li>Inicia sesi?n y verifica tu correo en Configuraci?n ? Perfil.</li>
+                      <li>Inicia sesión y verifica tu correo en Configuración → Perfil.</li>
                     </>
                   )}
                 </ul>
@@ -764,8 +794,8 @@ export function ConfirmEmailChangeForm({
             )}
             <p className="text-xs text-[color:var(--muted-foreground)]">
               {isSessionError 
-                ? 'Si el cambio ya se complet?, inicia sesi?n con tu nuevo correo. Si est? pendiente, confirma ambos correos para completarlo.'
-                : 'El enlace puede haber expirado o ya fue usado. Si necesitas cambiar tu correo, ve a la configuraci?n de tu cuenta y solicita un nuevo cambio.'
+                ? 'Si el cambio ya se completó, inicia sesión con tu nuevo correo. Si está pendiente, confirma ambos correos para completarlo.'
+                : 'El enlace puede haber expirado o ya fue usado. Si necesitas cambiar tu correo, ve a la configuración de tu cuenta y solicita un nuevo cambio.'
               }
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">

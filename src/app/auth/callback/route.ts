@@ -255,18 +255,33 @@ export async function GET(request: NextRequest) {
               const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
               confirmUrl.searchParams.set('confirmed', 'true');
               confirmUrl.searchParams.set('pending', 'true');
+              
+              // SIEMPRE pasar ambos correos cuando el cambio está pendiente
+              // oldEmail = correo actual (anterior) en auth.users
+              // newEmail = correo nuevo (pendiente) en auth.users.new_email
               confirmUrl.searchParams.set('oldEmail', userCheck.user.email);
               confirmUrl.searchParams.set('newEmail', userCheck.user.new_email);
               
-              // Mensaje más claro según el tipo de error
-              let pendingMessage = 'El cambio de correo está pendiente. Debes confirmar ambos correos (anterior y nuevo) para completarlo.';
-              if (exchangeError?.message?.includes('expired') || exchangeError?.message?.includes('already been used')) {
-                pendingMessage = 'El enlace puede haber expirado o ya fue usado, pero el cambio aún está pendiente. Revisa ambos correos (anterior y nuevo) para completar la confirmación.';
-              } else if (exchangeError?.message?.includes('invalid') || exchangeError?.message?.includes('token')) {
-                pendingMessage = 'El enlace no es válido, pero el cambio aún está pendiente. Revisa ambos correos para completar la confirmación.';
+              // Intentar también obtener previous_email del perfil si está disponible
+              // para asegurar que tenemos el correo anterior correcto
+              try {
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('previous_email')
+                  .eq('id', userCheck.user.id)
+                  .single();
+                
+                if (profile?.previous_email) {
+                  // Si hay previous_email, usarlo como oldEmail (más confiable)
+                  confirmUrl.searchParams.set('oldEmail', profile.previous_email);
+                  console.log('[AUTH CALLBACK] Usando previous_email del perfil para oldEmail:', profile.previous_email);
+                }
+              } catch (profileError) {
+                console.log('[AUTH CALLBACK] No se pudo obtener previous_email del perfil, usando email de auth.users');
               }
               
-              confirmUrl.searchParams.set('error', encodeURIComponent(pendingMessage));
+              console.log('[AUTH CALLBACK] Redirigiendo con oldEmail:', confirmUrl.searchParams.get('oldEmail'), 'newEmail:', confirmUrl.searchParams.get('newEmail'));
+              
               return NextResponse.redirect(confirmUrl);
             }
           } else {
@@ -409,13 +424,36 @@ export async function GET(request: NextRequest) {
         let newEmail = userData.user.new_email || userData.user.email;
         let isPending = false;
         
-        // Si hay new_email, significa que el cambio estรก pendiente
+        // Si hay new_email, significa que el cambio está pendiente
         if (userData.user.new_email) {
-          // El cambio estรก pendiente - falta confirmar uno de los correos
-          oldEmail = userData.user.email; // Correo actual (anterior)
-          newEmail = userData.user.new_email; // Nuevo correo (pendiente)
-          isPending = true;
+          // El cambio está pendiente - falta confirmar uno de los correos
+          // Intentar obtener previous_email del perfil primero (más confiable)
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('previous_email')
+              .eq('id', userData.user.id)
+              .single();
+            
+            if (profile?.previous_email) {
+              // Si hay previous_email, usarlo como oldEmail (más confiable)
+              oldEmail = profile.previous_email;
+              newEmail = userData.user.new_email;
+              console.log('[AUTH CALLBACK] Cambio pendiente - usando previous_email del perfil:', oldEmail);
+            } else {
+              // Si no hay previous_email, usar email actual como oldEmail
+              oldEmail = userData.user.email; // Correo actual (anterior)
+              newEmail = userData.user.new_email; // Nuevo correo (pendiente)
+              console.log('[AUTH CALLBACK] Cambio pendiente - usando email de auth.users:', oldEmail);
+            }
+          } catch (profileError) {
+            // Si falla, usar email de auth.users
+            oldEmail = userData.user.email;
+            newEmail = userData.user.new_email;
+            console.log('[AUTH CALLBACK] Cambio pendiente - error obteniendo perfil, usando auth.users:', oldEmail);
+          }
           
+          isPending = true;
           console.log('[AUTH CALLBACK] Cambio pendiente - oldEmail:', oldEmail, 'newEmail:', newEmail);
           
           // Detectar si el usuario está logueado (tiene sesión activa)
