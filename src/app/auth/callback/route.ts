@@ -100,18 +100,28 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Fallback: pasar el código al cliente para procesarlo ahí
+      // Fallback: para recovery, Supabase puede redirigir directamente con el hash
+      // En lugar de pasar el código como token, redirigir directamente y dejar que el cliente lea el hash
       if (type === 'recovery') {
+        // Si el código parece ser un UUID (recovery token), redirigir directamente
+        // El cliente leerá el hash si Supabase lo envía ahí
         const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
-        resetUrl.searchParams.set('token', code);
-        console.log('[AUTH CALLBACK] Recovery - redirigiendo con token para procesar en cliente');
+        // Solo pasar el token si no es un UUID (los UUIDs no funcionan con exchangeCodeForSession)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+        if (!isUUID) {
+          resetUrl.searchParams.set('token', code);
+        }
+        console.log('[AUTH CALLBACK] Recovery - redirigiendo (código será procesado desde hash si está disponible)');
         return NextResponse.redirect(resetUrl);
       }
       
       if (type === 'email_change') {
         const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-        confirmUrl.searchParams.set('token', code);
-        console.log('[AUTH CALLBACK] Email change - redirigiendo con token para procesar en cliente');
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+        if (!isUUID) {
+          confirmUrl.searchParams.set('token', code);
+        }
+        console.log('[AUTH CALLBACK] Email change - redirigiendo (código será procesado desde hash si está disponible)');
         return NextResponse.redirect(confirmUrl);
       }
     }

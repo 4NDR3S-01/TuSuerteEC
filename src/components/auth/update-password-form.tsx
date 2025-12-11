@@ -36,18 +36,47 @@ export function UpdatePasswordForm() {
         }
 
         // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
+        // Para recovery, Supabase envía el código en el hash cuando redirectTo apunta directamente
         const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
         const hash = globalThis.window?.location.hash || '';
         let token = urlParams.get('token');
         let codeFromHash = null;
         
-        // También verificar el hash por si Supabase envía el código ahí directamente
+        // Verificar el hash primero (Supabase envía el código ahí cuando redirectTo apunta directamente)
         if (hash) {
           const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-          codeFromHash = hashParams.get('code') || hashParams.get('access_token') || hashParams.get('token');
+          // Supabase puede enviar: code, access_token, refresh_token, type, etc.
+          codeFromHash = hashParams.get('code');
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          const hashType = hashParams.get('type');
+          
+          console.log('[UPDATE PASSWORD] Hash detectado:', {
+            hasCode: !!codeFromHash,
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken,
+            type: hashType,
+          });
+          
+          // Si hay access_token y refresh_token en el hash, Supabase estableció la sesión automáticamente
+          if (accessToken && refreshToken) {
+            console.log('[UPDATE PASSWORD] Tokens encontrados en hash, Supabase estableció sesión automáticamente');
+            // Supabase debería haber establecido la sesión automáticamente
+            // Verificar sesión inmediatamente
+            const { data: hashSession } = await client.auth.getSession();
+            if (hashSession?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada desde hash');
+              setHasSession(true);
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+              setIsLoading(false);
+              return;
+            }
+          }
         }
         
-        // Priorizar el código del hash si existe (Supabase a veces envía el código ahí)
+        // Priorizar el código del hash si existe, luego el token de query params
         const codeToProcess = codeFromHash || token;
         
         console.log('[UPDATE PASSWORD] Verificando código/token:', {
@@ -62,55 +91,73 @@ export function UpdatePasswordForm() {
         });
         
         if (codeToProcess) {
-          console.log('[UPDATE PASSWORD] Procesando código de recovery...');
-          try {
-            // El código de recovery de Supabase debe procesarse con exchangeCodeForSession
-            // En el cliente, esto funciona sin requerir PKCE
-            const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(codeToProcess);
-
-            if (!exchangeError && exchangeData?.session) {
-              console.log('[UPDATE PASSWORD] ✅ Código procesado exitosamente - sesión establecida');
-              setHasSession(true);
-              // Limpiar URL
-              if (globalThis.window) {
-                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-              }
-            } else if (exchangeError) {
-              console.error('[UPDATE PASSWORD] Error procesando código:', exchangeError.message);
-              console.error('[UPDATE PASSWORD] Detalles del error:', {
-                message: exchangeError.message,
-                status: exchangeError.status,
-                code: codeToProcess?.substring(0, 20) + '...', // Primeros 20 caracteres para debugging
-              });
-              
-              // Siempre verificar si hay una sesión establecida después del error
-              // A veces Supabase establece la sesión aunque haya un error en el intercambio
-              console.log('[UPDATE PASSWORD] Verificando si hay sesión establecida después del error...');
-              const { data: retrySession, error: retryError } = await client.auth.getSession();
-              
-              if (!retryError && retrySession?.session) {
-                console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error - Supabase la estableció de todas formas');
-                setHasSession(true);
-                if (globalThis.window) {
-                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-                }
-              } else {
-                console.log('[UPDATE PASSWORD] No hay sesión establecida después del error');
-                setHasSession(false);
-              }
-            }
-          } catch (error) {
-            console.error('[UPDATE PASSWORD] Error procesando código:', error);
-            // Verificar sesión como último recurso
-            const { data: retrySession } = await client.auth.getSession();
-            if (retrySession?.session) {
-              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después de excepción');
+          console.log('[UPDATE PASSWORD] Procesando código/token de recovery...');
+          
+          // Verificar si el código es un UUID (token hash de recovery)
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(codeToProcess);
+          
+          if (isUUID) {
+            // Es un UUID, probablemente un token hash de recovery
+            // Los tokens hash de recovery no funcionan con exchangeCodeForSession
+            // Necesitamos usar verifyOtp, pero requerimos el email
+            // Como alternativa, intentar usar el token directamente con la API
+            console.log('[UPDATE PASSWORD] Token detectado como UUID, intentando método alternativo...');
+            
+            // Intentar establecer la sesión usando el token directamente
+            // Supabase a veces establece la sesión automáticamente cuando procesa el hash
+            // Esperar un momento y verificar la sesión
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const { data: sessionCheck } = await client.auth.getSession();
+            if (sessionCheck?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada (Supabase la estableció automáticamente)');
               setHasSession(true);
               if (globalThis.window) {
                 globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
               }
             } else {
+              console.log('[UPDATE PASSWORD] No se pudo establecer sesión con UUID token');
               setHasSession(false);
+            }
+          } else {
+            // Es un código de autorización, intentar exchangeCodeForSession
+            try {
+              const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(codeToProcess);
+
+              if (!exchangeError && exchangeData?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Código procesado exitosamente - sesión establecida');
+                setHasSession(true);
+                // Limpiar URL
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+                }
+              } else if (exchangeError) {
+                console.error('[UPDATE PASSWORD] Error procesando código:', exchangeError.message);
+                
+                // Verificar sesión después del error
+                const { data: retrySession } = await client.auth.getSession();
+                if (retrySession?.session) {
+                  console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error');
+                  setHasSession(true);
+                  if (globalThis.window) {
+                    globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+                  }
+                } else {
+                  setHasSession(false);
+                }
+              }
+            } catch (error) {
+              console.error('[UPDATE PASSWORD] Error procesando código:', error);
+              const { data: retrySession } = await client.auth.getSession();
+              if (retrySession?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después de excepción');
+                setHasSession(true);
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+                }
+              } else {
+                setHasSession(false);
+              }
             }
           }
         } else {

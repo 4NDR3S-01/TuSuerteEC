@@ -42,12 +42,9 @@ export function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      // SIEMPRE usar la URL de producción para emails, incluso en desarrollo local
-      // Esto asegura que los enlaces en los emails funcionen correctamente
-      const redirectTo = getEmailAuthRedirectUrl('/auth/callback', {
-        type: 'recovery',
-        next: '/restablecer-clave',
-      });
+      // Para recovery, apuntar directamente a la página de restablecimiento
+      // Esto permite que Supabase maneje el hash automáticamente
+      const redirectTo = getEmailAuthRedirectUrl('/restablecer-clave');
 
       console.log('[RESET PASSWORD] Enviando email con redirectTo:', redirectTo);
 
