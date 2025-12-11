@@ -18,53 +18,34 @@ export async function GET(request: NextRequest) {
     hasNext: !!next,
   });
 
-  // Si hay un error, redirigir con el token para que el componente lo procese
+  // Si hay un error, redirigir a la página correspondiente con el error
   if (error) {
+    const errorMessage = errorDescription 
+      ? decodeURIComponent(errorDescription.replaceAll('+', ' '))
+      : 'Error al procesar la autenticación';
+    
     if (type === 'recovery') {
       const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
-      if (code) {
-        resetUrl.searchParams.set('token', code);
-      }
-      console.log('[AUTH CALLBACK] Error en recovery - redirigiendo con token');
+      resetUrl.searchParams.set('error', encodeURIComponent(errorMessage));
+      console.log('[AUTH CALLBACK] Error en recovery - redirigiendo con error');
       return NextResponse.redirect(resetUrl);
     }
     
     if (type === 'email_change') {
       const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-      if (code) {
-        confirmUrl.searchParams.set('token', code);
-      }
-      console.log('[AUTH CALLBACK] Error en email_change - redirigiendo con token');
+      confirmUrl.searchParams.set('error', encodeURIComponent(errorMessage));
+      console.log('[AUTH CALLBACK] Error en email_change - redirigiendo con error');
       return NextResponse.redirect(confirmUrl);
     }
     
     // Para otros tipos, redirigir a login con error
-    const errorMessage = errorDescription 
-      ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
-      : 'Error al procesar la autenticación';
     return NextResponse.redirect(
       new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
     );
   }
 
-  // Si hay un código, redirigir directamente con el token para que el componente lo procese
-  // Esto es más simple: el componente procesa el token directamente
+  // Si hay un código, procesarlo en el servidor para todos los tipos
   if (code) {
-    if (type === 'recovery') {
-      const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
-      resetUrl.searchParams.set('token', code);
-      console.log('[AUTH CALLBACK] Recovery - redirigiendo con token para procesar en cliente');
-      return NextResponse.redirect(resetUrl);
-    }
-    
-    if (type === 'email_change') {
-      const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-      confirmUrl.searchParams.set('token', code);
-      console.log('[AUTH CALLBACK] Email change - redirigiendo con token para procesar en cliente');
-      return NextResponse.redirect(confirmUrl);
-    }
-    
-    // Para otros tipos (signup, etc.), procesar código en servidor
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -99,16 +80,48 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Procesar el código en el servidor para establecer la sesión
     const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError) {
       console.error('[AUTH CALLBACK] Error exchanging code:', exchangeError.message);
+      
+      // Redirigir a la página correspondiente según el tipo
+      if (type === 'recovery') {
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('error', encodeURIComponent(exchangeError.message));
+        return NextResponse.redirect(resetUrl);
+      }
+      
+      if (type === 'email_change') {
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('error', encodeURIComponent(exchangeError.message));
+        return NextResponse.redirect(confirmUrl);
+      }
+      
+      // Para otros tipos, redirigir a login
       return NextResponse.redirect(
         new URL(`/iniciar-sesion?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin)
       );
     }
 
     if (exchangeData.session) {
+      // Redirigir según el tipo
+      if (type === 'recovery') {
+        console.log('[AUTH CALLBACK] Recovery - sesión establecida, redirigiendo a restablecer-clave');
+        return NextResponse.redirect(new URL('/restablecer-clave', requestUrl.origin));
+      }
+      
+      if (type === 'email_change') {
+        console.log('[AUTH CALLBACK] Email change - sesión establecida, redirigiendo a confirmar-cambio-correo');
+        return NextResponse.redirect(new URL('/confirmar-cambio-correo', requestUrl.origin));
+      }
+      
+      // Para signup y otros tipos, redirigir según el next o a confirmar-registro
+      if (type === 'signup') {
+        return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
+      }
+      
       // Redirigir según el next o a la app
       return NextResponse.redirect(new URL(next, requestUrl.origin));
     }

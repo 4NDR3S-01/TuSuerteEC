@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { getSupabaseBrowserClient } from '../../lib/supabase/client';
-import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
-import { useToast } from '../../hooks/use-toast';
 
 type ConfirmEmailChangeFormProps = {
   oldEmail?: string;
@@ -25,931 +22,136 @@ export function ConfirmEmailChangeForm({
   completed: initialCompleted = false,
   error: initialError 
 }: ConfirmEmailChangeFormProps) {
-  const router = useRouter();
-  const { showToast } = useToast();
   const [isValidating, setIsValidating] = useState(!initialConfirmed && !initialError);
   const [confirmed, setConfirmed] = useState(initialConfirmed);
   const [pending, setPending] = useState(initialPending);
   const [completed, setCompleted] = useState(initialCompleted);
   const [error, setError] = useState<string | null>(initialError || null);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
-  const [changeCompleted, setChangeCompleted] = useState(false);
-  const [hasCheckedStatus, setHasCheckedStatus] = useState(false);
   const [emailData, setEmailData] = useState<{ oldEmail?: string; newEmail?: string } | null>(
     oldEmail && newEmail ? { oldEmail, newEmail } : null
   );
-  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean | null>(null);
 
-  // Detectar si el usuario está logueado desde la URL
-  useEffect(() => {
-    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-    const firstConfirmed = urlParams.get('first_confirmed') === 'true';
-    setIsUserLoggedIn(firstConfirmed);
-    
-    // También intentar verificar desde Supabase
-    if (isUserLoggedIn === null) {
-      const checkUserSession = async () => {
-        try {
-          const supabase = getSupabaseBrowserClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          setIsUserLoggedIn(!!user);
-        } catch {
-          setIsUserLoggedIn(false);
-        }
-      };
-      void checkUserSession();
-    }
-  }, []);
-
-  // Verificar token y cargar datos iniciales
   useEffect(() => {
     const initialize = async () => {
       try {
         const supabase = getSupabaseBrowserClient();
         
-        // Obtener token de la URL
-        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-        const token = urlParams.get('token');
-        const hash = globalThis.window?.location.hash || '';
+        // Verificar si hay sesión (el callback ya procesó el código en el servidor)
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
         
-        // Intentar obtener token del hash también
-        let emailChangeToken = token;
-        if (!emailChangeToken && hash) {
-          const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-          emailChangeToken = hashParams.get('code') || hashParams.get('token');
-        }
-
-        // Si hay token, intentar verificar con verifyOtp
-        // Nota: Para email_change, Supabase puede requerir token_hash en lugar de token
-        if (emailChangeToken) {
-          console.log('[CONFIRM EMAIL CHANGE] Procesando token...');
-          try {
-            // Intentar usar exchangeCodeForSession primero (método estándar de Supabase)
-            const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(emailChangeToken);
-            
-            if (!exchangeError && exchangeData?.user) {
-              const user = exchangeData.user;
-              console.log('[CONFIRM EMAIL CHANGE] ✅ Token procesado exitosamente');
-              
-              // Determinar estado del cambio
-              if (user.new_email) {
-                // Cambio pendiente
-                setEmailData({ 
-                  oldEmail: user.email, 
-                  newEmail: user.new_email 
-                });
-                setConfirmed(true);
-                setPending(true);
-                setCompleted(false);
-              } else {
-                // Cambio completado
-                // Intentar obtener previous_email del perfil
-                try {
-                  const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('previous_email')
-                    .eq('id', user.id)
-                    .single();
-                  
-                  if (profile?.previous_email) {
-                    setEmailData({ 
-                      oldEmail: profile.previous_email, 
-                      newEmail: user.email 
-                    });
-                  } else {
-                    setEmailData({ 
-                      newEmail: user.email 
-                    });
-                  }
-                } catch {
-                  setEmailData({ newEmail: user.email });
-                }
-                setConfirmed(true);
-                setPending(false);
-                setCompleted(true);
-                setChangeCompleted(true);
-              }
-              
-              setIsValidating(false);
-              // Limpiar URL
-              if (globalThis.window) {
-                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-              }
-              return;
-            } else if (exchangeError) {
-              console.log('[CONFIRM EMAIL CHANGE] Error procesando token:', exchangeError.message);
-            }
-          } catch (error) {
-            console.error('[CONFIRM EMAIL CHANGE] Error procesando token:', error);
-          }
-        }
-
-        // Si no hay token o verifyOtp falló, usar datos de URL/props
-        if (initialConfirmed || initialError) {
-          setIsValidating(false);
-        }
-
-        if (!emailData) {
-          // PRIORIDAD 1: Emails de la URL
-          const urlOldEmail = urlParams.get('oldEmail');
-          const urlNewEmail = urlParams.get('newEmail');
-          const urlPending = urlParams.get('pending') === 'true';
-          const urlCompleted = urlParams.get('completed') === 'true';
+        if (userError) {
+          console.log('[CONFIRM EMAIL CHANGE] No hay sesión activa:', userError.message);
           
-          if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
-            setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
-            setConfirmed(true);
-            setPending(urlPending);
-            setCompleted(urlCompleted);
-            setIsValidating(false);
-            console.log('[CONFIRM EMAIL CHANGE] Inicializando desde URL');
-          } else if (oldEmail && newEmail && oldEmail !== newEmail) {
-            setEmailData({ oldEmail, newEmail });
-            setConfirmed(initialConfirmed);
-            setPending(initialPending);
-            setCompleted(initialCompleted);
-            setIsValidating(false);
-            console.log('[CONFIRM EMAIL CHANGE] Inicializando desde props');
-          } else if (urlNewEmail || newEmail) {
-            setEmailData({ oldEmail: urlOldEmail || oldEmail || undefined, newEmail: urlNewEmail || newEmail || '' });
-            setConfirmed(initialConfirmed || urlOldEmail !== null);
-            setPending(urlPending || initialPending);
-            setCompleted(urlCompleted || initialCompleted);
-            setIsValidating(false);
-            console.log('[CONFIRM EMAIL CHANGE] Inicializando con solo nuevo email');
+          // Verificar si hay error en la URL
+          const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+          const urlError = urlParams.get('error');
+          
+          if (urlError) {
+            setError(decodeURIComponent(urlError));
+          } else {
+            setError('No hay sesión activa. Por favor, usa el enlace de confirmación que recibiste por correo.');
           }
+          setIsValidating(false);
+          return;
         }
+
+        if (!user) {
+          setError('No se pudo obtener la información del usuario.');
+          setIsValidating(false);
+          return;
+        }
+
+        setIsUserLoggedIn(true);
+        setConfirmed(true);
+
+        // Determinar estado del cambio usando user.new_email
+        if (user.new_email) {
+          // Cambio pendiente: hay un nuevo email esperando confirmación
+          setEmailData({ 
+            oldEmail: user.email || undefined, 
+            newEmail: user.new_email 
+          });
+          setPending(true);
+          setCompleted(false);
+        } else {
+          // Cambio completado: no hay new_email, el cambio ya se completó
+          // Intentar obtener previous_email del perfil para mostrar el correo anterior
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('previous_email')
+              .eq('id', user.id)
+              .single();
+            
+            if (profile?.previous_email) {
+              setEmailData({ 
+                oldEmail: profile.previous_email, 
+                newEmail: user.email || undefined
+              });
+            } else {
+              setEmailData({ 
+                newEmail: user.email || undefined
+              });
+            }
+          } catch {
+            setEmailData({ 
+              newEmail: user.email || undefined
+            });
+          }
+          setPending(false);
+          setCompleted(true);
+        }
+        
+        setIsValidating(false);
       } catch (error) {
         console.error('[CONFIRM EMAIL CHANGE] Error inicializando:', error);
+        setError('Error al verificar el estado del cambio. Intenta iniciar sesión para verificar.');
         setIsValidating(false);
       }
     };
     
     void initialize();
-  }, [initialConfirmed, initialError, emailData, oldEmail, newEmail, initialPending, initialCompleted]);
+  }, []);
 
-  // Verificar estado del cambio cuando hay error o no hay datos
+  // Refrescar sesión cuando el cambio se completa
   useEffect(() => {
-    // Solo verificar una vez y si no se ha verificado antes
-    if (hasCheckedStatus) return;
-    
-    // Verificar si hay error de expiración, si no hay datos de email, o si viene check_status/verify_only
-    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-    const shouldCheckStatus = urlParams.get('check_status') === 'true';
-    const verifyOnly = urlParams.get('verify_only') === 'true';
-    const likelyCompleted = urlParams.get('likely_completed') === 'true';
-    const codeProcessed = urlParams.get('code_processed') === 'true'; // Flag: código fue procesado por Supabase
-    const shouldCheck = shouldCheckStatus || 
-                       verifyOnly ||
-                       likelyCompleted ||
-                       codeProcessed ||
-                       (error && (error.includes('expirado') || error.includes('ya fue usado') || error.includes('inválido') || error.includes('inv?lido'))) || 
-                       (!emailData && !isValidating);
-    
-    // Si code_processed=true, mostrar éxito inmediatamente aunque no tengamos todos los datos
-    // PRINCIPIO: Si hay código, Supabase lo procesó - mostrar confirmación de éxito
-    if (codeProcessed && !emailData && !changeCompleted && !hasCheckedStatus) {
-      setConfirmed(true);
-      setError(null); // Limpiar cualquier error
-      setIsValidating(false);
-      
-      // Intentar obtener emails de la URL primero
-      const urlOldEmail = urlParams.get('oldEmail');
-      const urlNewEmail = urlParams.get('newEmail');
-      if (urlOldEmail && urlNewEmail) {
-        setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
-      } else if (urlNewEmail) {
-        setEmailData({ newEmail: urlNewEmail });
-      }
-      
-      // Si también viene completed=true o likely_completed=true, establecer como completado
-      if (urlParams.get('completed') === 'true' || likelyCompleted) {
-        setCompleted(true);
-        setChangeCompleted(true);
-        console.log('[CONFIRM EMAIL CHANGE] ✅ code_processed=true + completed - cambio completado');
-      } else {
-        // Si no, puede estar pendiente (primer correo confirmado)
-        setPending(true);
-        console.log('[CONFIRM EMAIL CHANGE] ✅ code_processed=true - cambio pendiente (primer correo)');
-      }
-      
-      console.log('[CONFIRM EMAIL CHANGE] ✅ code_processed=true - código fue procesado por Supabase, mostrando confirmación');
-      setHasCheckedStatus(true); // Marcar como verificado para evitar verificación adicional
-      return; // Salir temprano para evitar verificación adicional
-    }
-    
-    if (shouldCheck && !isCheckingStatus && !changeCompleted) {
-      setHasCheckedStatus(true);
-      setIsCheckingStatus(true);
-      
-      const checkStatus = async () => {
+    if (completed && !pending) {
+      const refreshSession = async () => {
         try {
-          console.log('[CONFIRM EMAIL CHANGE] Verificando estado del cambio...');
           const supabase = getSupabaseBrowserClient();
-          
-          // Intentar obtener el usuario - puede funcionar incluso sin sesi?n persistente
-          // si el token del enlace estableci? una sesi?n temporal
-          let user: any = null;
-          let userError: any = null;
-          
-          // Intentar obtener usuario
-          const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-          user = authUser;
-          userError = authError;
-          
-          // ESTRATEGIA RECONSTRUIDA: Verificación agresiva sin sesión
-          // Cuando no hay sesión, verificar desde múltiples fuentes antes de mostrar error
-          if (userError && (userError.message.includes('session') || userError.message.includes('JWT'))) {
-            console.log('[CONFIRM EMAIL CHANGE] No hay sesión - iniciando verificación agresiva desde base de datos...');
-            
-            // Obtener emails de la URL
-            const urlOldEmail = urlParams.get('oldEmail');
-            const urlNewEmail = urlParams.get('newEmail');
-            
-            // ESTRATEGIA 1: Buscar en profiles usando emails de la URL (búsqueda mejorada)
-            if (urlOldEmail || urlNewEmail) {
-              try {
-                // Mejorar búsqueda: buscar por ambos emails si están disponibles
-                let profileByEmail: any = null;
-                let profileSearchError: any = null;
-                
-                if (urlOldEmail && urlNewEmail) {
-                  // Buscar por ambos emails - más preciso
-                  console.log('[CONFIRM EMAIL CHANGE] Buscando perfil con ambos emails:', urlOldEmail, urlNewEmail);
-                  const { data, error } = await supabase
-                    .from('profiles')
-                    .select('id, email, previous_email')
-                    .or(`email.eq.${urlNewEmail},email.eq.${urlOldEmail},previous_email.eq.${urlOldEmail},previous_email.eq.${urlNewEmail}`)
-                    .maybeSingle();
-                  profileByEmail = data;
-                  profileSearchError = error;
-                } else {
-                  // Buscar por un solo email
-                  const emailToSearch = urlNewEmail || urlOldEmail;
-                  console.log('[CONFIRM EMAIL CHANGE] Buscando perfil con email:', emailToSearch);
-                  const { data, error } = await supabase
-                    .from('profiles')
-                    .select('id, email, previous_email')
-                    .or(`email.eq.${emailToSearch},previous_email.eq.${emailToSearch}`)
-                    .single();
-                  profileByEmail = data;
-                  profileSearchError = error;
-                }
-                
-                if (profileSearchError) {
-                  console.error('[CONFIRM EMAIL CHANGE] Error buscando perfil:', profileSearchError);
-                } else if (profileByEmail) {
-                  console.log('[CONFIRM EMAIL CHANGE] Perfil encontrado:', {
-                    email: profileByEmail.email,
-                    previous_email: profileByEmail.previous_email,
-                  });
-                  
-                  // Lógica mejorada para determinar el estado del cambio:
-                  // 1. Si hay previous_email, el cambio está pendiente o completado recientemente
-                  // 2. Si no hay previous_email y tenemos emails en la URL, verificar si coinciden
-                  // 3. Si el email del perfil coincide con urlNewEmail, el cambio está completo
-                  if (profileByEmail.previous_email) {
-                    // Hay previous_email: usar previous_email como oldEmail
-                    // El newEmail debe ser el email actual del perfil o el de la URL
-                    const newEmailToUse = urlNewEmail || profileByEmail.email || '';
-                    setEmailData({ 
-                      oldEmail: profileByEmail.previous_email, 
-                      newEmail: newEmailToUse
-                    });
-                    setConfirmed(true);
-                    // Si el perfil tiene el nuevo email, el cambio está completo
-                    // Si no, está pendiente
-                    if (profileByEmail.email && profileByEmail.email !== profileByEmail.previous_email) {
-                      setCompleted(true);
-                      setChangeCompleted(true);
-                      console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completado detectado desde perfil (previous_email disponible)');
-                    } else {
-                      setPending(true);
-                      console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente detectado desde perfil (previous_email disponible)');
-                    }
-                    setError(null);
-                  } else if (urlNewEmail && profileByEmail.email === urlNewEmail) {
-                    // Cambio completo: el perfil tiene el nuevo email y coincide con la URL
-                    const oldEmail = urlOldEmail || profileByEmail.previous_email || (urlOldEmail || urlNewEmail);
-                    setEmailData({ 
-                      oldEmail: oldEmail, 
-                      newEmail: urlNewEmail 
-                    });
-                    setConfirmed(true);
-                    setCompleted(true);
-                    setChangeCompleted(true);
-                    setError(null); // Limpiar cualquier error previo
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completo detectado desde perfil - mostrando éxito');
-                  } else if (verifyOnly && !profileByEmail.previous_email && profileByEmail.email) {
-                    // Si verify_only=true y no hay previous_email, el cambio probablemente se completó
-                    // Usar el email del perfil como nuevo email
-                    const detectedOldEmail = urlOldEmail || (urlNewEmail && urlNewEmail !== profileByEmail.email ? urlNewEmail : null);
-                    const detectedNewEmail = profileByEmail.email;
-                    setEmailData({ 
-                      oldEmail: detectedOldEmail || 'correo anterior', 
-                      newEmail: detectedNewEmail 
-                    });
-                    setConfirmed(true);
-                    setCompleted(true);
-                    setChangeCompleted(true);
-                    setError(null);
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ verify_only=true y no hay previous_email - cambio completado');
-                  } else if (likelyCompleted && !profileByEmail.previous_email) {
-                    // Si likely_completed=true y no hay previous_email, es probable que el cambio se completó
-                    // Intentar usar el email del perfil como nuevo email
-                    const emailToUse = urlNewEmail || urlOldEmail || profileByEmail.email;
-                    const detectedNewEmail = profileByEmail.email || urlNewEmail || emailToUse;
-                    setEmailData({ 
-                      oldEmail: urlOldEmail || emailToUse, 
-                      newEmail: detectedNewEmail 
-                    });
-                    setConfirmed(true);
-                    setCompleted(true);
-                    setChangeCompleted(true);
-                    setError(null); // Limpiar error, mostrar éxito
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio probablemente completado (likely_completed) - mostrando éxito');
-                  } else if (urlOldEmail && urlNewEmail) {
-                    // Tenemos ambos emails en la URL, usar esos
-                    setEmailData({ 
-                      oldEmail: urlOldEmail, 
-                      newEmail: urlNewEmail 
-                    });
-                    setConfirmed(true);
-                    // Si el perfil tiene el nuevo email, está completo, si no, está pendiente
-                    if (profileByEmail.email === urlNewEmail) {
-                      setCompleted(true);
-                      setChangeCompleted(true);
-                    } else {
-                      setPending(true);
-                    }
-                    setError(null);
-                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL con verificación de perfil');
-                  }
-                  
-                  setIsCheckingStatus(false);
-                  setIsValidating(false);
-                  return;
-                }
-              } catch (profileSearchError) {
-                console.error('[CONFIRM EMAIL CHANGE] Error buscando perfil:', profileSearchError);
-                // Continuar con el flujo normal si no se puede buscar el perfil
-              }
-            } else {
-              // ESTRATEGIA 2: No hay emails en URL - buscar usuarios recientes con previous_email
-              // Si verify_only=true, likely_completed=true o code_processed=true, intentar buscar usuarios que hayan cambiado email recientemente
-              if (verifyOnly || likelyCompleted || codeProcessed) {
-                console.log('[CONFIRM EMAIL CHANGE] verify_only/likely_completed=true sin emails en URL - buscando usuarios con cambios recientes...');
-                
-                try {
-                  // Buscar perfiles que tengan previous_email (indica cambio reciente)
-                  // Ordenar por updated_at descendente para obtener los más recientes
-                  const { data: recentChanges, error: recentError } = await supabase
-                    .from('profiles')
-                    .select('id, email, previous_email, updated_at')
-                    .not('previous_email', 'is', null)
-                    .order('updated_at', { ascending: false })
-                    .limit(10);
-                  
-                  if (!recentError && recentChanges && recentChanges.length > 0) {
-                    console.log('[CONFIRM EMAIL CHANGE] Encontrados cambios recientes:', recentChanges.length);
-                    // Si hay cambios recientes y code_processed=true, usar el más reciente
-                    if (codeProcessed && recentChanges[0]) {
-                      const mostRecent = recentChanges[0];
-                      if (mostRecent.previous_email && mostRecent.email) {
-                        setEmailData({ 
-                          oldEmail: mostRecent.previous_email, 
-                          newEmail: mostRecent.email 
-                        });
-                        setConfirmed(true);
-                        // Si el email del perfil es diferente a previous_email, está completo
-                        if (mostRecent.email !== mostRecent.previous_email) {
-                          setCompleted(true);
-                          setChangeCompleted(true);
-                        } else {
-                          setPending(true);
-                        }
-                        setError(null);
-                        console.log('[CONFIRM EMAIL CHANGE] ✅ code_processed=true - usando perfil más reciente');
-                        setIsCheckingStatus(false);
-                        setIsValidating(false);
-                        return;
-                      }
-                    }
-                    // Si hay cambios recientes pero no code_processed, mostrar mensaje informativo
-                    setError(null);
-                    setConfirmed(true);
-                    console.log('[CONFIRM EMAIL CHANGE] Cambios recientes encontrados pero no se puede determinar cuál es del usuario');
-                  } else {
-                    // Si no hay previous_email en ningún perfil reciente, es probable que los cambios se completaron
-                    // Si likely_completed=true o code_processed=true, asumir que el cambio se completó
-                    console.log('[CONFIRM EMAIL CHANGE] No hay previous_email recientes - cambio probablemente completado');
-                    setError(null);
-                    setConfirmed(true);
-                    // Establecer como completado si likely_completed=true o code_processed=true
-                    if (likelyCompleted || codeProcessed) {
-                      setCompleted(true);
-                      setChangeCompleted(true);
-                      // Intentar usar emails de props si están disponibles
-                      if (oldEmail && newEmail && oldEmail !== newEmail) {
-                        setEmailData({ oldEmail, newEmail });
-                      } else if (newEmail) {
-                        setEmailData({ newEmail });
-                      }
-                      console.log('[CONFIRM EMAIL CHANGE] ✅ likely_completed/code_processed=true y no hay previous_email - cambio completado');
-                    } else if (verifyOnly) {
-                      // Si solo verify_only, no establecer completed todavía pero tampoco error
-                      setError(null);
-                      console.log('[CONFIRM EMAIL CHANGE] verify_only=true - cambio puede estar completo, mostrando estado intermedio');
-                    }
-                  }
-                } catch (searchError) {
-                  console.error('[CONFIRM EMAIL CHANGE] Error en búsqueda de cambios recientes:', searchError);
-                  // Si falla la búsqueda y code_processed=true, mostrar éxito de todas formas
-                  if (codeProcessed) {
-                    setError(null);
-                    setConfirmed(true);
-                    setCompleted(true);
-                    setChangeCompleted(true);
-                    // Intentar usar emails de props si están disponibles
-                    if (oldEmail && newEmail && oldEmail !== newEmail) {
-                      setEmailData({ oldEmail, newEmail });
-                    } else if (newEmail) {
-                      setEmailData({ newEmail });
-                    }
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ code_processed=true - código fue procesado, mostrando éxito');
-                  } else if (likelyCompleted) {
-                    setError(null);
-                    setConfirmed(true);
-                    setCompleted(true);
-                    setChangeCompleted(true);
-                    // Intentar usar emails de props si están disponibles
-                    if (oldEmail && newEmail && oldEmail !== newEmail) {
-                      setEmailData({ oldEmail, newEmail });
-                    } else if (newEmail) {
-                      setEmailData({ newEmail });
-                    }
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ likely_completed=true - asumiendo cambio completado');
-                  } else if (verifyOnly) {
-                    setError(null);
-                    setConfirmed(true);
-                    console.log('[CONFIRM EMAIL CHANGE] verify_only=true - cambio puede estar completo');
-                  }
-                }
-              } else {
-                console.log('[CONFIRM EMAIL CHANGE] No hay emails en URL, verify_only ni likely_completed - no se puede verificar sin sesión');
-              }
-            }
-          }
-          
-          // ESTRATEGIA 3: Si verify_only=true, code_processed=true o likely_completed=true y aún no tenemos datos, verificar desde props
-          if ((verifyOnly || codeProcessed || likelyCompleted) && !emailData && !changeCompleted) {
-            console.log('[CONFIRM EMAIL CHANGE] verify_only/code_processed/likely_completed=true - verificando desde props...');
-            if (oldEmail && newEmail && oldEmail !== newEmail) {
-              // Tenemos emails en props, usarlos
-              setEmailData({ oldEmail, newEmail });
-              setConfirmed(true);
-              // Si likely_completed=true o code_processed=true, asumir que está completo
-              if (likelyCompleted || codeProcessed) {
-                setCompleted(true);
-                setChangeCompleted(true);
-                setError(null);
-                console.log('[CONFIRM EMAIL CHANGE] ✅ verify_only + likely_completed/code_processed - cambio completado desde props');
-              }
-            }
-          }
-          
-          console.log('[CONFIRM EMAIL CHANGE] Usuario obtenido:', {
-            hasUser: !!user,
-            error: userError?.message,
-            email: user?.email,
-            new_email: user?.new_email,
-          });
-          
-          if (!userError && user) {
-            // Leer hash de error si existe (el hash no se envía al servidor, solo al cliente)
-            const hash = globalThis.window?.location.hash || '';
-            const hashHasError = hash.includes('error=');
-            
-            // PRIMERO: Verificar si hay new_email (cambio pendiente)
-            // Si NO hay new_email, el cambio está REALMENTE completado
-            const isReallyCompleted = !user.new_email;
-            
-            // Si el cambio está realmente completado, ignorar el hash de error
-            // El hash puede venir de Supabase pero el cambio ya se procesó
-            if (isReallyCompleted && hashHasError) {
-              console.log('[CONFIRM EMAIL CHANGE] Cambio realmente completado - ignorando hash de error');
-              setError(null); // Limpiar cualquier error del hash
-            }
-            
-            if (user.new_email) {
-              // Hay new_email, el cambio está pendiente
-              // Intentar obtener previous_email del perfil para tener el correo anterior correcto
-              if (!emailData) {
-                try {
-                  const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('previous_email')
-                    .eq('id', user.id)
-                    .single();
-                  
-                  // Si hay previous_email, usarlo como oldEmail (más confiable)
-                  // Si no, usar email actual de auth.users
-                  const oldEmailToUse = profile?.previous_email || user.email;
-                  
-                  setEmailData({ 
-                    oldEmail: oldEmailToUse, 
-                    newEmail: user.new_email 
-                  });
-                  console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - oldEmail:', oldEmailToUse, 'newEmail:', user.new_email, profile?.previous_email ? '(desde previous_email)' : '(desde auth.users)');
-                } catch (profileError) {
-                  // Si falla, usar email de auth.users
-                  setEmailData({ 
-                    oldEmail: user.email, 
-                    newEmail: user.new_email 
-                  });
-                  console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - error obteniendo perfil, usando auth.users:', user.email);
-                }
-                
-                setConfirmed(true);
-                setPending(true);
-                setError(null); // Limpiar error si el cambio está pendiente
-              }
-            } else {
-              // No hay new_email, el cambio ya se completó o no hay cambio pendiente
-              console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completado o no hay cambio pendiente');
-              setChangeCompleted(true);
-              setError(null);
-              setConfirmed(true);
-              setCompleted(true);
-              
-              // PRIORIDAD 1: Verificar emails en la URL primero (más confiable)
-              const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-              const urlOldEmail = urlParams.get('oldEmail');
-              const urlNewEmail = urlParams.get('newEmail');
-              
-              if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
-                // Usar los emails de la URL si están disponibles y son diferentes
-                setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
-                console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL (prioridad)');
-              } else {
-                // PRIORIDAD 2: Intentar obtener los correos del perfil
-                try {
-                  const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('email, previous_email')
-                    .eq('id', user.id)
-                    .single();
-                  
-                  // Estrategia mejorada para obtener oldEmail y newEmail desde el perfil:
-                  // 1. PRIORIDAD: Si hay previous_email, usarlo como oldEmail (más confiable)
-                  // 2. Si no hay previous_email pero el email del perfil es diferente al de auth, usar el del perfil como oldEmail
-                  // 3. Si no hay diferencia, usar los emails de los props iniciales si están disponibles
-                  // 4. Si no hay props, intentar usar los emails de la URL si están disponibles
-                  // 5. Solo como último recurso mostrar solo el nuevo email
-                  if (profile?.previous_email) {
-                    // Caso ideal: previous_email está disponible
-                    setEmailData({ oldEmail: profile.previous_email, newEmail: user.email });
-                    console.log('[CONFIRM EMAIL CHANGE] ✅ Usando previous_email del perfil:', profile.previous_email);
-                  } else if (profile?.email && profile.email !== user.email) {
-                    // El perfil tiene un email diferente (puede ser el anterior antes de sincronizar)
-                    setEmailData({ oldEmail: profile.email, newEmail: user.email });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando email del perfil como anterior:', profile.email);
-                  } else if (oldEmail && newEmail && oldEmail !== newEmail) {
-                    // Usar los emails de los props iniciales si están disponibles
-                    setEmailData({ oldEmail, newEmail });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de los props iniciales');
-                  } else if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
-                    // Intentar usar los emails de la URL si están disponibles
-                    setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL como fallback');
-                  } else if (oldEmail && oldEmail !== user.email) {
-                    // Usar oldEmail de props con newEmail del usuario
-                    setEmailData({ oldEmail, newEmail: user.email });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando oldEmail de props con newEmail del usuario');
-                  } else {
-                    // Si no hay forma de obtener el correo anterior, mostrar solo el nuevo email
-                    // pero intentar buscar una vez más en el perfil después de un breve delay
-                    console.warn('[CONFIRM EMAIL CHANGE] No se pudo obtener el correo anterior inmediatamente. Intentando búsqueda adicional...');
-                    // Establecer solo el nuevo email por ahora
-                    setEmailData({ newEmail: user.email });
-                    
-                    // Intentar una búsqueda adicional después de un breve delay
-                    // para ver si previous_email se actualiza o si hay otra forma de obtenerlo
-                    setTimeout(async () => {
-                      try {
-                        const { data: profileRetry } = await supabase
-                          .from('profiles')
-                          .select('email, previous_email')
-                          .eq('id', user.id)
-                          .single();
-                        
-                        if (profileRetry?.previous_email) {
-                          setEmailData({ oldEmail: profileRetry.previous_email, newEmail: user.email });
-                          console.log('[CONFIRM EMAIL CHANGE] ✅ Correo anterior encontrado en reintento:', profileRetry.previous_email);
-                        }
-                      } catch (retryError) {
-                        console.error('[CONFIRM EMAIL CHANGE] Error en reintento:', retryError);
-                      }
-                    }, 500);
-                  }
-                } catch (profileError) {
-                  console.error('[CONFIRM EMAIL CHANGE] Error obteniendo perfil:', profileError);
-                  // Intentar usar emails de los props como último recurso
-                  if (oldEmail && newEmail && oldEmail !== newEmail) {
-                    setEmailData({ oldEmail, newEmail });
-                  } else if (oldEmail && oldEmail !== user.email) {
-                    setEmailData({ oldEmail, newEmail: user.email });
-                  } else {
-                    // Si no hay forma de obtener el correo anterior, solo establecer el nuevo
-                    setEmailData({ newEmail: user.email });
-                  }
-                }
-              }
-            }
-          } else {
-          // ESTRATEGIA 4: No se pudo obtener usuario - verificar desde otras fuentes
-          console.log('[CONFIRM EMAIL CHANGE] No se pudo obtener usuario:', userError);
-          
-          if (!emailData) {
-            // Si verify_only=true, likely_completed=true o code_processed=true, NO mostrar error
-            // Priorizar verificación sobre error
-            if (verifyOnly || likelyCompleted || codeProcessed) {
-              console.log('[CONFIRM EMAIL CHANGE] verify_only/likely_completed/code_processed=true - NO mostrando error, verificando desde otras fuentes...');
-              setError(null); // Limpiar cualquier error previo
-              setConfirmed(true);
-              
-              // Si likely_completed=true o code_processed=true, asumir que el cambio se completó
-              if (likelyCompleted || codeProcessed) {
-                setCompleted(true);
-                setChangeCompleted(true);
-                console.log('[CONFIRM EMAIL CHANGE] ✅ likely_completed/code_processed=true - cambio completado (sin verificación de usuario)');
-              }
-            } else if (userError?.message?.includes('session') || userError?.message?.includes('JWT')) {
-              // Solo mostrar error si NO es verify_only/code_processed y realmente no hay forma de verificar
-              setError('No hay sesión activa. Si el cambio ya se completó, inicia sesión con tu nuevo correo para verificar. Si el cambio está pendiente, confirma ambos correos para completarlo.');
-            } else {
-              setError('No se pudo verificar el estado del cambio. Intenta iniciar sesión para verificar el estado.');
-            }
-          }
-        }
-        } catch (checkError) {
-          console.error('[CONFIRM EMAIL CHANGE] Error en verificación:', checkError);
-          // PRINCIPIO: Si verify_only=true, likely_completed=true o code_processed=true, NO mostrar error
-          // Solo mostrar error si realmente no hay forma de verificar y no es verify_only/code_processed
-          const urlParamsCheck = new URLSearchParams(globalThis.window?.location.search || '');
-          const verifyOnlyCheck = urlParamsCheck.get('verify_only') === 'true';
-          const likelyCompletedCheck = urlParamsCheck.get('likely_completed') === 'true';
-          const codeProcessedCheck = urlParamsCheck.get('code_processed') === 'true';
-          
-          if (verifyOnlyCheck || likelyCompletedCheck || codeProcessedCheck) {
-            // No establecer error - asumir que el cambio puede haberse completado
-            setError(null);
-            setConfirmed(true);
-            if (likelyCompletedCheck || codeProcessedCheck) {
-              setCompleted(true);
-              setChangeCompleted(true);
-              console.log('[CONFIRM EMAIL CHANGE] ✅ Error en verificación pero likely_completed/code_processed=true - asumiendo éxito');
-            }
-          } else if (!error && !emailData) {
-            // Solo establecer error si no es verify_only/code_processed
-            setError('Error al verificar el estado del cambio. Intenta iniciar sesión para verificar.');
-          }
-        } finally {
-          setIsCheckingStatus(false);
-          setIsValidating(false);
+          await supabase.auth.refreshSession();
+        } catch (error) {
+          console.error('[CONFIRM EMAIL CHANGE] Error refrescando sesión:', error);
         }
       };
       
-      checkStatus();
-    } else if (!shouldCheck) {
-      setIsValidating(false);
-    }
-  }, [error, emailData, isCheckingStatus, changeCompleted, hasCheckedStatus, isValidating, oldEmail, newEmail]);
-
-
-  // Refrescar sesión y limpiar previous_email cuando el cambio se completa
-  useEffect(() => {
-    if (changeCompleted && completed && !pending) {
-      const refreshSessionAndCleanup = async () => {
-        try {
-          const supabase = getSupabaseBrowserClient();
-          
-          // 1. Refrescar la sesión
-          const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-          
-          if (refreshError) {
-            console.log('[CONFIRM EMAIL CHANGE] No se pudo refrescar la sesión (puede que no haya sesión activa):', refreshError.message);
-          } else if (session) {
-            console.log('[CONFIRM EMAIL CHANGE] Sesión refrescada exitosamente, nuevo email:', session.user.email);
-            
-            // 2. Limpiar previous_email después de que el usuario vea la confirmación
-            // Esto es ético: solo guardamos el email anterior temporalmente para mostrar la confirmación
-            try {
-              const { error: cleanupError } = await supabase
-                .from('profiles')
-                .update({ previous_email: null })
-                .eq('id', session.user.id);
-              
-              if (cleanupError) {
-                console.warn('[CONFIRM EMAIL CHANGE] No se pudo limpiar previous_email:', cleanupError);
-              } else {
-                console.log('[CONFIRM EMAIL CHANGE] previous_email limpiado exitosamente (buena práctica de privacidad)');
-              }
-            } catch (error_) {
-              console.error('[CONFIRM EMAIL CHANGE] Error limpiando previous_email:', error_);
-            }
-            
-            // 3. Si estamos en una página de la app, refrescar también el router
-            if (globalThis.window?.location.pathname.startsWith('/app')) {
-              router.refresh();
-            }
-          }
-        } catch (error_) {
-          console.error('[CONFIRM EMAIL CHANGE] Error refrescando sesión:', error_);
-        }
-      };
-      
-      // Ejecutar después de un pequeño delay para asegurar que el usuario vea la confirmación
       const timer = setTimeout(() => {
-        void refreshSessionAndCleanup();
-      }, 2000); // 2 segundos después de mostrar la confirmación
+        void refreshSession();
+      }, 2000);
       
       return () => clearTimeout(timer);
     }
-  }, [changeCompleted, completed, pending, router]);
+  }, [completed, pending]);
 
-
-  // Verificar si viene verify_only para mostrar UI especial
-  const urlParamsForUI = new URLSearchParams(globalThis.window?.location.search || '');
-  const verifyOnlyForUI = urlParamsForUI.get('verify_only') === 'true';
-  const likelyCompletedForUI = urlParamsForUI.get('likely_completed') === 'true';
-
-  // Si est? verificando o validando, mostrar loading
-  if (isCheckingStatus || isValidating) {
+  if (isValidating) {
     return (
       <div className="space-y-4 text-center">
         <div className="flex justify-center">
           <Loader2 className="w-12 h-12 animate-spin text-[color:var(--accent)]" />
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-semibold">
-            {isCheckingStatus ? 'Verificando estado del cambio...' : 'Validando cambio de correo...'}
-          </h2>
+          <h2 className="text-xl font-semibold">Validando cambio de correo...</h2>
           <p className="text-sm text-[color:var(--muted-foreground)]">
-            {isCheckingStatus 
-              ? verifyOnlyForUI 
-                ? 'El enlace puede haber expirado, pero estamos verificando si el cambio se completó exitosamente...'
-                : 'Por favor espera mientras verificamos si el cambio se completó.'
-              : 'Por favor espera mientras verificamos tu solicitud.'
-            }
+            Por favor espera mientras verificamos tu solicitud.
           </p>
-          {verifyOnlyForUI && likelyCompletedForUI && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-              Es probable que el cambio ya se haya completado. Verificando en la base de datos...
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-  
-  // UI especial para verify_only cuando aún no se ha determinado el estado
-  if (verifyOnlyForUI && !changeCompleted && !emailData && !error && !isCheckingStatus) {
-    return (
-      <div className="space-y-4 text-center">
-        <div className="flex justify-center">
-          <Loader2 className="w-12 h-12 animate-spin text-blue-500" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400">
-            Verificando estado del cambio de correo
-          </h2>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            El enlace puede haber expirado, pero estamos verificando si el cambio se completó exitosamente en nuestro sistema.
-          </p>
-          {likelyCompletedForUI && (
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-medium">
-              Es muy probable que el cambio ya se haya completado. Verificando...
-            </p>
-          )}
         </div>
       </div>
     );
   }
 
-  // Si el cambio se complet? (verificado), mostrar ?xito incluso si hab?a error
-  if (changeCompleted && emailData) {
-    // Determinar si realmente está completado o pendiente
-    const isReallyCompleted = completed && !pending;
-    const hash = globalThis.window?.location.hash || '';
-    const hashHasError = hash.includes('error=');
-    
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
-          <div className="flex justify-center mb-4">
-            <CheckCircle2 className="w-16 h-16 text-green-500" />
-          </div>
-          <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
-            ✓ Cambio de correo completado
-          </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
-            {(() => {
-              // Solo mostrar "enlace expirado" si realmente hay error Y el cambio no está completado
-              if (initialError && hashHasError && !isReallyCompleted) {
-                return 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.';
-              } else if (isReallyCompleted) {
-                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
-              } else {
-                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
-              }
-            })()}
-          </p>
-          {(() => {
-            const shouldShowNextStep = !isReallyCompleted && (!initialError || (initialError && hashHasError && !isReallyCompleted));
-            if (shouldShowNextStep) {
-              return (
-                <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
-                  <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
-                    📧 Próximo paso:
-                  </p>
-                  <p className="text-xs text-green-700/90 dark:text-green-300/90">
-                    Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
-                  </p>
-                </div>
-              );
-            }
-            return null;
-          })()}
-          {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (
-            <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Mail className="w-5 h-5 text-[color:var(--muted-foreground)] mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                      Correo anterior:
-                    </p>
-                    <p className="text-sm font-medium text-[color:var(--foreground)] break-all">
-                      {emailData.oldEmail}
-                    </p>
-                  </div>
-                </div>
-                <div className="border-t border-[color:var(--border)] pt-3">
-                  <div className="flex items-start gap-3">
-                    <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                        Nuevo correo:
-                      </p>
-                      <p className="text-sm font-bold text-[color:var(--accent)] break-all">
-                        {emailData.newEmail}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : emailData?.newEmail ? (
-            // Si solo tenemos el nuevo email, mostrar solo ese
-            <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
-              <div className="flex items-start gap-3">
-                <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-[color:var(--muted-foreground)] mb-1">
-                    Nuevo correo:
-                  </p>
-                  <p className="text-sm font-bold text-[color:var(--accent)] break-all">
-                    {emailData.newEmail}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <div className="space-y-3">
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              Serás redirigido automáticamente a la página de inicio de sesión en unos segundos.
-            </p>
-            <div className="flex gap-3 justify-center pt-2">
-              <Link
-                href="/iniciar-sesion?email_changed=true"
-                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
-              >
-                Ir a iniciar sesión ahora
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Si hay error y no se completó, verificar si es verify_only o code_processed antes de mostrar error
-  // PRINCIPIO: Si verify_only=true o code_processed=true, NO mostrar error - solo verificar
-  const codeProcessedForUI = urlParamsForUI.get('code_processed') === 'true';
-  if (error && !changeCompleted && !verifyOnlyForUI && !codeProcessedForUI) {
-    const isExpiredError = error.includes('expirado') || error.includes('ya fue usado') || error.includes('inv?lido');
+  if (error) {
+    const isExpiredError = error.includes('expirado') || error.includes('ya fue usado') || error.includes('inválido') || error.includes('inv?lido');
     const isSessionError = error.includes('sesi?n') || error.includes('session') || error.includes('JWT');
     
     return (
@@ -959,7 +161,7 @@ export function ConfirmEmailChangeForm({
             <XCircle className="w-16 h-16 text-red-500" />
           </div>
           <h2 className="text-xl font-semibold text-red-600 dark:text-red-400 mb-2">
-            {isSessionError ? 'No hay sesi?n activa' : 'Error al confirmar el cambio'}
+            {isSessionError ? 'No hay sesión activa' : 'Error al confirmar el cambio'}
           </h2>
           <p className="text-sm text-red-600/90 dark:text-red-400/90 mb-4">
             {error}
@@ -968,133 +170,24 @@ export function ConfirmEmailChangeForm({
             {(isExpiredError || isSessionError) && (
               <div className="rounded-lg border border-amber-500/30 dark:border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/20 p-4 text-left">
                 <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-2">
-                  ?? ?Qu? hacer?
+                  ¿Qué hacer?
                 </p>
                 <ul className="text-xs text-amber-700/90 dark:text-amber-300/90 space-y-1 list-disc list-inside">
                   {isSessionError ? (
                     <>
-                      <li>El enlace puede haber expirado o ya fue usado, pero el cambio puede haberse completado.</li>
+                      <li>El enlace puede haber expirado o ya fue usado.</li>
                       <li>Intenta iniciar sesión con tu <strong>nuevo correo electrónico</strong> para verificar si el cambio se completó.</li>
-                      <li>Si no puedes iniciar sesión con el nuevo correo, intenta con el correo anterior.</li>
                       <li>Si el cambio está pendiente, confirma ambos correos (anterior y nuevo) para completarlo.</li>
                     </>
                   ) : (
                     <>
-                      <li>Si ya confirmaste el primer correo, el cambio puede estar parcialmente completado.</li>
-                      <li>El enlace puede haber expirado pero el cambio puede haberse completado de todas formas.</li>
+                      <li>El enlace puede haber expirado o ya fue usado.</li>
                       <li>Inicia sesión y verifica tu correo en Configuración → Perfil.</li>
                     </>
                   )}
                 </ul>
               </div>
             )}
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              {isSessionError 
-                ? 'Si el cambio ya se completó, inicia sesión con tu nuevo correo. Si está pendiente, confirma ambos correos para completarlo.'
-                : 'El enlace puede haber expirado o ya fue usado. Si necesitas cambiar tu correo, ve a la configuración de tu cuenta y solicita un nuevo cambio.'
-              }
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link
-                href="/iniciar-sesion"
-                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
-              >
-                Ir a iniciar sesi?n
-              </Link>
-              {isExpiredError && !isSessionError && (
-                <Link
-                  href="/app/settings"
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)] px-6 text-sm font-semibold text-[color:var(--foreground)] transition-transform hover:-translate-y-0.5"
-                >
-                  Ir a configuraci?n
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Si está confirmado pero likely_completed=true y no hay datos completos, mostrar mensaje informativo
-  const urlParamsForState = new URLSearchParams(globalThis.window?.location.search || '');
-  const likelyCompletedForState = urlParamsForState.get('likely_completed') === 'true';
-  const verifyOnlyForState = urlParamsForState.get('verify_only') === 'true';
-  
-  // Si likely_completed=true y changeCompleted=true (establecido en el useEffect), mostrar éxito
-  if (likelyCompletedForState && changeCompleted && !emailData) {
-    // Mostrar éxito aunque no tengamos los emails específicos
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
-          <div className="flex justify-center mb-4">
-            <CheckCircle2 className="w-16 h-16 text-green-500" />
-          </div>
-          <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
-            Cambio de correo completado
-          </h2>
-          <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
-            {(() => {
-              // Verificar si realmente está completado o pendiente
-              const isReallyCompleted = changeCompleted && completed && !pending;
-              if (isReallyCompleted) {
-                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
-              } else {
-                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
-              }
-            })()}
-          </p>
-          <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
-            <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
-              📧 Próximo paso:
-            </p>
-            <p className="text-xs text-green-700/90 dark:text-green-300/90">
-              Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
-            </p>
-          </div>
-          <div className="space-y-3">
-            <p className="text-xs text-[color:var(--muted-foreground)]">
-              Por favor, inicia sesión con tu nuevo correo electrónico para acceder a tu cuenta.
-            </p>
-            <div className="flex gap-3 justify-center pt-2">
-              <Link
-                href="/iniciar-sesion?email_changed=true"
-                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
-              >
-                Ir a iniciar sesión ahora
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  if (confirmed && likelyCompletedForState && !emailData && !error && !changeCompleted) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
-          <div className="flex justify-center mb-4">
-            <Mail className="w-16 h-16 text-blue-500" />
-          </div>
-          <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2">
-            Verificando cambio de correo
-          </h2>
-          <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-6">
-            El enlace puede haber expirado, pero es probable que el cambio de correo se haya completado exitosamente. 
-            Por favor, inicia sesión con tu nuevo correo electrónico para verificar.
-          </p>
-          <div className="space-y-3">
-            <div className="rounded-lg border border-amber-500/30 dark:border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/20 p-4 text-left">
-              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-2">
-                ¿Qué hacer?
-              </p>
-              <ul className="text-xs text-amber-700/90 dark:text-amber-300/90 space-y-1 list-disc list-inside">
-                <li>Intenta iniciar sesión con tu <strong>nuevo correo electrónico</strong> para verificar si el cambio se completó.</li>
-                <li>Si no puedes iniciar sesión con el nuevo correo, intenta con el correo anterior.</li>
-                <li>Una vez que inicies sesión, verifica tu correo en Configuración → Perfil.</li>
-              </ul>
-            </div>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link
                 href="/iniciar-sesion"
@@ -1109,9 +202,8 @@ export function ConfirmEmailChangeForm({
     );
   }
 
-  // Si está confirmado y hay datos, mostrar estado
   if (confirmed && emailData) {
-    // Si está pendiente, mostrar mensaje simplificado con instrucciones integradas
+    // Si está pendiente, mostrar mensaje de primer correo confirmado
     if (pending && !completed) {
       return (
         <div className="space-y-4">
@@ -1127,7 +219,6 @@ export function ConfirmEmailChangeForm({
               <strong>debes confirmar también el correo que se envió al otro correo electrónico</strong>.
             </p>
             
-            {/* Mostrar ambos correos */}
             {emailData.oldEmail && emailData.newEmail && emailData.oldEmail !== emailData.newEmail ? (
               <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
                 <div className="space-y-3">
@@ -1159,7 +250,6 @@ export function ConfirmEmailChangeForm({
               </div>
             ) : null}
 
-            {/* Instrucciones integradas del EmailChangeMessageHandler */}
             <div className="space-y-3">
               <div className="rounded-lg border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-4 text-left">
                 <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-2">
@@ -1174,12 +264,6 @@ export function ConfirmEmailChangeForm({
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Revisa tu bandeja de entrada del correo anterior</span>
               </div>
-              
-              {redirectCountdown !== null && redirectCountdown > 0 && (
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Serás redirigido automáticamente en {redirectCountdown} segundo{redirectCountdown !== 1 ? 's' : ''}...
-                </p>
-              )}
               
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                 {isUserLoggedIn ? (
@@ -1204,12 +288,7 @@ export function ConfirmEmailChangeForm({
       );
     }
 
-    // Si está completado, mostrar mensaje de éxito simplificado
-    // Determinar si realmente está completado o pendiente
-    const isReallyCompleted = completed && !pending;
-    const hash = globalThis.window?.location.hash || '';
-    const hashHasError = hash.includes('error=');
-    
+    // Si está completado, mostrar mensaje de éxito
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-6 text-center">
@@ -1220,35 +299,9 @@ export function ConfirmEmailChangeForm({
             ✓ Cambio de correo completado
           </h2>
           <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-4">
-            {(() => {
-              // Solo mostrar "enlace expirado" si realmente hay error Y el cambio no está completado
-              if (initialError && hashHasError && !isReallyCompleted) {
-                return 'Aunque el enlace expiró, el cambio de correo se completó exitosamente. Tu nuevo correo electrónico ya está activo.';
-              } else if (isReallyCompleted) {
-                return 'Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.';
-              } else {
-                return 'Has confirmado este correo correctamente. Para completar el cambio, debes confirmar también el enlace que se envió al otro correo electrónico.';
-              }
-            })()}
+            Cambio de correo completado exitosamente. Tu nuevo correo electrónico ya está activo.
           </p>
-          {(() => {
-            const shouldShowNextStep = !isReallyCompleted && (!initialError || (initialError && hashHasError && !isReallyCompleted));
-            if (shouldShowNextStep) {
-              return (
-                <div className="rounded-lg border border-green-500/30 dark:border-green-500/40 bg-green-500/10 dark:bg-green-500/20 p-4 mb-6 text-left">
-                  <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-2">
-                    📧 Próximo paso:
-                  </p>
-                  <p className="text-xs text-green-700/90 dark:text-green-300/90">
-                    Revisa tu bandeja de entrada del <strong>otro correo electrónico</strong> y haz clic en el enlace de confirmación que recibiste. Una vez que confirmes ambos correos, recibirás un correo final confirmando que el cambio se realizó correctamente.
-                  </p>
-                </div>
-              );
-            }
-            return null;
-          })()}
           
-          {/* Mostrar ambos correos si están disponibles */}
           {emailData?.oldEmail && emailData?.newEmail && emailData.oldEmail !== emailData.newEmail ? (
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
               <div className="space-y-3">
@@ -1279,7 +332,6 @@ export function ConfirmEmailChangeForm({
               </div>
             </div>
           ) : emailData?.newEmail ? (
-            // Si solo tenemos el nuevo email, mostrar solo ese
             <div className="bg-[color:var(--card)] border border-[color:var(--border)] rounded-xl p-4 mb-6 text-left">
               <div className="flex items-start gap-3">
                 <Mail className="w-5 h-5 text-[color:var(--accent)] mt-0.5 flex-shrink-0" />
@@ -1296,11 +348,6 @@ export function ConfirmEmailChangeForm({
           ) : null}
           
           <div className="space-y-3">
-            {redirectCountdown !== null && redirectCountdown > 0 && (
-              <p className="text-xs text-[color:var(--muted-foreground)]">
-                Serás redirigido automáticamente en {redirectCountdown} segundo{redirectCountdown !== 1 ? 's' : ''}...
-              </p>
-            )}
             <p className="text-xs text-[color:var(--muted-foreground)]">
               Ahora puedes iniciar sesión con tu nuevo correo electrónico{emailData?.newEmail ? `: ${emailData.newEmail}` : ''}
             </p>
@@ -1330,13 +377,13 @@ export function ConfirmEmailChangeForm({
   return (
     <div className="space-y-4 text-center">
       <p className="text-sm text-[color:var(--muted-foreground)]">
-        No se pudo procesar la confirmaci?n. Por favor, intenta nuevamente.
+        No se pudo procesar la confirmación. Por favor, intenta nuevamente.
       </p>
       <Link
         href="/iniciar-sesion"
         className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
       >
-        Ir a iniciar sesi?n
+        Ir a iniciar sesión
       </Link>
     </div>
   );

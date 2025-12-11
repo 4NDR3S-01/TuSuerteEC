@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Eye, EyeOff } from 'lucide-react';
-import { getSupabaseBrowserClient } from '../../lib/supabase/client';
+import { getSupabaseBrowserClient as getSupabaseClient } from '../../lib/supabase/client';
 import { useToast } from '../../hooks/use-toast';
 
 export function UpdatePasswordForm() {
@@ -22,126 +22,24 @@ export function UpdatePasswordForm() {
 
   useEffect(() => {
     const initialize = async () => {
-      // Timeout de seguridad para evitar quedarse en loading indefinidamente
-      const timeoutId = setTimeout(() => {
-        console.log('[UPDATE PASSWORD] Timeout - estableciendo isLoading=false');
-        setIsLoading(false);
-      }, 10000); // 10 segundos máximo
-
       try {
-        const client = getSupabaseBrowserClient();
+        const client = getSupabaseClient();
         setSupabase(client);
 
-        // PRIORIDAD 1: Verificar si ya hay una sesión establecida (el callback puede haberla establecido)
+        // Verificar si hay sesión establecida (el callback ya procesó el código en el servidor)
         const { data: sessionData, error: sessionError } = await client.auth.getSession();
-        if (!sessionError && sessionData?.session) {
-          console.log('[UPDATE PASSWORD] ✅ Sesión ya establecida - callback procesó el token');
-          clearTimeout(timeoutId);
-          setHasSession(true);
-          setIsLoading(false);
-          // Limpiar URL de parámetros
-          if (globalThis.window) {
-            const url = new URL(globalThis.window.location.href);
-            if (url.searchParams.has('token') || url.searchParams.has('code') || url.hash) {
-              globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-            }
-          }
-          return;
-        }
-
-        // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
-        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-        const token = urlParams.get('token');
-        const hash = globalThis.window?.location.hash || '';
         
-        // Intentar obtener token del hash también
-        let recoveryToken = token;
-        if (!recoveryToken && hash) {
-          const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-          recoveryToken = hashParams.get('code') || hashParams.get('token');
-        }
-
-        // Si hay token, procesar con exchangeCodeForSession
-        if (recoveryToken) {
-          console.log('[UPDATE PASSWORD] Procesando token con exchangeCodeForSession...');
-          try {
-            const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(recoveryToken);
-
-            if (!exchangeError && exchangeData?.session) {
-              console.log('[UPDATE PASSWORD] ✅ Token procesado exitosamente - sesión establecida');
-              clearTimeout(timeoutId);
-              setHasSession(true);
-              setIsLoading(false);
-              // Limpiar URL
-              if (globalThis.window) {
-                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-              }
-              return;
-            } else if (exchangeError) {
-              console.log('[UPDATE PASSWORD] Error procesando token:', exchangeError.message);
-              // Si el token expiró o ya fue usado, verificar si hay sesión establecida
-              // (puede que el callback del servidor ya la haya establecido)
-              const { data: retrySessionData } = await client.auth.getSession();
-              if (retrySessionData?.session) {
-                console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error - callback ya procesó');
-                clearTimeout(timeoutId);
-                setHasSession(true);
-                setIsLoading(false);
-                if (globalThis.window) {
-                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-                }
-                return;
-              }
-              // Si el token expiró o es inválido, mostrar mensaje informativo
-              console.log('[UPDATE PASSWORD] Token inválido o expirado - mostrando mensaje informativo');
-              clearTimeout(timeoutId);
-              setIsLoading(false);
-              setHasSession(false);
-              return;
-            }
-          } catch (error) {
-            console.error('[UPDATE PASSWORD] Error procesando token:', error);
-            // Intentar verificar sesión como último recurso
-            const { data: retrySessionData } = await client.auth.getSession();
-            if (retrySessionData?.session) {
-              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error');
-              clearTimeout(timeoutId);
-              setHasSession(true);
-              setIsLoading(false);
-              if (globalThis.window) {
-                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-              }
-              return;
-            }
-            // Si no hay sesión, mostrar mensaje informativo
-            console.log('[UPDATE PASSWORD] No se pudo procesar token ni encontrar sesión');
-            clearTimeout(timeoutId);
-            setIsLoading(false);
-            setHasSession(false);
-            return;
-          }
-        }
-
-        // Si no hay token, verificar una vez más si hay sesión
-        if (!recoveryToken) {
-          const { data: finalSessionData } = await client.auth.getSession();
-          const sessionEstablished = !!finalSessionData?.session;
-          clearTimeout(timeoutId);
-          setHasSession(sessionEstablished);
-          setIsLoading(false);
-          
-          if (sessionEstablished) {
-            console.log('[UPDATE PASSWORD] ✅ Sesión encontrada en verificación final');
-          }
+        if (!sessionError && sessionData?.session) {
+          console.log('[UPDATE PASSWORD] ✅ Sesión establecida - callback procesó el código');
+          setHasSession(true);
         } else {
-          // Si había token pero no se procesó correctamente, ya se estableció isLoading=false arriba
-          clearTimeout(timeoutId);
+          console.log('[UPDATE PASSWORD] No hay sesión activa');
           setHasSession(false);
         }
       } catch (error) {
-        console.error('[UPDATE PASSWORD] Error inicializando:', error);
-        clearTimeout(timeoutId);
+        console.error('[UPDATE PASSWORD] Error verificando sesión:', error);
         setHasSession(false);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -217,22 +115,20 @@ export function UpdatePasswordForm() {
   }
 
   if (!hasSession) {
-    const hash = globalThis.window?.location.hash || '';
-    const hashHasError = hash.includes('error=');
+    // Verificar si hay un error en la URL
+    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+    const error = urlParams.get('error');
     
     return (
       <div className="space-y-4 text-sm">
         <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
           <p className="font-medium text-blue-600 dark:text-blue-400 mb-2">
-            {hashHasError 
-              ? 'El enlace puede haber expirado'
-              : 'Enlace de recuperación procesado'
-            }
+            {error ? 'El enlace expiró o ya fue usado' : 'No hay sesión activa'}
           </p>
           <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-4">
-            {hashHasError
-              ? 'Aunque el enlace puede haber expirado, es posible que el proceso se haya completado. Por favor, intenta iniciar sesión con tu nueva contraseña si ya la estableciste.'
-              : 'El enlace de recuperación fue procesado. Si ya estableciste tu nueva contraseña, puedes iniciar sesión. Si no, solicita un nuevo enlace.'
+            {error
+              ? decodeURIComponent(error)
+              : 'Por favor, usa el enlace de recuperación que recibiste por correo. El enlace puede haber expirado o ya fue usado.'
             }
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
