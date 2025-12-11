@@ -273,18 +273,43 @@ export async function GET(request: NextRequest) {
           
           console.log('[AUTH CALLBACK] Cambio pendiente - oldEmail:', oldEmail, 'newEmail:', newEmail);
         } else {
-          // No hay new_email - el cambio puede estar completo o puede ser que se confirmรณ el correo anterior
-          // Intentar obtener informaciรณn del perfil para determinar el estado
+          // No hay new_email - el cambio está completo (ambos correos confirmados)
+          // El trigger sync_email_to_profiles_trigger debería haber sincronizado automáticamente
+          // pero verificamos y sincronizamos manualmente si es necesario
           const { data: profile } = await supabase
             .from('profiles')
             .select('email')
             .eq('id', userData.user.id)
             .single();
           
-          // Si el perfil tiene un email diferente al actual, puede ser que el cambio se completรณ
+          // Si hay desincronización, sincronizar manualmente
           if (profile?.email && profile.email !== userData.user.email) {
+            console.log('[AUTH CALLBACK] Detectada desincronización, sincronizando email...');
+            console.log('[AUTH CALLBACK] auth.users.email:', userData.user.email);
+            console.log('[AUTH CALLBACK] profiles.email:', profile.email);
+            
+            // Sincronizar usando la función RPC
+            try {
+              const { error: syncError } = await supabase.rpc('sync_user_email_to_profile', {
+                user_id_param: userData.user.id,
+              });
+              
+              if (syncError) {
+                console.error('[AUTH CALLBACK] Error sincronizando email:', syncError);
+                // Intentar actualización directa como fallback
+                await supabase
+                  .from('profiles')
+                  .update({ email: userData.user.email, updated_at: new Date().toISOString() })
+                  .eq('id', userData.user.id);
+              } else {
+                console.log('[AUTH CALLBACK] Email sincronizado exitosamente');
+              }
+            } catch (syncErr) {
+              console.error('[AUTH CALLBACK] Error en sincronización:', syncErr);
+            }
+            
             oldEmail = profile.email; // Email anterior del perfil
-            newEmail = userData.user.email; // Email actual (nuevo)
+            newEmail = userData.user.email; // Email actual (nuevo) de auth.users
             isPending = false;
             console.log('[AUTH CALLBACK] Cambio completado - oldEmail:', oldEmail, 'newEmail:', newEmail);
           } else {

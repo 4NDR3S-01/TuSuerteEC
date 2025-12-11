@@ -165,14 +165,24 @@ export function ProfileSettings({ user, profile }: any) {
       }
 
       // Actualizar perfil en la tabla profiles
-      // Incluimos el email siempre para mantener sincronización entre auth.users y profiles
+      // IMPORTANTE: NO actualizar el email aquí si se está cambiando el email
+      // El trigger sync_email_to_profiles_trigger se encargará de sincronizar
+      // el email de auth.users a profiles cuando Supabase complete el cambio
       const profileUpdateData: any = {
         full_name: formData.full_name.trim(),
         phone_number: formData.phone_number.trim() || null,
         address: formData.address.trim() || null,
-        email: formData.email.trim(), // Siempre actualizar email para mantener sincronización
+        // Solo actualizar email si NO se está cambiando el email
+        // Si se está cambiando, el trigger lo sincronizará cuando auth.users.email cambie
         updated_at: new Date().toISOString(),
       };
+
+      // Solo incluir email en la actualización si NO se está cambiando el email
+      // Si se está cambiando, esperamos a que Supabase complete el cambio en auth.users
+      // y el trigger sincronice automáticamente
+      if (!emailChanged) {
+        profileUpdateData.email = formData.email.trim();
+      }
 
       const { error: profileError } = await supabase
         .from('profiles')
