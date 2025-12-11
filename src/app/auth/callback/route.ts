@@ -155,20 +155,26 @@ export async function GET(request: NextRequest) {
                   .eq('id', userCheck.user.id)
                   .single();
                 
-                // Usar previous_email si está disponible
+                // Estrategia para obtener oldEmail:
+                // 1. Usar previous_email si está disponible (más confiable)
+                // 2. Si no hay previous_email pero el email del perfil es diferente, usar ese
+                // 3. Si no hay diferencia, no pasar oldEmail (la página de confirmación intentará obtenerlo)
                 if (profile?.previous_email) {
                   confirmUrl.searchParams.set('oldEmail', profile.previous_email);
                   confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                  console.log('[AUTH CALLBACK] Pasando emails en URL desde previous_email');
                 } else if (profile?.email && profile.email !== userCheck.user.email) {
                   confirmUrl.searchParams.set('oldEmail', profile.email);
                   confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                  console.log('[AUTH CALLBACK] Pasando emails en URL desde email del perfil');
                 } else {
-                  // Si no hay diferencia, usar el email actual como nuevo
+                  // Si no hay diferencia, al menos pasar el nuevo email
                   confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                  console.log('[AUTH CALLBACK] Solo pasando nuevo email en URL (no se encontró anterior)');
                 }
               } catch (profileError) {
                 console.error('[AUTH CALLBACK] Error obteniendo perfil:', profileError);
-                // Continuar sin los correos específicos
+                // Al menos pasar el nuevo email
                 confirmUrl.searchParams.set('newEmail', userCheck.user.email);
               }
               
@@ -353,11 +359,9 @@ export async function GET(request: NextRequest) {
             isPending = false;
             console.log('[AUTH CALLBACK] Cambio completado - usando previous_email:', oldEmail, 'newEmail:', newEmail);
             
-            // Limpiar previous_email después de usarlo
-            await supabase
-              .from('profiles')
-              .update({ previous_email: null })
-              .eq('id', userData.user.id);
+            // NO limpiar previous_email inmediatamente - dejarlo para que la página de confirmación pueda usarlo
+            // Se limpiará después de que el usuario vea la confirmación o después de un tiempo
+            // Esto asegura que siempre tengamos el correo anterior disponible
           } else if (profile?.email && profile.email !== userData.user.email) {
             // Si hay desincronización, sincronizar manualmente
             console.log('[AUTH CALLBACK] Detectada desincronización, sincronizando email...');
