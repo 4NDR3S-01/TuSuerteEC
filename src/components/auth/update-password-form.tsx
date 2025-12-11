@@ -22,6 +22,12 @@ export function UpdatePasswordForm() {
 
   useEffect(() => {
     const initialize = async () => {
+      // Timeout de seguridad para evitar quedarse en loading indefinidamente
+      const timeoutId = setTimeout(() => {
+        console.log('[UPDATE PASSWORD] Timeout - estableciendo isLoading=false');
+        setIsLoading(false);
+      }, 10000); // 10 segundos máximo
+
       try {
         const client = getSupabaseBrowserClient();
         setSupabase(client);
@@ -30,6 +36,7 @@ export function UpdatePasswordForm() {
         const { data: sessionData, error: sessionError } = await client.auth.getSession();
         if (!sessionError && sessionData?.session) {
           console.log('[UPDATE PASSWORD] ✅ Sesión ya establecida - callback procesó el token');
+          clearTimeout(timeoutId);
           setHasSession(true);
           setIsLoading(false);
           // Limpiar URL de parámetros
@@ -62,6 +69,7 @@ export function UpdatePasswordForm() {
 
             if (!exchangeError && exchangeData?.session) {
               console.log('[UPDATE PASSWORD] ✅ Token procesado exitosamente - sesión establecida');
+              clearTimeout(timeoutId);
               setHasSession(true);
               setIsLoading(false);
               // Limpiar URL
@@ -76,6 +84,7 @@ export function UpdatePasswordForm() {
               const { data: retrySessionData } = await client.auth.getSession();
               if (retrySessionData?.session) {
                 console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error - callback ya procesó');
+                clearTimeout(timeoutId);
                 setHasSession(true);
                 setIsLoading(false);
                 if (globalThis.window) {
@@ -85,6 +94,7 @@ export function UpdatePasswordForm() {
               }
               // Si el token expiró o es inválido, mostrar mensaje informativo
               console.log('[UPDATE PASSWORD] Token inválido o expirado - mostrando mensaje informativo');
+              clearTimeout(timeoutId);
               setIsLoading(false);
               setHasSession(false);
               return;
@@ -95,6 +105,7 @@ export function UpdatePasswordForm() {
             const { data: retrySessionData } = await client.auth.getSession();
             if (retrySessionData?.session) {
               console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error');
+              clearTimeout(timeoutId);
               setHasSession(true);
               setIsLoading(false);
               if (globalThis.window) {
@@ -104,6 +115,7 @@ export function UpdatePasswordForm() {
             }
             // Si no hay sesión, mostrar mensaje informativo
             console.log('[UPDATE PASSWORD] No se pudo procesar token ni encontrar sesión');
+            clearTimeout(timeoutId);
             setIsLoading(false);
             setHasSession(false);
             return;
@@ -114,6 +126,7 @@ export function UpdatePasswordForm() {
         if (!recoveryToken) {
           const { data: finalSessionData } = await client.auth.getSession();
           const sessionEstablished = !!finalSessionData?.session;
+          clearTimeout(timeoutId);
           setHasSession(sessionEstablished);
           setIsLoading(false);
           
@@ -122,12 +135,13 @@ export function UpdatePasswordForm() {
           }
         } else {
           // Si había token pero no se procesó correctamente, ya se estableció isLoading=false arriba
+          clearTimeout(timeoutId);
           setHasSession(false);
         }
       } catch (error) {
         console.error('[UPDATE PASSWORD] Error inicializando:', error);
+        clearTimeout(timeoutId);
         setHasSession(false);
-      } finally {
         setIsLoading(false);
       }
     };
