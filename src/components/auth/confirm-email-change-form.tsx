@@ -382,37 +382,57 @@ export function ConfirmEmailChangeForm({
                     .eq('id', user.id)
                     .single();
                   
-                  // Estrategia para obtener oldEmail y newEmail desde el perfil:
-                  // 1. Si hay previous_email, usarlo como oldEmail
+                  // Estrategia mejorada para obtener oldEmail y newEmail desde el perfil:
+                  // 1. PRIORIDAD: Si hay previous_email, usarlo como oldEmail (más confiable)
                   // 2. Si no hay previous_email pero el email del perfil es diferente al de auth, usar el del perfil como oldEmail
                   // 3. Si no hay diferencia, usar los emails de los props iniciales si están disponibles
-                  // 4. Solo como último recurso usar el mismo email
+                  // 4. Si no hay props, intentar usar los emails de la URL si están disponibles
+                  // 5. Solo como último recurso mostrar solo el nuevo email
                   if (profile?.previous_email) {
                     // Caso ideal: previous_email está disponible
                     setEmailData({ oldEmail: profile.previous_email, newEmail: user.email });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando previous_email del perfil');
+                    console.log('[CONFIRM EMAIL CHANGE] ✅ Usando previous_email del perfil:', profile.previous_email);
                   } else if (profile?.email && profile.email !== user.email) {
                     // El perfil tiene un email diferente (puede ser el anterior antes de sincronizar)
                     setEmailData({ oldEmail: profile.email, newEmail: user.email });
-                    console.log('[CONFIRM EMAIL CHANGE] Usando email del perfil como anterior');
+                    console.log('[CONFIRM EMAIL CHANGE] Usando email del perfil como anterior:', profile.email);
                   } else if (oldEmail && newEmail && oldEmail !== newEmail) {
                     // Usar los emails de los props iniciales si están disponibles
                     setEmailData({ oldEmail, newEmail });
                     console.log('[CONFIRM EMAIL CHANGE] Usando emails de los props iniciales');
+                  } else if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
+                    // Intentar usar los emails de la URL si están disponibles
+                    setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
+                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL como fallback');
+                  } else if (oldEmail && oldEmail !== user.email) {
+                    // Usar oldEmail de props con newEmail del usuario
+                    setEmailData({ oldEmail, newEmail: user.email });
+                    console.log('[CONFIRM EMAIL CHANGE] Usando oldEmail de props con newEmail del usuario');
                   } else {
-                    // Último recurso: si realmente no hay diferencia, intentar usar los props
-                    // pero solo si son diferentes
-                    if (oldEmail && oldEmail !== user.email) {
-                      setEmailData({ oldEmail, newEmail: user.email });
-                      console.log('[CONFIRM EMAIL CHANGE] Usando emails de los props');
-                    } else {
-                      // Si no hay forma de obtener el correo anterior y es diferente, 
-                      // no establecer emailData para que no se muestren los campos
-                      console.warn('[CONFIRM EMAIL CHANGE] No se pudo obtener el correo anterior. El cambio se completó pero no hay información del correo anterior disponible.');
-                      // Establecer solo el nuevo email para que se muestre el mensaje de éxito
-                      // pero sin los campos de correo anterior/nuevo
-                      setEmailData({ newEmail: user.email });
-                    }
+                    // Si no hay forma de obtener el correo anterior, mostrar solo el nuevo email
+                    // pero intentar buscar una vez más en el perfil después de un breve delay
+                    console.warn('[CONFIRM EMAIL CHANGE] No se pudo obtener el correo anterior inmediatamente. Intentando búsqueda adicional...');
+                    // Establecer solo el nuevo email por ahora
+                    setEmailData({ newEmail: user.email });
+                    
+                    // Intentar una búsqueda adicional después de un breve delay
+                    // para ver si previous_email se actualiza o si hay otra forma de obtenerlo
+                    setTimeout(async () => {
+                      try {
+                        const { data: profileRetry } = await supabase
+                          .from('profiles')
+                          .select('email, previous_email')
+                          .eq('id', user.id)
+                          .single();
+                        
+                        if (profileRetry?.previous_email) {
+                          setEmailData({ oldEmail: profileRetry.previous_email, newEmail: user.email });
+                          console.log('[CONFIRM EMAIL CHANGE] ✅ Correo anterior encontrado en reintento:', profileRetry.previous_email);
+                        }
+                      } catch (retryError) {
+                        console.error('[CONFIRM EMAIL CHANGE] Error en reintento:', retryError);
+                      }
+                    }, 500);
                   }
                 } catch (profileError) {
                   console.error('[CONFIRM EMAIL CHANGE] Error obteniendo perfil:', profileError);
@@ -668,7 +688,7 @@ export function ConfirmEmailChangeForm({
             <CheckCircle2 className="w-16 h-16 text-green-500" />
           </div>
           <h2 className="text-xl font-semibold text-green-600 dark:text-green-400 mb-2">
-            ? Cambio de correo completado
+            ✓ Cambio de correo completado
           </h2>
           <p className="text-sm text-green-600/90 dark:text-green-400/90 mb-6">
             {initialError 

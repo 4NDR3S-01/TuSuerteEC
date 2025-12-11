@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Si hay un error, redirigir apropiadamente segรบn el tipo de error
+  // PRINCIPIO: Para email_change, NUNCA mostrar error sin verificar primero el estado
   if (error) {
     const errorCode = requestUrl.searchParams.get('error_code');
     let errorMessage = errorDescription 
@@ -36,18 +37,32 @@ export async function GET(request: NextRequest) {
             new URL(`/recuperar?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
           );
         }
-        // Si era email_change, redirigir a settings
+        // Si era email_change, NO mostrar error - verificar estado primero
         if (type === 'email_change') {
-          return NextResponse.redirect(
-            new URL(`/iniciar-sesion?error=${encodeURIComponent('El enlace de cambio de correo ha expirado. Solicita uno nuevo desde la configuraciรณn.')}`, requestUrl.origin)
-          );
+          // Redirigir a página de confirmación con verify_only para verificar estado
+          const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+          confirmUrl.searchParams.set('verify_only', 'true');
+          confirmUrl.searchParams.set('check_status', 'true');
+          confirmUrl.searchParams.set('likely_completed', 'true');
+          console.log('[AUTH CALLBACK] Error de Supabase para email_change - verificando estado antes de mostrar error');
+          return NextResponse.redirect(confirmUrl);
         }
       }
     }
     
-    return NextResponse.redirect(
-      new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
-    );
+    // Para otros tipos de error que no sean email_change, redirigir normalmente
+    if (type !== 'email_change') {
+      return NextResponse.redirect(
+        new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
+      );
+    } else {
+      // Para email_change con otros errores, también verificar estado
+      const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+      confirmUrl.searchParams.set('verify_only', 'true');
+      confirmUrl.searchParams.set('check_status', 'true');
+      console.log('[AUTH CALLBACK] Error de Supabase para email_change - verificando estado');
+      return NextResponse.redirect(confirmUrl);
+    }
   }
 
   // Si hay un cรณdigo, intercambiarlo por una sesiรณn
@@ -423,12 +438,14 @@ export async function GET(request: NextRequest) {
             // Se limpiará después de que el usuario vea la confirmación o después de un tiempo
             // Esto asegura que siempre tengamos el correo anterior disponible
           } else if (profile?.email && profile.email !== userData.user.email) {
-            // Si hay desincronización, sincronizar manualmente
-            console.log('[AUTH CALLBACK] Detectada desincronización, sincronizando email...');
-            console.log('[AUTH CALLBACK] auth.users.email:', userData.user.email);
-            console.log('[AUTH CALLBACK] profiles.email:', profile.email);
+            // El perfil tiene un email diferente - puede ser el correo anterior antes de sincronizar
+            // Usar ese como oldEmail
+            oldEmail = profile.email;
+            newEmail = userData.user.email;
+            isPending = false;
+            console.log('[AUTH CALLBACK] Cambio completado - usando email del perfil como anterior:', oldEmail, 'newEmail:', newEmail);
             
-            // Sincronizar usando la función RPC
+            // Sincronizar el email del perfil con auth.users
             try {
               const { error: syncError } = await supabase.rpc('sync_user_email_to_profile', {
                 user_id_param: userData.user.id,
@@ -447,18 +464,18 @@ export async function GET(request: NextRequest) {
             } catch (error_) {
               console.error('[AUTH CALLBACK] Error en sincronización:', error_);
             }
-            
-            oldEmail = profile.email; // Email anterior del perfil
-            newEmail = userData.user.email; // Email actual (nuevo) de auth.users
-            isPending = false;
-            console.log('[AUTH CALLBACK] Cambio completado - oldEmail:', oldEmail, 'newEmail:', newEmail);
           } else {
-            // Si no hay diferencia y no hay previous_email, usar el email actual como nuevo
-            // Esto puede pasar si el cambio se completó antes de guardar previous_email
+            // No hay previous_email y el perfil está sincronizado o no existe
+            // Intentar obtener el correo anterior de otras fuentes
+            // Si no se puede determinar, al menos pasar el nuevo email
             newEmail = userData.user.email;
-            oldEmail = userData.user.email; // Fallback: usar el mismo email
+            // Si el perfil existe pero tiene un email diferente, usarlo como oldEmail
+            // Si no, dejar que la página de confirmación intente obtenerlo desde props o URL
+            oldEmail = profile?.email && profile.email !== userData.user.email 
+              ? profile.email 
+              : undefined; // No establecer oldEmail si no se puede determinar
             isPending = false;
-            console.log('[AUTH CALLBACK] Cambio completado - usando email actual (sin previous_email):', newEmail);
+            console.log('[AUTH CALLBACK] Cambio completado - nuevo email:', newEmail, 'oldEmail:', oldEmail || 'no disponible (se intentará obtener desde otras fuentes)');
           }
         }
         
@@ -470,8 +487,15 @@ export async function GET(request: NextRequest) {
         } else {
           confirmUrl.searchParams.set('completed', 'true');
         }
-        if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
-        if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
+        // SIEMPRE pasar oldEmail si está disponible, incluso si es undefined (la página lo manejará)
+        if (oldEmail) {
+          confirmUrl.searchParams.set('oldEmail', oldEmail);
+        }
+        if (newEmail) {
+          confirmUrl.searchParams.set('newEmail', newEmail);
+        }
+        // Si no hay oldEmail pero el cambio está completo, la página intentará obtenerlo desde previous_email
+        console.log('[AUTH CALLBACK] Redirigiendo con oldEmail:', oldEmail || 'no disponible', 'newEmail:', newEmail);
         
         return NextResponse.redirect(confirmUrl);
       
