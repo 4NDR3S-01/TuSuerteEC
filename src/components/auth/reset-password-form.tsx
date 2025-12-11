@@ -42,9 +42,11 @@ export function ResetPasswordForm() {
     setIsLoading(true);
 
     try {
-      // Para recovery, apuntar directamente a la página de restablecimiento
-      // Esto permite que Supabase maneje el hash automáticamente
-      const redirectTo = getEmailAuthRedirectUrl('/restablecer-clave');
+      // Para recovery, apuntar al callback que procesará el código
+      // El callback redirigirá a la página de restablecimiento con el código
+      const redirectTo = getEmailAuthRedirectUrl('/auth/callback', {
+        type: 'recovery',
+      });
 
       console.log('[RESET PASSWORD] Enviando email con redirectTo:', redirectTo);
 

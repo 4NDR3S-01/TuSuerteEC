@@ -10,15 +10,7 @@ export async function GET(request: NextRequest) {
   const error = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
 
-  // Log para debugging
-  console.log('[AUTH CALLBACK] Parámetros recibidos:', {
-    code: code ? 'presente' : 'ausente',
-    type,
-    error,
-    hasNext: !!next,
-  });
-
-  // Si hay un error, redirigir a la página correspondiente con el error
+  // Manejar errores
   if (error) {
     const errorMessage = errorDescription 
       ? decodeURIComponent(errorDescription.replaceAll('+', ' '))
@@ -27,106 +19,22 @@ export async function GET(request: NextRequest) {
     if (type === 'recovery') {
       const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
       resetUrl.searchParams.set('error', encodeURIComponent(errorMessage));
-      console.log('[AUTH CALLBACK] Error en recovery - redirigiendo con error');
       return NextResponse.redirect(resetUrl);
     }
     
     if (type === 'email_change') {
       const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
       confirmUrl.searchParams.set('error', encodeURIComponent(errorMessage));
-      console.log('[AUTH CALLBACK] Error en email_change - redirigiendo con error');
       return NextResponse.redirect(confirmUrl);
     }
     
-    // Para otros tipos, redirigir a login con error
     return NextResponse.redirect(
       new URL(`/iniciar-sesion?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
     );
   }
 
-  // Si hay un código, intentar procesarlo en el servidor primero
-  // Si falla por PKCE, pasarlo al cliente como fallback
+  // Si hay código, intentar procesarlo en el servidor
   if (code) {
-    if (type === 'recovery' || type === 'email_change') {
-      // Intentar procesar en el servidor primero
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-      if (supabaseUrl && supabaseAnonKey) {
-        try {
-          const cookieStore = await cookies();
-          const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-            cookies: {
-              getAll() {
-                return cookieStore.getAll();
-              },
-              setAll(cookiesToSet) {
-                try {
-                  for (const cookie of cookiesToSet) {
-                    const anyCookie: any = cookie;
-                    const name = anyCookie.name;
-                    const value = anyCookie.value;
-                    if (!name) continue;
-                    const opts = anyCookie.options ? { ...anyCookie.options } : { ...anyCookie };
-                    delete opts.name;
-                    delete opts.value;
-                    cookieStore.set({ name, value, ...opts });
-                  }
-                } catch {
-                  // Ignorar errores de escritura
-                }
-              },
-            },
-          });
-
-          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-          if (!exchangeError && exchangeData?.session) {
-            // Éxito: sesión establecida en el servidor
-            if (type === 'recovery') {
-              console.log('[AUTH CALLBACK] Recovery - sesión establecida en servidor');
-              return NextResponse.redirect(new URL('/restablecer-clave', requestUrl.origin));
-            }
-            if (type === 'email_change') {
-              console.log('[AUTH CALLBACK] Email change - sesión establecida en servidor');
-              return NextResponse.redirect(new URL('/confirmar-cambio-correo', requestUrl.origin));
-            }
-          } else if (exchangeError) {
-            // Error (probablemente PKCE): pasar al cliente como fallback
-            console.log('[AUTH CALLBACK] Error en servidor, pasando código al cliente:', exchangeError.message);
-          }
-        } catch (error) {
-          console.log('[AUTH CALLBACK] Excepción en servidor, pasando código al cliente:', error);
-        }
-      }
-
-      // Fallback: para recovery, Supabase puede redirigir directamente con el hash
-      // En lugar de pasar el código como token, redirigir directamente y dejar que el cliente lea el hash
-      if (type === 'recovery') {
-        // Si el código parece ser un UUID (recovery token), redirigir directamente
-        // El cliente leerá el hash si Supabase lo envía ahí
-        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
-        // Solo pasar el token si no es un UUID (los UUIDs no funcionan con exchangeCodeForSession)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
-        if (!isUUID) {
-          resetUrl.searchParams.set('token', code);
-        }
-        console.log('[AUTH CALLBACK] Recovery - redirigiendo (código será procesado desde hash si está disponible)');
-        return NextResponse.redirect(resetUrl);
-      }
-      
-      if (type === 'email_change') {
-        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
-        if (!isUUID) {
-          confirmUrl.searchParams.set('token', code);
-        }
-        console.log('[AUTH CALLBACK] Email change - redirigiendo (código será procesado desde hash si está disponible)');
-        return NextResponse.redirect(confirmUrl);
-      }
-    }
-    
-    // Para signup y otros tipos, procesar código en servidor (estos flujos tienen PKCE)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -136,49 +44,83 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            for (const cookie of cookiesToSet) {
-              const anyCookie: any = cookie;
-              const name = anyCookie.name;
-              const value = anyCookie.value;
-              if (!name) continue;
-              const opts = anyCookie.options ? { ...anyCookie.options } : { ...anyCookie };
-              delete opts.name;
-              delete opts.value;
-              cookieStore.set({ name, value, ...opts });
+    try {
+      const cookieStore = await cookies();
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              for (const cookie of cookiesToSet) {
+                const anyCookie: any = cookie;
+                const name = anyCookie.name;
+                const value = anyCookie.value;
+                if (!name) continue;
+                const opts = anyCookie.options ? { ...anyCookie.options } : { ...anyCookie };
+                delete opts.name;
+                delete opts.value;
+                cookieStore.set({ name, value, ...opts });
+              }
+            } catch {
+              // Ignorar errores de escritura de cookies
             }
-          } catch {
-            // Ignorar errores de escritura
-          }
+          },
         },
-      },
-    });
+      });
 
-    // Procesar el código en el servidor para establecer la sesión
-    const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      // Intentar intercambiar el código por una sesión
+      // Esto funciona para códigos PKCE (OAuth, signup, etc.)
+      const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (exchangeError) {
-      console.error('[AUTH CALLBACK] Error exchanging code:', exchangeError.message);
-      return NextResponse.redirect(
-        new URL(`/iniciar-sesion?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin)
-      );
-    }
+      if (!exchangeError && exchangeData?.session) {
+        // Éxito: sesión establecida
+        if (type === 'recovery') {
+          return NextResponse.redirect(new URL('/restablecer-clave', requestUrl.origin));
+        }
+        if (type === 'email_change') {
+          return NextResponse.redirect(new URL('/confirmar-cambio-correo', requestUrl.origin));
+        }
+        if (type === 'signup') {
+          return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
+        }
+        return NextResponse.redirect(new URL(next, requestUrl.origin));
+      }
 
-    if (exchangeData.session) {
-      // Para signup, redirigir a confirmar-registro
-      if (type === 'signup') {
-        return NextResponse.redirect(new URL('/confirmar-registro?confirmed=true', requestUrl.origin));
+      // Si falla (puede ser un token UUID de recovery), pasar al cliente
+      // El cliente manejará el token directamente con la API de Supabase
+      if (type === 'recovery') {
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('code', code);
+        return NextResponse.redirect(resetUrl);
       }
       
-      // Redirigir según el next o a la app
-      return NextResponse.redirect(new URL(next, requestUrl.origin));
+      if (type === 'email_change') {
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('code', code);
+        return NextResponse.redirect(confirmUrl);
+      }
+
+      // Para otros tipos, si falla, redirigir con error
+      if (exchangeError) {
+        return NextResponse.redirect(
+          new URL(`/iniciar-sesion?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin)
+        );
+      }
+    } catch (error) {
+      // Si hay excepción, pasar el código al cliente como fallback
+      if (type === 'recovery') {
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('code', code);
+        return NextResponse.redirect(resetUrl);
+      }
+      
+      if (type === 'email_change') {
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('code', code);
+        return NextResponse.redirect(confirmUrl);
+      }
     }
   }
 
