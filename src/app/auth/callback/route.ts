@@ -96,38 +96,69 @@ export async function GET(request: NextRequest) {
         type,
       });
       
-      // Para email_change, verificar si el cambio ya se completó antes de mostrar error
+      // Para email_change, SIEMPRE verificar si el cambio ya se completó antes de mostrar error
       if (type === 'email_change') {
         try {
+          console.log('[AUTH CALLBACK] Verificando estado del cambio de email después del error');
+          
           // Intentar obtener el usuario para verificar el estado del cambio
+          // Usar un cliente temporal para verificar sin depender de la sesión
           const { data: userCheck, error: userCheckError } = await supabase.auth.getUser();
           
+          console.log('[AUTH CALLBACK] Resultado de getUser:', {
+            hasUser: !!userCheck?.user,
+            error: userCheckError?.message,
+            email: userCheck?.user?.email,
+            new_email: userCheck?.user?.new_email,
+          });
+          
           if (!userCheckError && userCheck?.user) {
-            // Si no hay new_email, el cambio ya se completó
+            // Si no hay new_email, el cambio ya se completó (ambos correos confirmados)
             if (!userCheck.user.new_email) {
-              console.log('[AUTH CALLBACK] Cambio de email ya completado, redirigiendo a confirmación exitosa');
+              console.log('[AUTH CALLBACK] ✅ Cambio de email ya completado, redirigiendo a confirmación exitosa');
+              
               const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
               confirmUrl.searchParams.set('confirmed', 'true');
               confirmUrl.searchParams.set('completed', 'true');
-              // Intentar obtener los correos del perfil
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('email')
-                .eq('id', userCheck.user.id)
-                .single();
               
-              if (profile?.email && profile.email !== userCheck.user.email) {
-                confirmUrl.searchParams.set('oldEmail', profile.email);
-                confirmUrl.searchParams.set('newEmail', userCheck.user.email);
-              } else {
+              // Intentar obtener los correos del perfil para mostrar ambos
+              try {
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('email')
+                  .eq('id', userCheck.user.id)
+                  .single();
+                
+                if (profile?.email && profile.email !== userCheck.user.email) {
+                  confirmUrl.searchParams.set('oldEmail', profile.email);
+                  confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                } else {
+                  // Si no hay diferencia, usar el email actual como nuevo
+                  confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                }
+              } catch (profileError) {
+                console.error('[AUTH CALLBACK] Error obteniendo perfil:', profileError);
+                // Continuar sin los correos específicos
                 confirmUrl.searchParams.set('newEmail', userCheck.user.email);
               }
               
               return NextResponse.redirect(confirmUrl);
+            } else {
+              // Hay new_email, el cambio está pendiente
+              console.log('[AUTH CALLBACK] Cambio pendiente - falta confirmar un correo');
+              const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+              confirmUrl.searchParams.set('confirmed', 'true');
+              confirmUrl.searchParams.set('pending', 'true');
+              confirmUrl.searchParams.set('oldEmail', userCheck.user.email);
+              confirmUrl.searchParams.set('newEmail', userCheck.user.new_email);
+              return NextResponse.redirect(confirmUrl);
             }
+          } else {
+            console.log('[AUTH CALLBACK] No se pudo obtener usuario, continuando con error normal');
           }
         } catch (checkError) {
           console.error('[AUTH CALLBACK] Error verificando estado del cambio:', checkError);
+          // Continuar con el flujo de error normal
         }
       }
       
@@ -141,9 +172,9 @@ export async function GET(request: NextRequest) {
         if (type === 'recovery') {
           redirectPath = '/recuperar?error=expired';
         }
-        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error y opciรณn de reenviar
+        // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
         if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuraciรณn de tu cuenta.');
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace ha expirado. Verificando si el cambio se completó...');
         }
       } else if (exchangeError.message.includes('token')) {
         errorMessage = 'El enlace no es vรกlido. Solicita uno nuevo.';
@@ -152,7 +183,7 @@ export async function GET(request: NextRequest) {
         }
         // Si es email_change, redirigir a confirmar-cambio-correo con mensaje de error
         if (type === 'email_change') {
-          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es vรกlido. Si ya confirmaste el primer correo, puedes solicitar un nuevo cambio desde la configuraciรณn de tu cuenta.');
+          redirectPath = '/confirmar-cambio-correo?error=' + encodeURIComponent('El enlace no es vรกlido. Verificando si el cambio se completó...');
         }
       }
       
