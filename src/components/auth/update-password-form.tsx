@@ -26,7 +26,23 @@ export function UpdatePasswordForm() {
         const client = getSupabaseBrowserClient();
         setSupabase(client);
 
-        // Obtener token de la URL
+        // PRIORIDAD 1: Verificar si ya hay una sesión establecida (el callback puede haberla establecido)
+        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        if (!sessionError && sessionData?.session) {
+          console.log('[UPDATE PASSWORD] ✅ Sesión ya establecida - callback procesó el token');
+          setHasSession(true);
+          setIsLoading(false);
+          // Limpiar URL de parámetros
+          if (globalThis.window) {
+            const url = new URL(globalThis.window.location.href);
+            if (url.searchParams.has('token') || url.searchParams.has('code') || url.hash) {
+              globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+            }
+          }
+          return;
+        }
+
+        // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
         const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
         const token = urlParams.get('token');
         const hash = globalThis.window?.location.hash || '';
@@ -38,7 +54,7 @@ export function UpdatePasswordForm() {
           recoveryToken = hashParams.get('code') || hashParams.get('token');
         }
 
-        // Si hay token, procesar con exchangeCodeForSession (método simple y directo)
+        // Si hay token, procesar con exchangeCodeForSession
         if (recoveryToken) {
           console.log('[UPDATE PASSWORD] Procesando token con exchangeCodeForSession...');
           try {
@@ -55,8 +71,20 @@ export function UpdatePasswordForm() {
               return;
             } else if (exchangeError) {
               console.log('[UPDATE PASSWORD] Error procesando token:', exchangeError.message);
-              // Si el token expiró, mostrar mensaje informativo
-              if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid')) {
+              // Si el token expiró o ya fue usado, verificar si hay sesión establecida
+              // (puede que el callback del servidor ya la haya establecido)
+              const { data: retrySessionData } = await client.auth.getSession();
+              if (retrySessionData?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error - callback ya procesó');
+                setHasSession(true);
+                setIsLoading(false);
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+                }
+                return;
+              }
+              // Si el token expiró y no hay sesión, mostrar mensaje informativo
+              if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid') || exchangeError.message.includes('already been used')) {
                 setIsLoading(false);
                 setHasSession(false);
                 return;
@@ -64,24 +92,31 @@ export function UpdatePasswordForm() {
             }
           } catch (error) {
             console.error('[UPDATE PASSWORD] Error procesando token:', error);
+            // Intentar verificar sesión como último recurso
+            const { data: retrySessionData } = await client.auth.getSession();
+            if (retrySessionData?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error');
+              setHasSession(true);
+              setIsLoading(false);
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+              return;
+            }
           }
         }
 
-        // Verificar si hay una sesión válida
-        const { data: sessionData, error: sessionError } = await client.auth.getSession();
-        if (sessionError && !recoveryToken) {
-          throw sessionError;
-        }
-
-        const sessionEstablished = !!sessionData.session;
-        setHasSession(sessionEstablished);
-
-        // Limpiar la URL de parámetros si hay
-        if (globalThis.window && sessionEstablished) {
-          const url = new URL(globalThis.window.location.href);
-          if (url.searchParams.has('token') || url.searchParams.has('code') || url.hash) {
-            globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+        // Si no hay token ni sesión, verificar una vez más por si acaso
+        if (!recoveryToken) {
+          const { data: finalSessionData } = await client.auth.getSession();
+          const sessionEstablished = !!finalSessionData?.session;
+          setHasSession(sessionEstablished);
+          
+          if (sessionEstablished) {
+            console.log('[UPDATE PASSWORD] ✅ Sesión encontrada en verificación final');
           }
+        } else {
+          setHasSession(false);
         }
       } catch (error) {
         console.error('[UPDATE PASSWORD] Error inicializando:', error);
