@@ -39,26 +39,34 @@ export function UpdatePasswordForm() {
         const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
         const hash = globalThis.window?.location.hash || '';
         let token = urlParams.get('token');
+        let codeFromHash = null;
         
-        // También verificar el hash por si Supabase envía el código ahí
-        if (!token && hash) {
+        // También verificar el hash por si Supabase envía el código ahí directamente
+        if (hash) {
           const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-          token = hashParams.get('code') || hashParams.get('token');
+          codeFromHash = hashParams.get('code') || hashParams.get('access_token') || hashParams.get('token');
         }
         
-        console.log('[UPDATE PASSWORD] Verificando token:', {
+        // Priorizar el código del hash si existe (Supabase a veces envía el código ahí)
+        const codeToProcess = codeFromHash || token;
+        
+        console.log('[UPDATE PASSWORD] Verificando código/token:', {
           hasToken: !!token,
+          hasCodeFromHash: !!codeFromHash,
+          codeToProcess: !!codeToProcess,
           tokenLength: token?.length,
+          codeLength: codeFromHash?.length,
           hasHash: !!hash,
           urlSearch: globalThis.window?.location.search,
+          urlHash: hash.substring(0, 100), // Primeros 100 caracteres del hash para debugging
         });
         
-        if (token) {
+        if (codeToProcess) {
           console.log('[UPDATE PASSWORD] Procesando código de recovery...');
           try {
             // El código de recovery de Supabase debe procesarse con exchangeCodeForSession
             // En el cliente, esto funciona sin requerir PKCE
-            const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(token);
+            const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(codeToProcess);
 
             if (!exchangeError && exchangeData?.session) {
               console.log('[UPDATE PASSWORD] ✅ Código procesado exitosamente - sesión establecida');
@@ -69,20 +77,45 @@ export function UpdatePasswordForm() {
               }
             } else if (exchangeError) {
               console.error('[UPDATE PASSWORD] Error procesando código:', exchangeError.message);
-              // Mostrar el error específico para ayudar con debugging
               console.error('[UPDATE PASSWORD] Detalles del error:', {
                 message: exchangeError.message,
                 status: exchangeError.status,
+                code: codeToProcess?.substring(0, 20) + '...', // Primeros 20 caracteres para debugging
               });
-              setHasSession(false);
+              
+              // Siempre verificar si hay una sesión establecida después del error
+              // A veces Supabase establece la sesión aunque haya un error en el intercambio
+              console.log('[UPDATE PASSWORD] Verificando si hay sesión establecida después del error...');
+              const { data: retrySession, error: retryError } = await client.auth.getSession();
+              
+              if (!retryError && retrySession?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después del error - Supabase la estableció de todas formas');
+                setHasSession(true);
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+                }
+              } else {
+                console.log('[UPDATE PASSWORD] No hay sesión establecida después del error');
+                setHasSession(false);
+              }
             }
           } catch (error) {
             console.error('[UPDATE PASSWORD] Error procesando código:', error);
-            setHasSession(false);
+            // Verificar sesión como último recurso
+            const { data: retrySession } = await client.auth.getSession();
+            if (retrySession?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Sesión encontrada después de excepción');
+              setHasSession(true);
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+            } else {
+              setHasSession(false);
+            }
           }
         } else {
           // No hay token ni sesión
-          console.log('[UPDATE PASSWORD] No se encontró token en la URL ni en el hash');
+          console.log('[UPDATE PASSWORD] No se encontró código/token en la URL ni en el hash');
           setHasSession(false);
         }
       } catch (error) {
