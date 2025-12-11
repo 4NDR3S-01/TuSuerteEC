@@ -181,14 +181,38 @@ export async function GET(request: NextRequest) {
               confirmUrl.searchParams.set('pending', 'true');
               confirmUrl.searchParams.set('oldEmail', userCheck.user.email);
               confirmUrl.searchParams.set('newEmail', userCheck.user.new_email);
-              confirmUrl.searchParams.set('error', encodeURIComponent('El enlace puede haber expirado, pero el cambio aún está pendiente. Revisa ambos correos para completar la confirmación.'));
+              
+              // Mensaje más claro según el tipo de error
+              let pendingMessage = 'El cambio de correo está pendiente. Debes confirmar ambos correos (anterior y nuevo) para completarlo.';
+              if (exchangeError?.message?.includes('expired') || exchangeError?.message?.includes('already been used')) {
+                pendingMessage = 'El enlace puede haber expirado o ya fue usado, pero el cambio aún está pendiente. Revisa ambos correos (anterior y nuevo) para completar la confirmación.';
+              } else if (exchangeError?.message?.includes('invalid') || exchangeError?.message?.includes('token')) {
+                pendingMessage = 'El enlace no es válido, pero el cambio aún está pendiente. Revisa ambos correos para completar la confirmación.';
+              }
+              
+              confirmUrl.searchParams.set('error', encodeURIComponent(pendingMessage));
               return NextResponse.redirect(confirmUrl);
             }
           } else {
             console.log('[AUTH CALLBACK] No se pudo obtener usuario después del error');
-            // Redirigir a página de confirmación que verificará el estado
+            // Intentar verificar desde la base de datos usando el código del token
+            // Aunque no podamos obtener el usuario directamente, podemos intentar verificar
+            // si el cambio se completó consultando la tabla profiles
+            // Nota: No podemos extraer el user_id del código directamente, pero podemos
+            // redirigir a la página de confirmación que intentará verificar desde el perfil
             const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-            confirmUrl.searchParams.set('error', encodeURIComponent('No se pudo verificar el estado. El enlace puede haber expirado o ya fue usado. Verificando si el cambio se completó...'));
+            
+            // Determinar el tipo de error para mostrar un mensaje más específico
+            let errorMessage = 'No se pudo verificar el estado del cambio.';
+            if (exchangeError?.message?.includes('expired') || exchangeError?.message?.includes('already been used')) {
+              errorMessage = 'El enlace ha expirado o ya fue usado. Verificando si el cambio se completó...';
+            } else if (exchangeError?.message?.includes('invalid') || exchangeError?.message?.includes('token')) {
+              errorMessage = 'El enlace no es válido. Verificando si el cambio se completó...';
+            } else {
+              errorMessage = 'No se pudo verificar el estado. El cambio puede haberse completado. Verificando...';
+            }
+            
+            confirmUrl.searchParams.set('error', encodeURIComponent(errorMessage));
             confirmUrl.searchParams.set('check_status', 'true');
             return NextResponse.redirect(confirmUrl);
           }

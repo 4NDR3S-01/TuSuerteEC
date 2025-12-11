@@ -59,9 +59,12 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
   const { isCollapsed, setIsCollapsed } = useSidebar();
   const { mode, setMode } = useTheme();
 
+  // Estado local para el email (se actualiza automáticamente cuando cambia)
+  const [currentEmail, setCurrentEmail] = useState<string | undefined>(user.email);
+  
   // Obtener full_name desde user_metadata de Supabase
   const fullName = (user as any)?.user_metadata?.full_name || user.fullName;
-  const userEmail = user.email;
+  const userEmail = currentEmail || user.email;
 
   // Obtener iniciales del usuario
   const getUserInitials = () => {
@@ -129,6 +132,67 @@ export function AppSidebar({ user, subscription, onSignOut, isProcessing }: Read
       void channel.unsubscribe();
     };
   }, [user?.id]);
+
+  // Escuchar cambios de autenticación para actualizar el email automáticamente
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const supabase = getSupabaseBrowserClient();
+    
+    // Suscribirse a cambios de autenticación
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[APP SIDEBAR] Auth state change:', event, session?.user?.email);
+      
+      // Cuando el usuario se actualiza (incluyendo cambio de email)
+      if (event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+        if (session?.user?.email) {
+          setCurrentEmail(session.user.email);
+          console.log('[APP SIDEBAR] Email actualizado a:', session.user.email);
+        }
+      }
+      
+      // También refrescar cuando hay sesión
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        setCurrentEmail(session.user.email);
+      }
+    });
+
+    // También escuchar cambios en la tabla profiles para detectar actualizaciones del email
+    const profileChannel = supabase
+      .channel('profile-email-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('[APP SIDEBAR] Profile actualizado:', payload);
+          // Si el email cambió en el perfil, actualizar el estado local
+          if (payload.new?.email && payload.new.email !== currentEmail) {
+            setCurrentEmail(payload.new.email as string);
+            console.log('[APP SIDEBAR] Email actualizado desde perfil:', payload.new.email);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      authSubscription.unsubscribe();
+      void profileChannel.unsubscribe();
+    };
+  }, [user?.id, currentEmail]);
+
+  // Sincronizar el email inicial cuando cambia el prop user
+  useEffect(() => {
+    if (user?.email && user.email !== currentEmail) {
+      setCurrentEmail(user.email);
+    }
+  }, [user?.email]);
 
   const toggleTheme = () => {
     setMode(mode === 'light' ? 'dark' : 'light');

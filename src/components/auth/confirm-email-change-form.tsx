@@ -94,53 +94,78 @@ export function ConfirmEmailChangeForm({
           user = authUser;
           userError = authError;
           
-          // Si no hay usuario pero hay error de sesi?n, intentar verificar desde el perfil
-          // usando el email de la URL si est? disponible
+          // Si no hay usuario pero hay error de sesión, intentar verificar desde el perfil
+          // usando el email de la URL si está disponible
           if (userError && (userError.message.includes('session') || userError.message.includes('JWT'))) {
-            console.log('[CONFIRM EMAIL CHANGE] No hay sesi?n, intentando verificar desde perfil...');
+            console.log('[CONFIRM EMAIL CHANGE] No hay sesión, intentando verificar desde perfil...');
             
-            // Si tenemos emails en la URL, podemos intentar verificar desde el perfil
+            // Obtener emails de la URL
             const urlOldEmail = urlParams.get('oldEmail');
             const urlNewEmail = urlParams.get('newEmail');
             
+            // Intentar buscar el perfil por email si tenemos al menos uno
             if (urlOldEmail || urlNewEmail) {
-              // Intentar buscar el perfil por email
               try {
                 const emailToCheck = urlNewEmail || urlOldEmail;
-                const { data: profileByEmail } = await supabase
+                console.log('[CONFIRM EMAIL CHANGE] Buscando perfil con email:', emailToCheck);
+                
+                const { data: profileByEmail, error: profileSearchError } = await supabase
                   .from('profiles')
                   .select('id, email, previous_email')
                   .or(`email.eq.${emailToCheck},previous_email.eq.${emailToCheck}`)
                   .single();
                 
-                if (profileByEmail) {
+                if (profileSearchError) {
+                  console.error('[CONFIRM EMAIL CHANGE] Error buscando perfil:', profileSearchError);
+                } else if (profileByEmail) {
                   console.log('[CONFIRM EMAIL CHANGE] Perfil encontrado:', {
                     email: profileByEmail.email,
                     previous_email: profileByEmail.previous_email,
                   });
                   
-                  // Si el perfil tiene previous_email, significa que el cambio está en proceso
-                  // Si no tiene previous_email y el email coincide con el nuevo, el cambio puede estar completo
+                  // Lógica mejorada para determinar el estado del cambio:
+                  // 1. Si hay previous_email, el cambio está pendiente
+                  // 2. Si no hay previous_email y tenemos emails en la URL, verificar si coinciden
+                  // 3. Si el email del perfil coincide con urlNewEmail, el cambio está completo
                   if (profileByEmail.previous_email) {
-                    // Cambio pendiente
+                    // Cambio pendiente: hay previous_email guardado
+                    const newEmail = profileByEmail.email || urlNewEmail || '';
                     setEmailData({ 
                       oldEmail: profileByEmail.previous_email, 
-                      newEmail: profileByEmail.email || urlNewEmail || '' 
+                      newEmail: newEmail
                     });
                     setConfirmed(true);
                     setPending(true);
                     setError(null);
+                    console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente detectado desde perfil');
                   } else if (urlNewEmail && profileByEmail.email === urlNewEmail) {
-                    // Cambio puede estar completo
-                    console.log('[CONFIRM EMAIL CHANGE] El perfil tiene el nuevo email, cambio puede estar completo');
+                    // Cambio completo: el perfil tiene el nuevo email y coincide con la URL
+                    const oldEmail = urlOldEmail || profileByEmail.previous_email || emailToCheck;
                     setEmailData({ 
-                      oldEmail: urlOldEmail || profileByEmail.email, 
+                      oldEmail: oldEmail, 
                       newEmail: urlNewEmail 
                     });
                     setConfirmed(true);
                     setCompleted(true);
                     setChangeCompleted(true);
                     setError(null);
+                    console.log('[CONFIRM EMAIL CHANGE] Cambio completo detectado desde perfil');
+                  } else if (urlOldEmail && urlNewEmail) {
+                    // Tenemos ambos emails en la URL, usar esos
+                    setEmailData({ 
+                      oldEmail: urlOldEmail, 
+                      newEmail: urlNewEmail 
+                    });
+                    setConfirmed(true);
+                    // Si el perfil tiene el nuevo email, está completo, si no, está pendiente
+                    if (profileByEmail.email === urlNewEmail) {
+                      setCompleted(true);
+                      setChangeCompleted(true);
+                    } else {
+                      setPending(true);
+                    }
+                    setError(null);
+                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL con verificación de perfil');
                   }
                   
                   setIsCheckingStatus(false);
@@ -149,7 +174,11 @@ export function ConfirmEmailChangeForm({
                 }
               } catch (profileSearchError) {
                 console.error('[CONFIRM EMAIL CHANGE] Error buscando perfil:', profileSearchError);
+                // Continuar con el flujo normal si no se puede buscar el perfil
               }
+            } else {
+              // No hay emails en la URL, no podemos verificar sin sesión
+              console.log('[CONFIRM EMAIL CHANGE] No hay emails en la URL y no hay sesión, no se puede verificar');
             }
           }
           
@@ -161,9 +190,22 @@ export function ConfirmEmailChangeForm({
           });
           
           if (!userError && user) {
-            // Si no hay new_email, el cambio ya se complet?
-            if (!user.new_email) {
-              console.log('[CONFIRM EMAIL CHANGE] ? Cambio completado');
+            // PRIMERO: Verificar si hay new_email (cambio pendiente)
+            if (user.new_email) {
+              // Hay new_email, el cambio está pendiente
+              console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente - oldEmail:', user.email, 'newEmail:', user.new_email);
+              if (!emailData) {
+                setEmailData({ 
+                  oldEmail: user.email, 
+                  newEmail: user.new_email 
+                });
+                setConfirmed(true);
+                setPending(true);
+                setError(null); // Limpiar error si el cambio está pendiente
+              }
+            } else {
+              // No hay new_email, el cambio ya se completó o no hay cambio pendiente
+              console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completado o no hay cambio pendiente');
               setChangeCompleted(true);
               setError(null);
               setConfirmed(true);
@@ -177,29 +219,49 @@ export function ConfirmEmailChangeForm({
                   .eq('id', user.id)
                   .single();
                 
-                // Usar previous_email si está disponible
+                // Estrategia para obtener oldEmail y newEmail:
+                // 1. Si hay previous_email, usarlo como oldEmail
+                // 2. Si no hay previous_email pero el email del perfil es diferente al de auth, usar el del perfil como oldEmail
+                // 3. Si no hay diferencia, verificar si hay emails en la URL
+                // 4. Solo como último recurso usar el mismo email
                 if (profile?.previous_email) {
+                  // Caso ideal: previous_email está disponible
                   setEmailData({ oldEmail: profile.previous_email, newEmail: user.email });
+                  console.log('[CONFIRM EMAIL CHANGE] Usando previous_email del perfil');
                 } else if (profile?.email && profile.email !== user.email) {
+                  // El perfil tiene un email diferente (puede ser el anterior antes de sincronizar)
                   setEmailData({ oldEmail: profile.email, newEmail: user.email });
+                  console.log('[CONFIRM EMAIL CHANGE] Usando email del perfil como anterior');
                 } else {
-                  setEmailData({ oldEmail: user.email, newEmail: user.email });
+                  // No hay previous_email y los emails coinciden
+                  // Verificar si hay emails en la URL que puedan ayudar
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const urlOldEmail = urlParams.get('oldEmail');
+                  const urlNewEmail = urlParams.get('newEmail');
+                  
+                  if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
+                    // Usar los emails de la URL si están disponibles y son diferentes
+                    setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
+                    console.log('[CONFIRM EMAIL CHANGE] Usando emails de la URL');
+                  } else {
+                    // Último recurso: si realmente no hay diferencia, usar el email actual
+                    // Esto puede pasar si el cambio se completó antes de guardar previous_email
+                    setEmailData({ oldEmail: user.email, newEmail: user.email });
+                    console.log('[CONFIRM EMAIL CHANGE] No se encontró correo anterior, usando email actual');
+                  }
                 }
               } catch (profileError) {
                 console.error('[CONFIRM EMAIL CHANGE] Error obteniendo perfil:', profileError);
-                setEmailData({ oldEmail: user.email, newEmail: user.email });
-              }
-            } else {
-              // Hay new_email, el cambio est? pendiente
-              console.log('[CONFIRM EMAIL CHANGE] Cambio pendiente');
-              if (!emailData) {
-                setEmailData({ 
-                  oldEmail: user.email, 
-                  newEmail: user.new_email 
-                });
-                setConfirmed(true);
-                setPending(true);
-                setError(null); // Limpiar error si el cambio est? pendiente
+                // Intentar usar emails de la URL como fallback
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlOldEmail = urlParams.get('oldEmail');
+                const urlNewEmail = urlParams.get('newEmail');
+                
+                if (urlOldEmail && urlNewEmail && urlOldEmail !== urlNewEmail) {
+                  setEmailData({ oldEmail: urlOldEmail, newEmail: urlNewEmail });
+                } else {
+                  setEmailData({ oldEmail: user.email, newEmail: user.email });
+                }
               }
             }
           } else {
@@ -284,7 +346,34 @@ export function ConfirmEmailChangeForm({
     }
   };
 
-  // Redirigir a login despu?s de 5 segundos si est? confirmado y completado
+  // Refrescar sesión automáticamente cuando el cambio se completa
+  useEffect(() => {
+    if (changeCompleted && completed && !pending) {
+      const refreshSession = async () => {
+        try {
+          const supabase = getSupabaseBrowserClient();
+          const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            console.log('[CONFIRM EMAIL CHANGE] No se pudo refrescar la sesión (puede que no haya sesión activa):', refreshError.message);
+          } else if (session) {
+            console.log('[CONFIRM EMAIL CHANGE] Sesión refrescada exitosamente, nuevo email:', session.user.email);
+            // Si estamos en una página de la app, refrescar también el router
+            if (typeof globalThis.window !== 'undefined' && globalThis.window.location.pathname.startsWith('/app')) {
+              router.refresh();
+            }
+          }
+        } catch (error_) {
+          console.error('[CONFIRM EMAIL CHANGE] Error refrescando sesión:', error_);
+        }
+      };
+      
+      // Refrescar inmediatamente cuando se detecta que el cambio está completo
+      void refreshSession();
+    }
+  }, [changeCompleted, completed, pending, router]);
+
+  // Redirigir a login después de 5 segundos si está confirmado y completado
   useEffect(() => {
     if (confirmed && completed && !error && !pending) {
       const timer = setTimeout(() => {
