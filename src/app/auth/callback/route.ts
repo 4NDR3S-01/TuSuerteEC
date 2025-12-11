@@ -35,6 +35,27 @@ export async function GET(request: NextRequest) {
 
   // Si hay código, intentar procesarlo en el servidor
   if (code) {
+    // Verificar si el código es un UUID (token de recovery de Supabase)
+    // Los UUIDs NO son códigos PKCE válidos y no deben procesarse con exchangeCodeForSession
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+    
+    // Para recovery y email_change con UUID, pasar directamente al cliente
+    // Supabase establece la sesión automáticamente cuando procesa el token PKCE original
+    if (isUUID && (type === 'recovery' || type === 'email_change')) {
+      if (type === 'recovery') {
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('code', code);
+        return NextResponse.redirect(resetUrl);
+      }
+      
+      if (type === 'email_change') {
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('code', code);
+        return NextResponse.redirect(confirmUrl);
+      }
+    }
+
+    // Para códigos PKCE válidos (no UUIDs), intentar procesarlos en el servidor
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -70,8 +91,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      // Intentar intercambiar el código por una sesión
-      // Esto funciona para códigos PKCE (OAuth, signup, etc.)
+      // Intentar intercambiar el código por una sesión (solo para códigos PKCE válidos)
       const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
       if (!exchangeError && exchangeData?.session) {
@@ -88,8 +108,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL(next, requestUrl.origin));
       }
 
-      // Si falla (puede ser un token UUID de recovery), pasar al cliente
-      // El cliente manejará el token directamente con la API de Supabase
+      // Si falla, pasar al cliente como fallback
       if (type === 'recovery') {
         const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
         resetUrl.searchParams.set('code', code);

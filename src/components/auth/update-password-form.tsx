@@ -44,8 +44,42 @@ export function UpdatePasswordForm() {
           return;
         }
 
-        // Intentar procesar el código directamente con la API de Supabase
-        // Primero intentar exchangeCodeForSession (para códigos PKCE)
+        // Verificar si el código es un UUID (token de recovery de Supabase)
+        // Los UUIDs NO son códigos PKCE válidos, no intentar exchangeCodeForSession
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
+        
+        if (isUUID) {
+          // Para tokens UUID de recovery, Supabase establece la sesión automáticamente
+          // cuando procesa el token PKCE original. Solo necesitamos verificar la sesión.
+          // Esperar un momento para que Supabase procese el token
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Verificar la sesión múltiples veces (Supabase puede tardar un poco)
+          for (let i = 0; i < 5; i++) {
+            const { data: sessionCheck } = await client.auth.getSession();
+            if (sessionCheck?.session) {
+              setHasSession(true);
+              // Limpiar URL
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+              setIsLoading(false);
+              return;
+            }
+            // Esperar antes del siguiente intento
+            if (i < 4) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+          
+          // Si después de todos los intentos no hay sesión, mostrar error
+          setHasSession(false);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si NO es un UUID, es un código PKCE válido
+        // Intentar procesar el código con exchangeCodeForSession
         const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(code);
 
         if (!exchangeError && exchangeData?.session) {
@@ -59,26 +93,7 @@ export function UpdatePasswordForm() {
           return;
         }
 
-        // Si exchangeCodeForSession falla, puede ser un token UUID de recovery
-        // Verificar si es un UUID y usar verifyOtp como alternativa
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
-        
-        if (isUUID) {
-          // Para tokens UUID de recovery, Supabase puede establecer la sesión automáticamente
-          // Esperar un momento y verificar la sesión
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const { data: sessionCheck } = await client.auth.getSession();
-          if (sessionCheck?.session) {
-            setHasSession(true);
-            if (globalThis.window) {
-              globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
-            }
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        // Si aún no hay sesión, verificar una vez más después de un breve delay
+        // Si falla, verificar sesión de todas formas (por si Supabase la estableció)
         await new Promise(resolve => setTimeout(resolve, 1000));
         const { data: finalSession } = await client.auth.getSession();
         if (finalSession?.session) {
