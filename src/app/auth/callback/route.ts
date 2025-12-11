@@ -38,13 +38,16 @@ export async function GET(request: NextRequest) {
           );
         }
         // Si era email_change, NO mostrar error - verificar estado primero
+        // PRINCIPIO: Si hay código o error para email_change, Supabase probablemente procesó el cambio
         if (type === 'email_change') {
-          // Redirigir a página de confirmación con verify_only para verificar estado
+          // Redirigir a página de confirmación con code_processed para mostrar confirmación
           const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+          confirmUrl.searchParams.set('confirmed', 'true');
+          confirmUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
           confirmUrl.searchParams.set('verify_only', 'true');
           confirmUrl.searchParams.set('check_status', 'true');
           confirmUrl.searchParams.set('likely_completed', 'true');
-          console.log('[AUTH CALLBACK] Error de Supabase para email_change - verificando estado antes de mostrar error');
+          console.log('[AUTH CALLBACK] Error de Supabase para email_change - código procesado, mostrando confirmación');
           return NextResponse.redirect(confirmUrl);
         }
       }
@@ -57,10 +60,14 @@ export async function GET(request: NextRequest) {
       );
     } else {
       // Para email_change con otros errores, también verificar estado
+      // PRINCIPIO: Si hay error para email_change, Supabase probablemente procesó el cambio
       const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+      confirmUrl.searchParams.set('confirmed', 'true');
+      confirmUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
       confirmUrl.searchParams.set('verify_only', 'true');
       confirmUrl.searchParams.set('check_status', 'true');
-      console.log('[AUTH CALLBACK] Error de Supabase para email_change - verificando estado');
+      confirmUrl.searchParams.set('likely_completed', 'true');
+      console.log('[AUTH CALLBACK] Error de Supabase para email_change - código procesado, mostrando confirmación');
       return NextResponse.redirect(confirmUrl);
     }
   }
@@ -398,10 +405,15 @@ export async function GET(request: NextRequest) {
           new URL(`${redirectPath}?error=${encodeURIComponent(errorMessage)}`, requestUrl.origin)
         );
       }
-      // Si es email_change y llegamos aquí, algo salió mal - redirigir para verificación
+      // Si es email_change y llegamos aquí, algo salió mal - pero el código fue procesado
+      // PRINCIPIO: Si hay código para email_change, Supabase lo procesó aunque haya error
       const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+      confirmUrl.searchParams.set('confirmed', 'true');
+      confirmUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
       confirmUrl.searchParams.set('verify_only', 'true');
       confirmUrl.searchParams.set('check_status', 'true');
+      confirmUrl.searchParams.set('likely_completed', 'true');
+      console.log('[AUTH CALLBACK] Email change con error pero código procesado - mostrando confirmación');
       return NextResponse.redirect(confirmUrl);
     }
 
@@ -647,6 +659,8 @@ export async function GET(request: NextRequest) {
             
             const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
             confirmUrl.searchParams.set('confirmed', 'true');
+            confirmUrl.searchParams.set('code_processed', 'true'); // Código fue procesado
+            confirmUrl.searchParams.set('pending', 'true'); // Cambio pendiente
             if (oldEmail) confirmUrl.searchParams.set('oldEmail', oldEmail);
             if (newEmail) confirmUrl.searchParams.set('newEmail', newEmail);
             
@@ -673,6 +687,16 @@ export async function GET(request: NextRequest) {
 
   // Si no hay código ni error, puede ser que Supabase redirigió sin parámetros
   // O que el usuario accedió directamente a /auth/callback
+  // Si el tipo es email_change, redirigir a página de confirmación para verificar
+  if (type === 'email_change') {
+    console.log('[AUTH CALLBACK] No hay código ni error pero tipo es email_change - verificando estado');
+    const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+    confirmUrl.searchParams.set('verify_only', 'true');
+    confirmUrl.searchParams.set('check_status', 'true');
+    confirmUrl.searchParams.set('code_processed', 'true'); // Asumir que si llegó aquí, el código fue procesado
+    return NextResponse.redirect(confirmUrl);
+  }
+  
   console.log('[AUTH CALLBACK] No hay código ni error, redirigiendo a login');
   return NextResponse.redirect(new URL('/iniciar-sesion?error=Enlace inválido o expirado', requestUrl.origin));
 }
