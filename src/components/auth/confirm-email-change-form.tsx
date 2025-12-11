@@ -37,70 +37,49 @@ export function ConfirmEmailChangeForm({
       try {
         const supabase = getSupabaseBrowserClient();
         
-        // Verificar si hay sesión (el callback ya procesó el código en el servidor)
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        // PRIORIDAD 1: Verificar si ya hay una sesión establecida
+        const { data: { user: existingUser }, error: existingError } = await supabase.auth.getUser();
+        if (!existingError && existingUser) {
+          console.log('[CONFIRM EMAIL CHANGE] ✅ Sesión ya establecida');
+          await processUserData(supabase, existingUser);
+          setIsValidating(false);
+          return;
+        }
+
+        // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
+        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+        const token = urlParams.get('token');
+        const urlError = urlParams.get('error');
         
-        if (userError) {
-          console.log('[CONFIRM EMAIL CHANGE] No hay sesión activa:', userError.message);
-          
-          // Verificar si hay error en la URL
-          const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-          const urlError = urlParams.get('error');
-          
-          if (urlError) {
-            setError(decodeURIComponent(urlError));
-          } else {
-            setError('No hay sesión activa. Por favor, usa el enlace de confirmación que recibiste por correo.');
-          }
+        if (urlError) {
+          setError(decodeURIComponent(urlError));
           setIsValidating(false);
           return;
         }
-
-        if (!user) {
-          setError('No se pudo obtener la información del usuario.');
-          setIsValidating(false);
-          return;
-        }
-
-        setIsUserLoggedIn(true);
-        setConfirmed(true);
-
-        // Determinar estado del cambio usando user.new_email
-        if (user.new_email) {
-          // Cambio pendiente: hay un nuevo email esperando confirmación
-          setEmailData({ 
-            oldEmail: user.email || undefined, 
-            newEmail: user.new_email 
-          });
-          setPending(true);
-          setCompleted(false);
-        } else {
-          // Cambio completado: no hay new_email, el cambio ya se completó
-          // Intentar obtener previous_email del perfil para mostrar el correo anterior
+        
+        if (token) {
+          console.log('[CONFIRM EMAIL CHANGE] Procesando token con exchangeCodeForSession...');
           try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('previous_email')
-              .eq('id', user.id)
-              .single();
-            
-            if (profile?.previous_email) {
-              setEmailData({ 
-                oldEmail: profile.previous_email, 
-                newEmail: user.email || undefined
-              });
-            } else {
-              setEmailData({ 
-                newEmail: user.email || undefined
-              });
+            const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(token);
+
+            if (!exchangeError && exchangeData?.user) {
+              console.log('[CONFIRM EMAIL CHANGE] ✅ Token procesado exitosamente');
+              await processUserData(supabase, exchangeData.user);
+              // Limpiar URL
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+            } else if (exchangeError) {
+              console.log('[CONFIRM EMAIL CHANGE] Error procesando token:', exchangeError.message);
+              setError(exchangeError.message);
             }
-          } catch {
-            setEmailData({ 
-              newEmail: user.email || undefined
-            });
+          } catch (error) {
+            console.error('[CONFIRM EMAIL CHANGE] Error procesando token:', error);
+            setError('Error al procesar el token. El enlace puede haber expirado.');
           }
-          setPending(false);
-          setCompleted(true);
+        } else {
+          // No hay token ni sesión
+          setError('No hay sesión activa. Por favor, usa el enlace de confirmación que recibiste por correo.');
         }
         
         setIsValidating(false);
@@ -108,6 +87,49 @@ export function ConfirmEmailChangeForm({
         console.error('[CONFIRM EMAIL CHANGE] Error inicializando:', error);
         setError('Error al verificar el estado del cambio. Intenta iniciar sesión para verificar.');
         setIsValidating(false);
+      }
+    };
+
+    const processUserData = async (supabase: any, user: any) => {
+      setIsUserLoggedIn(true);
+      setConfirmed(true);
+
+      // Determinar estado del cambio usando user.new_email
+      if (user.new_email) {
+        // Cambio pendiente: hay un nuevo email esperando confirmación
+        setEmailData({ 
+          oldEmail: user.email || undefined, 
+          newEmail: user.new_email 
+        });
+        setPending(true);
+        setCompleted(false);
+      } else {
+        // Cambio completado: no hay new_email, el cambio ya se completó
+        // Intentar obtener previous_email del perfil para mostrar el correo anterior
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('previous_email')
+            .eq('id', user.id)
+            .single();
+          
+          if (profile?.previous_email) {
+            setEmailData({ 
+              oldEmail: profile.previous_email, 
+              newEmail: user.email || undefined
+            });
+          } else {
+            setEmailData({ 
+              newEmail: user.email || undefined
+            });
+          }
+        } catch {
+          setEmailData({ 
+            newEmail: user.email || undefined
+          });
+        }
+        setPending(false);
+        setCompleted(true);
       }
     };
     

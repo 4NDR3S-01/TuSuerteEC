@@ -26,18 +26,45 @@ export function UpdatePasswordForm() {
         const client = getSupabaseClient();
         setSupabase(client);
 
-        // Verificar si hay sesión establecida (el callback ya procesó el código en el servidor)
+        // PRIORIDAD 1: Verificar si ya hay una sesión establecida
         const { data: sessionData, error: sessionError } = await client.auth.getSession();
-        
         if (!sessionError && sessionData?.session) {
-          console.log('[UPDATE PASSWORD] ✅ Sesión establecida - callback procesó el código');
+          console.log('[UPDATE PASSWORD] ✅ Sesión ya establecida');
           setHasSession(true);
+          setIsLoading(false);
+          return;
+        }
+
+        // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
+        const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+        const token = urlParams.get('token');
+        
+        if (token) {
+          console.log('[UPDATE PASSWORD] Procesando token con exchangeCodeForSession...');
+          try {
+            const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(token);
+
+            if (!exchangeError && exchangeData?.session) {
+              console.log('[UPDATE PASSWORD] ✅ Token procesado exitosamente - sesión establecida');
+              setHasSession(true);
+              // Limpiar URL
+              if (globalThis.window) {
+                globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
+              }
+            } else if (exchangeError) {
+              console.log('[UPDATE PASSWORD] Error procesando token:', exchangeError.message);
+              setHasSession(false);
+            }
+          } catch (error) {
+            console.error('[UPDATE PASSWORD] Error procesando token:', error);
+            setHasSession(false);
+          }
         } else {
-          console.log('[UPDATE PASSWORD] No hay sesión activa');
+          // No hay token ni sesión
           setHasSession(false);
         }
       } catch (error) {
-        console.error('[UPDATE PASSWORD] Error verificando sesión:', error);
+        console.error('[UPDATE PASSWORD] Error inicializando:', error);
         setHasSession(false);
       } finally {
         setIsLoading(false);
