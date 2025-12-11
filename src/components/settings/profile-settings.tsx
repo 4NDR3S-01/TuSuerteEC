@@ -133,6 +133,20 @@ export function ProfileSettings({ user, profile }: any) {
           return;
         }
 
+        // Guardar el correo anterior en profiles antes de solicitar el cambio
+        // Esto nos permitirá mostrarlo durante el proceso de confirmación
+        const currentEmail = user.email || profile?.email;
+        if (currentEmail) {
+          const { error: prevEmailError } = await supabase
+            .from('profiles')
+            .update({ previous_email: currentEmail })
+            .eq('id', user.id);
+          
+          if (prevEmailError) {
+            console.warn('[CHANGE EMAIL] Error guardando correo anterior:', prevEmailError);
+          }
+        }
+
         // SIEMPRE usar la URL de producción para emails, incluso en desarrollo local
         // Esto asegura que los enlaces en los emails funcionen correctamente
         const emailRedirectTo = getEmailAuthRedirectUrl('/auth/callback', {

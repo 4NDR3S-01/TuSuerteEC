@@ -101,18 +101,44 @@ export async function GET(request: NextRequest) {
         try {
           console.log('[AUTH CALLBACK] Verificando estado del cambio de email después del error');
           
-          // Intentar obtener el usuario para verificar el estado del cambio
-          // Usar un cliente temporal para verificar sin depender de la sesión
-          const { data: userCheck, error: userCheckError } = await supabase.auth.getUser();
+          // Intentar múltiples métodos para obtener el usuario cuando no hay sesión
+          let userCheck: any = null;
+          let userCheckError: any = null;
           
-          console.log('[AUTH CALLBACK] Resultado de getUser:', {
-            hasUser: !!userCheck?.user,
-            error: userCheckError?.message,
-            email: userCheck?.user?.email,
-            new_email: userCheck?.user?.new_email,
-          });
+          // Método 1: Intentar obtener del exchangeData aunque haya error (puede tener datos parciales)
+          if (exchangeData?.user) {
+            userCheck = { user: exchangeData.user };
+            console.log('[AUTH CALLBACK] Usuario obtenido de exchangeData a pesar del error');
+          } else {
+            // Método 2: Intentar obtener usuario de la sesión (puede que se haya establecido parcialmente)
+            const getUserResult = await supabase.auth.getUser();
+            userCheck = getUserResult.data;
+            userCheckError = getUserResult.error;
+            console.log('[AUTH CALLBACK] Intentando getUser después del error:', {
+              hasUser: !!userCheck?.user,
+              error: userCheckError?.message,
+            });
+          }
+          
+          // Método 3: Si aún no tenemos usuario, intentar verificar desde el perfil usando el token
+          // Esto es útil cuando el usuario no está logueado pero el cambio ya se completó
+          if (!userCheck?.user && !userCheckError) {
+            console.log('[AUTH CALLBACK] Intentando verificar desde profiles usando el código del token');
+            // El código puede contener información del usuario, pero no podemos extraerlo directamente
+            // En su lugar, redirigimos a la página de confirmación que verificará el estado
+            const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+            confirmUrl.searchParams.set('error', encodeURIComponent('El enlace puede haber expirado o ya fue usado. Verificando si el cambio se completó...'));
+            confirmUrl.searchParams.set('check_status', 'true');
+            return NextResponse.redirect(confirmUrl);
+          }
           
           if (!userCheckError && userCheck?.user) {
+            console.log('[AUTH CALLBACK] Resultado de verificación:', {
+              hasUser: !!userCheck?.user,
+              email: userCheck?.user?.email,
+              new_email: userCheck?.user?.new_email,
+            });
+            
             // Si no hay new_email, el cambio ya se completó (ambos correos confirmados)
             if (!userCheck.user.new_email) {
               console.log('[AUTH CALLBACK] ✅ Cambio de email ya completado, redirigiendo a confirmación exitosa');
@@ -125,11 +151,15 @@ export async function GET(request: NextRequest) {
               try {
                 const { data: profile } = await supabase
                   .from('profiles')
-                  .select('email')
+                  .select('email, previous_email')
                   .eq('id', userCheck.user.id)
                   .single();
                 
-                if (profile?.email && profile.email !== userCheck.user.email) {
+                // Usar previous_email si está disponible
+                if (profile?.previous_email) {
+                  confirmUrl.searchParams.set('oldEmail', profile.previous_email);
+                  confirmUrl.searchParams.set('newEmail', userCheck.user.email);
+                } else if (profile?.email && profile.email !== userCheck.user.email) {
                   confirmUrl.searchParams.set('oldEmail', profile.email);
                   confirmUrl.searchParams.set('newEmail', userCheck.user.email);
                 } else {
@@ -151,14 +181,24 @@ export async function GET(request: NextRequest) {
               confirmUrl.searchParams.set('pending', 'true');
               confirmUrl.searchParams.set('oldEmail', userCheck.user.email);
               confirmUrl.searchParams.set('newEmail', userCheck.user.new_email);
+              confirmUrl.searchParams.set('error', encodeURIComponent('El enlace puede haber expirado, pero el cambio aún está pendiente. Revisa ambos correos para completar la confirmación.'));
               return NextResponse.redirect(confirmUrl);
             }
           } else {
-            console.log('[AUTH CALLBACK] No se pudo obtener usuario, continuando con error normal');
+            console.log('[AUTH CALLBACK] No se pudo obtener usuario después del error');
+            // Redirigir a página de confirmación que verificará el estado
+            const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+            confirmUrl.searchParams.set('error', encodeURIComponent('No se pudo verificar el estado. El enlace puede haber expirado o ya fue usado. Verificando si el cambio se completó...'));
+            confirmUrl.searchParams.set('check_status', 'true');
+            return NextResponse.redirect(confirmUrl);
           }
         } catch (checkError) {
           console.error('[AUTH CALLBACK] Error verificando estado del cambio:', checkError);
-          // Continuar con el flujo de error normal
+          // Redirigir a página de confirmación que verificará el estado
+          const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+          confirmUrl.searchParams.set('error', encodeURIComponent('Error al verificar el estado. El enlace puede haber expirado. Verificando si el cambio se completó...'));
+          confirmUrl.searchParams.set('check_status', 'true');
+          return NextResponse.redirect(confirmUrl);
         }
       }
       
@@ -278,12 +318,24 @@ export async function GET(request: NextRequest) {
           // pero verificamos y sincronizamos manualmente si es necesario
           const { data: profile } = await supabase
             .from('profiles')
-            .select('email')
+            .select('email, previous_email')
             .eq('id', userData.user.id)
             .single();
           
-          // Si hay desincronización, sincronizar manualmente
-          if (profile?.email && profile.email !== userData.user.email) {
+          // Obtener el correo anterior desde previous_email si está disponible
+          if (profile?.previous_email) {
+            oldEmail = profile.previous_email;
+            newEmail = userData.user.email;
+            isPending = false;
+            console.log('[AUTH CALLBACK] Cambio completado - usando previous_email:', oldEmail, 'newEmail:', newEmail);
+            
+            // Limpiar previous_email después de usarlo
+            await supabase
+              .from('profiles')
+              .update({ previous_email: null })
+              .eq('id', userData.user.id);
+          } else if (profile?.email && profile.email !== userData.user.email) {
+            // Si hay desincronización, sincronizar manualmente
             console.log('[AUTH CALLBACK] Detectada desincronización, sincronizando email...');
             console.log('[AUTH CALLBACK] auth.users.email:', userData.user.email);
             console.log('[AUTH CALLBACK] profiles.email:', profile.email);
@@ -313,10 +365,12 @@ export async function GET(request: NextRequest) {
             isPending = false;
             console.log('[AUTH CALLBACK] Cambio completado - oldEmail:', oldEmail, 'newEmail:', newEmail);
           } else {
-            // Si no hay diferencia, usar el email actual como nuevo
+            // Si no hay diferencia y no hay previous_email, usar el email actual como nuevo
+            // Esto puede pasar si el cambio se completó antes de guardar previous_email
             newEmail = userData.user.email;
+            oldEmail = userData.user.email; // Fallback: usar el mismo email
             isPending = false;
-            console.log('[AUTH CALLBACK] Cambio completado - usando email actual:', newEmail);
+            console.log('[AUTH CALLBACK] Cambio completado - usando email actual (sin previous_email):', newEmail);
           }
         }
         

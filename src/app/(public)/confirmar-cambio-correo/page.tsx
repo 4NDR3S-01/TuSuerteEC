@@ -16,6 +16,7 @@ type ConfirmEmailChangePageProps = {
     pending?: string;
     completed?: string;
     error?: string;
+    check_status?: string;
   }>;
 };
 
