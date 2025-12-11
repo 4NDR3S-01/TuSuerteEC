@@ -44,15 +44,16 @@ export function UpdatePasswordForm() {
           return;
         }
 
-        // Verificar si el código es un UUID (token de recovery de Supabase)
-        // Los UUIDs son tokens de recovery que deben verificarse con verifyOtp
+        // Verificar si el código es un UUID (token hash de recovery de Supabase)
+        // Los UUIDs son tokens hash que Supabase genera cuando procesa el token PKCE original
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code);
         
         if (isUUID) {
-          // Para tokens UUID de recovery, usar verifyOtp para establecer la sesión
+          // Para tokens UUID de recovery, usar verifyOtp con token_hash
+          // Esto establece la sesión de recovery necesaria para updateUser
           console.log('[UPDATE PASSWORD] Procesando token UUID de recovery con verifyOtp...');
           const { data: verifyData, error: verifyError } = await client.auth.verifyOtp({
-            token: code,
+            token_hash: code,
             type: 'recovery',
           });
 
