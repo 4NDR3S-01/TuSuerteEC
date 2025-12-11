@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const errorDescription = requestUrl.searchParams.get('error_description');
 
   // Log para debugging
-  console.log('[AUTH CALLBACK] Parรกmetros recibidos:', {
+  console.log('[AUTH CALLBACK] Parámetros recibidos:', {
     code: code ? 'presente' : 'ausente',
     type,
     error,
@@ -34,11 +34,18 @@ export async function GET(request: NextRequest) {
         // Si el tipo era recovery, NO mostrar error inmediatamente - verificar si el código fue procesado
         // PRINCIPIO: Si hay código para recovery, Supabase puede haberlo procesado aunque no tengamos sesión
         if (type === 'recovery') {
-          // Redirigir a restablecer-clave con code_processed para que intente procesar el código
+          // Si hay código en la URL, pasarlo para que el componente lo procese
           const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
           resetUrl.searchParams.set('code_processed', 'true'); // Flag crítico: código fue procesado
           resetUrl.searchParams.set('verify_only', 'true');
-          console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+          // Si hay código en la URL original, pasarlo para que el componente lo procese
+          const originalCode = requestUrl.searchParams.get('code');
+          if (originalCode) {
+            resetUrl.searchParams.set('code', originalCode);
+            console.log('[AUTH CALLBACK] Error de Supabase para recovery - pasando código para procesar');
+          } else {
+            console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+          }
           return NextResponse.redirect(resetUrl);
         }
         // Si era email_change, NO mostrar error - verificar estado primero
@@ -404,7 +411,13 @@ export async function GET(request: NextRequest) {
             if (isLikelyProcessed) {
               resetUrl.searchParams.set('likely_processed', 'true');
             }
-            console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+            // Si hay código, pasarlo para que el componente lo procese
+            if (code) {
+              resetUrl.searchParams.set('code', code);
+              console.log('[AUTH CALLBACK] Error de Supabase para recovery - pasando código para procesar');
+            } else {
+              console.log('[AUTH CALLBACK] Error de Supabase para recovery - código procesado, verificando...');
+            }
             return NextResponse.redirect(resetUrl);
           }
         } else if (exchangeError.message.includes('token')) {

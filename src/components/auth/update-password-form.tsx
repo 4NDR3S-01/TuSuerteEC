@@ -33,42 +33,27 @@ export function UpdatePasswordForm() {
         const client = getSupabaseBrowserClient();
         setSupabase(client);
 
-        // Verificar parámetros de la URL para code_processed
+        // Verificar parámetros de la URL para code/token
         const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
         const codeProcessed = urlParams.get('code_processed') === 'true';
         const verifyOnly = urlParams.get('verify_only') === 'true';
         const hash = globalThis.window?.location.hash || '';
+        const urlCode = urlParams.get('code'); // Código en la URL (query params)
         
-        // Si code_processed=true, intentar procesar el código desde el hash antes de verificar sesión
-        if (codeProcessed && hash) {
-          console.log('[UPDATE PASSWORD] code_processed=true - intentando procesar código desde hash...');
-          try {
-            // Intentar extraer el código del hash
-            const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-            const accessToken = hashParams.get('access_token');
+        // PRIORIDAD 1: Intentar extraer el token/código del hash (Supabase lo pone ahí)
+        let token = null;
+        let code = null;
+        
+        if (hash) {
+          const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+          // Supabase puede poner el código como 'code' o como parte de access_token/refresh_token
+          code = hashParams.get('code');
+          // También verificar si hay access_token (indica que ya se procesó)
+          const accessToken = hashParams.get('access_token');
+          if (accessToken) {
+            // Si hay access_token, intentar establecer sesión directamente
             const refreshToken = hashParams.get('refresh_token');
-            const code = hashParams.get('code');
-            
-            // Si hay código en el hash, intentar intercambiarlo por sesión
-            if (code) {
-              console.log('[UPDATE PASSWORD] Código encontrado en hash - intercambiando por sesión...');
-              const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-              
-              if (!exchangeError && exchangeData?.session) {
-                console.log('[UPDATE PASSWORD] ✅ Sesión establecida desde código del hash');
-                setHasSession(true);
-                setIsLoading(false);
-                // Limpiar hash de la URL
-                if (globalThis.window) {
-                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
-                }
-                return;
-              } else if (exchangeError) {
-                console.log('[UPDATE PASSWORD] Error intercambiando código:', exchangeError.message);
-                // Continuar con verificación de sesión normal
-              }
-            } else if (accessToken && refreshToken) {
-              // Si hay tokens en el hash, intentar establecer sesión directamente
+            if (refreshToken) {
               console.log('[UPDATE PASSWORD] Tokens encontrados en hash - estableciendo sesión...');
               const { data: sessionData, error: tokenError } = await client.auth.setSession({
                 access_token: accessToken,
@@ -84,15 +69,66 @@ export function UpdatePasswordForm() {
                   globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
                 }
                 return;
-              } else if (tokenError) {
-                console.log('[UPDATE PASSWORD] Error estableciendo sesión desde tokens:', tokenError.message);
-                // Continuar con verificación de sesión normal
               }
             }
-          } catch (hashError) {
-            console.error('[UPDATE PASSWORD] Error procesando hash:', hashError);
+          }
+        }
+        
+        // PRIORIDAD 2: Si no hay código en el hash, intentar desde la URL
+        if (!code && urlCode) {
+          code = urlCode;
+          console.log('[UPDATE PASSWORD] Código encontrado en URL (query params)');
+        }
+        
+        // Si hay código, usar verifyOtp para verificar el token SIN establecer sesión
+        // Esto es más ético y profesional: verifica el token directamente
+        if (code) {
+          console.log('[UPDATE PASSWORD] Verificando token con verifyOtp (método profesional)...');
+          try {
+            const { data: verifyData, error: verifyError } = await client.auth.verifyOtp({
+              token: code,
+              type: 'recovery',
+            });
+            
+            if (!verifyError && verifyData?.user) {
+              console.log('[UPDATE PASSWORD] ✅ Token verificado exitosamente - usuario:', verifyData.user.email);
+              // Token válido - verifyOtp establece automáticamente una sesión temporal
+              // Verificar si hay sesión establecida
+              const { data: sessionData } = await client.auth.getSession();
+              if (sessionData?.session) {
+                console.log('[UPDATE PASSWORD] ✅ Sesión establecida después de verifyOtp');
+                setHasSession(true);
+                setIsLoading(false);
+                // Limpiar hash y parámetros de la URL
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
+                }
+                return;
+              } else {
+                // Si verifyOtp fue exitoso pero no hay sesión, el token es válido de todas formas
+                // Podemos permitir cambiar contraseña usando el token
+                console.log('[UPDATE PASSWORD] ✅ Token válido - verifyOtp estableció contexto de recovery');
+                setHasSession(true); // Permitir cambiar contraseña (updateUser funcionará con el contexto de recovery)
+                setIsLoading(false);
+                if (globalThis.window) {
+                  globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname + '?token=valid');
+                }
+                return;
+              }
+            } else if (verifyError) {
+              console.log('[UPDATE PASSWORD] Error verificando token:', verifyError.message);
+              // Si el token expiró pero code_processed=true, puede que ya se procesó
+              if (codeProcessed && (verifyError.message.includes('expired') || verifyError.message.includes('invalid'))) {
+                console.log('[UPDATE PASSWORD] Token expirado pero code_processed=true - código puede haberse procesado');
+                // Continuar para verificar si hay sesión temporal
+              }
+            }
+          } catch (verifyError) {
+            console.error('[UPDATE PASSWORD] Error en verifyOtp:', verifyError);
             // Continuar con verificación de sesión normal
           }
+        } else if (codeProcessed) {
+          console.log('[UPDATE PASSWORD] code_processed=true pero no hay código - callback ya procesó, verificando sesión...');
         }
 
         // Verificar si hay una sesión válida (establecida por el callback)
@@ -118,6 +154,37 @@ export function UpdatePasswordForm() {
             // Establecer hasSession como true para permitir cambiar contraseña
             setHasSession(true);
             setIsLoading(false);
+            return;
+          } else {
+            // Si code_processed=true pero no hay usuario,
+            // el código puede haberse procesado pero no hay sesión persistente
+            // Intentar una vez más obtener sesión después de un breve delay
+            console.log('[UPDATE PASSWORD] code_processed=true pero no hay usuario - reintentando obtener sesión...');
+            // Establecer isLoading=false inmediatamente para mostrar mensaje informativo
+            setIsLoading(false);
+            // Esperar un momento y verificar sesión nuevamente (puede que el callback esté estableciendo la sesión)
+            setTimeout(async () => {
+              try {
+                const { data: retrySessionData } = await client.auth.getSession();
+                if (retrySessionData?.session) {
+                  console.log('[UPDATE PASSWORD] ✅ Sesión obtenida en reintento');
+                  setHasSession(true);
+                } else {
+                  // Si aún no hay sesión, intentar obtener usuario una vez más
+                  const { data: retryUserData } = await client.auth.getUser();
+                  if (retryUserData?.user) {
+                    console.log('[UPDATE PASSWORD] ✅ Usuario obtenido en reintento - permitiendo cambio');
+                    setHasSession(true);
+                  } else {
+                    // Si aún no hay sesión ni usuario, el código no se procesó correctamente
+                    // Pero como code_processed=true, el mensaje informativo ya se está mostrando
+                    console.log('[UPDATE PASSWORD] No hay sesión ni usuario después del reintento - código puede no haberse procesado');
+                  }
+                }
+              } catch (retryError) {
+                console.error('[UPDATE PASSWORD] Error en reintento:', retryError);
+              }
+            }, 1000); // Aumentar delay a 1 segundo para dar tiempo al callback
             return;
           }
         }
@@ -187,6 +254,8 @@ export function UpdatePasswordForm() {
     setIsSubmitting(true);
 
     try {
+      // Si el token fue verificado con verifyOtp, updateUser funcionará
+      // porque verifyOtp establece un contexto de recovery que permite cambiar contraseña
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         throw error;
@@ -238,14 +307,14 @@ export function UpdatePasswordForm() {
           <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
             <p className="font-medium text-blue-600 dark:text-blue-400 mb-2">
               {hashHasError 
-                ? 'El enlace puede haber expirado, pero estamos verificando...'
-                : 'Verificando enlace de recuperación...'
+                ? 'El enlace puede haber expirado'
+                : 'Enlace de recuperación procesado'
               }
             </p>
             <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-4">
               {hashHasError
                 ? 'Aunque el enlace puede haber expirado, es posible que el proceso se haya completado. Por favor, intenta iniciar sesión con tu nueva contraseña si ya la estableciste.'
-                : 'Estamos verificando si el enlace de recuperación es válido. Por favor espera...'
+                : 'El enlace de recuperación fue procesado. Si ya estableciste tu nueva contraseña, puedes iniciar sesión. Si no, solicita un nuevo enlace.'
               }
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
