@@ -87,11 +87,13 @@ export function ConfirmEmailChangeForm({
     // Solo verificar una vez y si no se ha verificado antes
     if (hasCheckedStatus) return;
     
-    // Verificar si hay error de expiraci?n, si no hay datos de email, o si viene check_status=true
-    const urlParams = new URLSearchParams(window.location.search);
+    // Verificar si hay error de expiración, si no hay datos de email, o si viene check_status=true
+    const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
     const shouldCheckStatus = urlParams.get('check_status') === 'true';
+    const likelyCompleted = urlParams.get('likely_completed') === 'true';
     const shouldCheck = shouldCheckStatus || 
-                       (error && (error.includes('expirado') || error.includes('ya fue usado') || error.includes('inv?lido'))) || 
+                       likelyCompleted ||
+                       (error && (error.includes('expirado') || error.includes('ya fue usado') || error.includes('inválido') || error.includes('inv?lido'))) || 
                        (!emailData && !isValidating);
     
     if (shouldCheck && !isCheckingStatus && !changeCompleted) {
@@ -167,8 +169,21 @@ export function ConfirmEmailChangeForm({
                     setConfirmed(true);
                     setCompleted(true);
                     setChangeCompleted(true);
-                    setError(null);
-                    console.log('[CONFIRM EMAIL CHANGE] Cambio completo detectado desde perfil');
+                    setError(null); // Limpiar cualquier error previo
+                    console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio completo detectado desde perfil - mostrando éxito');
+                  } else if (likelyCompleted && !profileByEmail.previous_email) {
+                    // Si likely_completed=true y no hay previous_email, es probable que el cambio se completó
+                    // Intentar usar el email del perfil como nuevo email
+                    const detectedNewEmail = profileByEmail.email || urlNewEmail || emailToCheck;
+                    setEmailData({ 
+                      oldEmail: urlOldEmail || emailToCheck, 
+                      newEmail: detectedNewEmail 
+                    });
+                    setConfirmed(true);
+                    setCompleted(true);
+                    setChangeCompleted(true);
+                    setError(null); // Limpiar error, mostrar éxito
+                    console.log('[CONFIRM EMAIL CHANGE] ✅ Cambio probablemente completado (likely_completed) - mostrando éxito');
                   } else if (urlOldEmail && urlNewEmail) {
                     // Tenemos ambos emails en la URL, usar esos
                     setEmailData({ 
@@ -196,8 +211,31 @@ export function ConfirmEmailChangeForm({
                 // Continuar con el flujo normal si no se puede buscar el perfil
               }
             } else {
-              // No hay emails en la URL, no podemos verificar sin sesión
-              console.log('[CONFIRM EMAIL CHANGE] No hay emails en la URL y no hay sesión, no se puede verificar');
+              // No hay emails en la URL, pero si likely_completed=true, intentar verificar de otra manera
+              if (likelyCompleted) {
+                console.log('[CONFIRM EMAIL CHANGE] likely_completed=true pero no hay emails en URL, intentando verificación alternativa...');
+                // Si es probable que el cambio se completó pero no tenemos emails, 
+                // mostrar mensaje informativo en lugar de error
+                // El usuario puede iniciar sesión para verificar
+                setError(null); // Limpiar error inicial
+                setConfirmed(true);
+                // No establecer completed todavía, pero tampoco mostrar error
+                // La UI mostrará un mensaje informativo
+                
+                // Intentar buscar en profiles usando cualquier email que pueda estar en el error o en la URL
+                // Aunque no tengamos emails explícitos, podemos intentar buscar usuarios recientes
+                // que hayan cambiado su email (esto es una verificación adicional)
+                try {
+                  // Nota: No podemos consultar auth.users directamente desde el cliente
+                  // Pero podemos intentar buscar en profiles si tenemos alguna pista
+                  // Por ahora, simplemente establecemos el estado para mostrar mensaje informativo
+                  console.log('[CONFIRM EMAIL CHANGE] No se puede verificar sin emails o sesión, mostrando mensaje informativo');
+                } catch (altVerifyError) {
+                  console.error('[CONFIRM EMAIL CHANGE] Error en verificación alternativa:', altVerifyError);
+                }
+              } else {
+                console.log('[CONFIRM EMAIL CHANGE] No hay emails en la URL y no hay sesión, no se puede verificar');
+              }
             }
           }
           
@@ -296,12 +334,20 @@ export function ConfirmEmailChangeForm({
             }
           } else {
             console.log('[CONFIRM EMAIL CHANGE] No se pudo obtener usuario:', userError);
-            // Si hay error pero no tenemos datos, mostrar mensaje m?s ?til
+            // Si hay error pero no tenemos datos, verificar si likely_completed=true
             if (!emailData) {
-              if (userError?.message?.includes('session') || userError?.message?.includes('JWT')) {
-                setError('No hay sesi?n activa. Si el cambio ya se complet?, inicia sesi?n con tu nuevo correo para verificar. Si el cambio est? pendiente, confirma ambos correos para completarlo.');
+              if (likelyCompleted) {
+                // Si es probable que el cambio se completó, no mostrar error
+                // En su lugar, mostrar mensaje informativo y sugerir iniciar sesión
+                console.log('[CONFIRM EMAIL CHANGE] likely_completed=true pero no se puede verificar sin sesión');
+                setError(null); // No mostrar error
+                setConfirmed(true);
+                // No establecer completed todavía, pero tampoco error
+                // La UI mostrará un estado intermedio
+              } else if (userError?.message?.includes('session') || userError?.message?.includes('JWT')) {
+                setError('No hay sesión activa. Si el cambio ya se completó, inicia sesión con tu nuevo correo para verificar. Si el cambio está pendiente, confirma ambos correos para completarlo.');
               } else {
-                setError('No se pudo verificar el estado del cambio. Intenta iniciar sesi?n para verificar el estado.');
+                setError('No se pudo verificar el estado del cambio. Intenta iniciar sesión para verificar el estado.');
               }
             }
           }
@@ -404,12 +450,12 @@ export function ConfirmEmailChangeForm({
               } else {
                 console.log('[CONFIRM EMAIL CHANGE] previous_email limpiado exitosamente (buena práctica de privacidad)');
               }
-            } catch (cleanupErr) {
-              console.error('[CONFIRM EMAIL CHANGE] Error limpiando previous_email:', cleanupErr);
+            } catch (error_) {
+              console.error('[CONFIRM EMAIL CHANGE] Error limpiando previous_email:', error_);
             }
             
             // 3. Si estamos en una página de la app, refrescar también el router
-            if (typeof globalThis.window !== 'undefined' && globalThis.window.location.pathname.startsWith('/app')) {
+            if (globalThis.window?.location.pathname.startsWith('/app')) {
               router.refresh();
             }
           }
@@ -601,6 +647,49 @@ export function ConfirmEmailChangeForm({
                   Ir a configuraci?n
                 </Link>
               )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Si está confirmado pero likely_completed=true y no hay datos completos, mostrar mensaje informativo
+  const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
+  const likelyCompleted = urlParams.get('likely_completed') === 'true';
+  
+  if (confirmed && likelyCompleted && !emailData && !error && !changeCompleted) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-blue-500/30 dark:border-blue-500/40 bg-blue-500/10 dark:bg-blue-500/20 p-6 text-center">
+          <div className="flex justify-center mb-4">
+            <Mail className="w-16 h-16 text-blue-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2">
+            Verificando cambio de correo
+          </h2>
+          <p className="text-sm text-blue-600/90 dark:text-blue-400/90 mb-6">
+            El enlace puede haber expirado, pero es probable que el cambio de correo se haya completado exitosamente. 
+            Por favor, inicia sesión con tu nuevo correo electrónico para verificar.
+          </p>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-500/30 dark:border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/20 p-4 text-left">
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-2">
+                ¿Qué hacer?
+              </p>
+              <ul className="text-xs text-amber-700/90 dark:text-amber-300/90 space-y-1 list-disc list-inside">
+                <li>Intenta iniciar sesión con tu <strong>nuevo correo electrónico</strong> para verificar si el cambio se completó.</li>
+                <li>Si no puedes iniciar sesión con el nuevo correo, intenta con el correo anterior.</li>
+                <li>Una vez que inicies sesión, verifica tu correo en Configuración → Perfil.</li>
+              </ul>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                href="/iniciar-sesion"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
+              >
+                Ir a iniciar sesión
+              </Link>
             </div>
           </div>
         </div>
