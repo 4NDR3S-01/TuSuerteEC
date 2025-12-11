@@ -44,22 +44,76 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Si hay un código, redirigir con el token para que el componente lo procese
-  // Para recovery y email_change, pasamos el código como token para procesarlo en el cliente
-  // Esto evita problemas con PKCE (code_verifier) que no está disponible en estos flujos
+  // Si hay un código, intentar procesarlo en el servidor primero
+  // Si falla por PKCE, pasarlo al cliente como fallback
   if (code) {
-    if (type === 'recovery') {
-      const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
-      resetUrl.searchParams.set('token', code);
-      console.log('[AUTH CALLBACK] Recovery - redirigiendo con token para procesar en cliente');
-      return NextResponse.redirect(resetUrl);
-    }
-    
-    if (type === 'email_change') {
-      const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
-      confirmUrl.searchParams.set('token', code);
-      console.log('[AUTH CALLBACK] Email change - redirigiendo con token para procesar en cliente');
-      return NextResponse.redirect(confirmUrl);
+    if (type === 'recovery' || type === 'email_change') {
+      // Intentar procesar en el servidor primero
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (supabaseUrl && supabaseAnonKey) {
+        try {
+          const cookieStore = await cookies();
+          const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+            cookies: {
+              getAll() {
+                return cookieStore.getAll();
+              },
+              setAll(cookiesToSet) {
+                try {
+                  for (const cookie of cookiesToSet) {
+                    const anyCookie: any = cookie;
+                    const name = anyCookie.name;
+                    const value = anyCookie.value;
+                    if (!name) continue;
+                    const opts = anyCookie.options ? { ...anyCookie.options } : { ...anyCookie };
+                    delete opts.name;
+                    delete opts.value;
+                    cookieStore.set({ name, value, ...opts });
+                  }
+                } catch {
+                  // Ignorar errores de escritura
+                }
+              },
+            },
+          });
+
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (!exchangeError && exchangeData?.session) {
+            // Éxito: sesión establecida en el servidor
+            if (type === 'recovery') {
+              console.log('[AUTH CALLBACK] Recovery - sesión establecida en servidor');
+              return NextResponse.redirect(new URL('/restablecer-clave', requestUrl.origin));
+            }
+            if (type === 'email_change') {
+              console.log('[AUTH CALLBACK] Email change - sesión establecida en servidor');
+              return NextResponse.redirect(new URL('/confirmar-cambio-correo', requestUrl.origin));
+            }
+          } else if (exchangeError) {
+            // Error (probablemente PKCE): pasar al cliente como fallback
+            console.log('[AUTH CALLBACK] Error en servidor, pasando código al cliente:', exchangeError.message);
+          }
+        } catch (error) {
+          console.log('[AUTH CALLBACK] Excepción en servidor, pasando código al cliente:', error);
+        }
+      }
+
+      // Fallback: pasar el código al cliente para procesarlo ahí
+      if (type === 'recovery') {
+        const resetUrl = new URL('/restablecer-clave', requestUrl.origin);
+        resetUrl.searchParams.set('token', code);
+        console.log('[AUTH CALLBACK] Recovery - redirigiendo con token para procesar en cliente');
+        return NextResponse.redirect(resetUrl);
+      }
+      
+      if (type === 'email_change') {
+        const confirmUrl = new URL('/confirmar-cambio-correo', requestUrl.origin);
+        confirmUrl.searchParams.set('token', code);
+        console.log('[AUTH CALLBACK] Email change - redirigiendo con token para procesar en cliente');
+        return NextResponse.redirect(confirmUrl);
+      }
     }
     
     // Para signup y otros tipos, procesar código en servidor (estos flujos tienen PKCE)

@@ -37,30 +37,52 @@ export function UpdatePasswordForm() {
 
         // PRIORIDAD 2: Si no hay sesión, intentar procesar token de la URL
         const urlParams = new URLSearchParams(globalThis.window?.location.search || '');
-        const token = urlParams.get('token');
+        const hash = globalThis.window?.location.hash || '';
+        let token = urlParams.get('token');
+        
+        // También verificar el hash por si Supabase envía el código ahí
+        if (!token && hash) {
+          const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+          token = hashParams.get('code') || hashParams.get('token');
+        }
+        
+        console.log('[UPDATE PASSWORD] Verificando token:', {
+          hasToken: !!token,
+          tokenLength: token?.length,
+          hasHash: !!hash,
+          urlSearch: globalThis.window?.location.search,
+        });
         
         if (token) {
-          console.log('[UPDATE PASSWORD] Procesando token con exchangeCodeForSession...');
+          console.log('[UPDATE PASSWORD] Procesando código de recovery...');
           try {
+            // El código de recovery de Supabase debe procesarse con exchangeCodeForSession
+            // En el cliente, esto funciona sin requerir PKCE
             const { data: exchangeData, error: exchangeError } = await client.auth.exchangeCodeForSession(token);
 
             if (!exchangeError && exchangeData?.session) {
-              console.log('[UPDATE PASSWORD] ✅ Token procesado exitosamente - sesión establecida');
+              console.log('[UPDATE PASSWORD] ✅ Código procesado exitosamente - sesión establecida');
               setHasSession(true);
               // Limpiar URL
               if (globalThis.window) {
                 globalThis.window.history.replaceState({}, document.title, globalThis.window.location.pathname);
               }
             } else if (exchangeError) {
-              console.log('[UPDATE PASSWORD] Error procesando token:', exchangeError.message);
+              console.error('[UPDATE PASSWORD] Error procesando código:', exchangeError.message);
+              // Mostrar el error específico para ayudar con debugging
+              console.error('[UPDATE PASSWORD] Detalles del error:', {
+                message: exchangeError.message,
+                status: exchangeError.status,
+              });
               setHasSession(false);
             }
           } catch (error) {
-            console.error('[UPDATE PASSWORD] Error procesando token:', error);
+            console.error('[UPDATE PASSWORD] Error procesando código:', error);
             setHasSession(false);
           }
         } else {
           // No hay token ni sesión
+          console.log('[UPDATE PASSWORD] No se encontró token en la URL ni en el hash');
           setHasSession(false);
         }
       } catch (error) {
