@@ -1,6 +1,7 @@
-import { getSupabaseServerClient } from '../supabase/server';
-import { canAccessAdmin, canAccessStaff, canAccessDashboard } from './roles';
-import { ensureUserProfile } from './ensure-profile';
+import { redirect } from 'next/navigation';
+import { auth } from '../../auth';
+import { prisma } from '../db';
+import { can, canAccessAdmin, canAccessStaff, canAccessDashboard, getRedirectPath, type Permission } from './roles';
 
 export type User = {
   id: string;
@@ -12,87 +13,56 @@ export type User = {
   cityId?: number;
   parishId?: number;
   address: string;
+  mustChangePassword: boolean;
 };
 
+export class AuthorizationError extends Error {
+  constructor(message = 'No tienes permiso para realizar esta acción.') {
+    super(message);
+    this.name = 'AuthorizationError';
+  }
+}
+
+/**
+ * Usuario autenticado leído siempre desde la base de datos (no desde el token),
+ * para que un cambio de rol, una suspensión o un cambio de contraseña surtan efecto de inmediato.
+ */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const supabase = await getSupabaseServerClient();
-    
-    const { data: { user }, error } = await supabase.auth.getUser();
-    
-    if (error) {
-      // No registrar errores de sesión faltante como errores críticos
-      // AuthSessionMissingError es esperado en rutas públicas
-      if (error.name !== 'AuthSessionMissingError' && error.message !== 'Auth session missing!') {
-        console.error('Error getting user from Supabase:', error);
-      }
-      return null;
-    }
-    
-    if (!user) {
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    if (!userId) {
       return null;
     }
 
-    // Intentar obtener perfil desde la tabla profiles
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
+    const account = await prisma.users.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
 
-    if (profile && !profileError) {
-      return {
-        id: user.id,
-        email: user.email!,
-        role: profile.role,
-        fullName: profile.full_name,
-        idNumber: profile.id_number,
-        phoneNumber: profile.phone_number,
-        cityId: profile.city_id,
-        parishId: profile.parish_id,
-        address: profile.address,
-      };
+    if (!account?.profile || account.suspended_at) {
+      return null;
     }
 
-    // Si no hay perfil, intentar crearlo automáticamente
-    const profileCreated = await ensureUserProfile(user);
-    
-    if (profileCreated) {
-      // Intentar obtener el perfil recién creado
-      const { data: newProfile, error: newProfileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (newProfile && !newProfileError) {
-        return {
-          id: user.id,
-          email: user.email!,
-          role: newProfile.role,
-          fullName: newProfile.full_name,
-          idNumber: newProfile.id_number,
-          phoneNumber: newProfile.phone_number,
-          cityId: newProfile.city_id,
-          parishId: newProfile.parish_id,
-          address: newProfile.address,
-        };
-      }
+    // Sesión emitida antes de un cambio de contraseña/rol/suspensión: ya no es válida
+    if ((session.user.sessionVersion ?? 0) !== account.session_version) {
+      return null;
     }
 
-    // Como último recurso, usar datos de user_metadata
-    const metadata = user.user_metadata || {};
-    
+    const profile = account.profile;
+
     return {
-      id: user.id,
-      email: user.email!,
-      role: metadata.role || 'participant',
-      fullName: metadata.full_name || 'Usuario',
-      idNumber: metadata.id_number || '0000000000',
-      phoneNumber: metadata.phone_number || '+593000000000',
-      cityId: metadata.city_id ? Number(metadata.city_id) : undefined,
-      parishId: metadata.parish_id ? Number(metadata.parish_id) : undefined,
-      address: metadata.address || 'Dirección no especificada',
+      id: account.id,
+      email: account.email,
+      role: profile.role,
+      fullName: profile.full_name,
+      idNumber: profile.id_number,
+      phoneNumber: profile.phone_number,
+      cityId: profile.city_id ?? undefined,
+      parishId: profile.parish_id ?? undefined,
+      address: profile.address,
+      mustChangePassword: account.must_change_password,
     };
   } catch (error) {
     console.error('Error in getCurrentUser:', error);
@@ -103,23 +73,56 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function requireAuth(): Promise<User> {
   const user = await getCurrentUser();
   if (!user) {
-    throw new Error('Usuario no autenticado');
+    throw new AuthorizationError('Tu sesión expiró. Inicia sesión nuevamente.');
   }
   return user;
 }
 
 export async function requireRole(role: 'admin' | 'staff' | 'participant'): Promise<User> {
   const user = await requireAuth();
-  
+
   const roleChecks = {
     admin: canAccessAdmin,
     staff: canAccessStaff,
     participant: canAccessDashboard,
   };
-  
+
   if (!roleChecks[role](user.role)) {
-    throw new Error(`Acceso denegado. Se requiere rol: ${role}`);
+    throw new AuthorizationError(`Acceso denegado. Se requiere rol: ${role}`);
   }
-  
+
+  return user;
+}
+
+/** Verifica un permiso de la matriz en `roles.ts` (para acciones de servidor) */
+export async function requirePermission(permission: Permission): Promise<User> {
+  const user = await requireAuth();
+  if (!can(user.role, permission)) {
+    throw new AuthorizationError();
+  }
+  return user;
+}
+
+/**
+ * Igual que `requirePermission`, pero para páginas: redirige en lugar de lanzar un error
+ * (sin sesión → login; sin permiso → el panel que le corresponde a su rol).
+ */
+export async function requirePagePermission(permission: Permission, currentPath?: string): Promise<User> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(currentPath ? `/iniciar-sesion?redirectTo=${encodeURIComponent(currentPath)}` : '/iniciar-sesion');
+  }
+  if (!can(user.role, permission)) {
+    redirect(getRedirectPath(user.role));
+  }
+  return user;
+}
+
+/** Usuario autenticado para páginas del área de participante */
+export async function requirePageUser(currentPath?: string): Promise<User> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(currentPath ? `/iniciar-sesion?redirectTo=${encodeURIComponent(currentPath)}` : '/iniciar-sesion');
+  }
   return user;
 }

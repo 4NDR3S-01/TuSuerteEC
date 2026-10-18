@@ -1,27 +1,12 @@
 import type { ReactNode } from 'react';
-import { StaffSidebar } from '../../../components/staff/staff-sidebar';
-import { StaffHeader } from '../../../components/staff/staff-header';
+import type { Metadata } from 'next';
+import { StaffPanel } from '../../../components/ops/panels';
+import { requirePagePermission } from '../../../lib/auth/get-user';
 
-type StaffLayoutProps = {
-  children: ReactNode;
-};
+export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Panel operativo', robots: { index: false } };
 
-export default function StaffLayout({ children }: StaffLayoutProps) {
-  return (
-    <div className="flex min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      {/* Sidebar */}
-      <StaffSidebar />
-
-      {/* Main content */}
-      <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <StaffHeader />
-
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
+export default async function StaffLayout({ children }: { children: ReactNode }) {
+  const user = await requirePagePermission('staff_panel.access', '/staff');
+  return <StaffPanel mustChangePassword={user.mustChangePassword}>{children}</StaffPanel>;
 }

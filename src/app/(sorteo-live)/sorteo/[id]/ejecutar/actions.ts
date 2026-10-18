@@ -1,26 +1,24 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { executeRaffleDraw } from '../../../../../lib/raffle/raffle-algorithm';
-import { requireRole } from '../../../../../lib/auth/get-user';
+import { requirePermission } from '../../../../../lib/auth/get-user';
 
 export async function executeRaffleDrawAction(raffleId: string) {
-  await requireRole('admin');
-
   try {
-    console.log('🎲 Iniciando ejecución de sorteo:', raffleId);
-    const result = await executeRaffleDraw(raffleId);
-    console.log('✅ Sorteo ejecutado exitosamente');
+    const actor = await requirePermission('raffles.draw');
+    const result = await executeRaffleDraw(String(raffleId), actor);
+
+    revalidatePath('/administrador/sorteos');
+    revalidatePath(`/resultados/${raffleId}`);
+    revalidatePath('/');
+
     return { success: true, data: result };
-  } catch (error: any) {
-    console.error('❌ Error en executeRaffleDrawAction:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      cause: error.cause
-    });
+  } catch (error) {
+    console.error('[executeRaffleDrawAction]', error);
     return {
       success: false,
-      error: error.message || 'Error al ejecutar el sorteo'
+      error: error instanceof Error ? error.message : 'Error al ejecutar el sorteo',
     };
   }
 }

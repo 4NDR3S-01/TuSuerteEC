@@ -1,69 +1,46 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { RegisterForm } from "../../../components/auth/register-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
-import { SiteHeader } from "../../../components/layout/site-header";
-import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
 import { getCurrentUser } from "../../../lib/auth/get-user";
+import { getRedirectPath, safeInternalPath } from "../../../lib/auth/roles";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export default async function RegisterPage() {
-  // Si el usuario ya está autenticado, redirigir al dashboard
+export const metadata: Metadata = {
+  title: "Crear cuenta",
+  description: "Regístrate gratis en TuSuerte para participar en sorteos con reglas claras y resultados verificables.",
+};
+
+type RegisterPageProps = {
+  searchParams?: Promise<{ ref?: string; redirectTo?: string }>;
+};
+
+export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const user = await getCurrentUser();
   if (user) {
-    redirect('/app');
+    redirect(getRedirectPath(user.role));
   }
+
+  const params = await searchParams;
+  const candidate = params?.ref ?? (await cookies()).get("ref")?.value;
+  const referralCode = typeof candidate === "string" && /^[A-Za-z0-9]{4,12}$/.test(candidate) ? candidate.toUpperCase() : null;
+
   return (
-    <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      <SiteHeader
-        navItems={PUBLIC_NAV_ITEMS}
-        cta={{ href: "/iniciar-sesion", label: "Iniciar sesión" }}
-      />
-
-      <main className="relative flex w-full min-h-screen items-center justify-center px-4 pb-12 pt-12 text-base sm:px-6 sm:pb-20 sm:pt-16">
-        <div className="absolute inset-x-0 top-0 -z-10 hidden h-[420px] bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.18)_0%,_transparent_55%)] sm:block" />
-
-        <AuthPageLayout
-          badge="Únete a TuSuerte"
-          title="Crea tu cuenta y participa en nuestros sorteos."
-          description="Regístrate en menos de un minuto y comienza a ganar premios increíbles participando en nuestros sorteos."
-          highlights={[
-            "Accede a sorteos exclusivos para miembros.",
-            "Recibe notificaciones de nuevos sorteos y resultados.",
-            "Gestiona tus participaciones desde tu panel personal.",
-          ]}
-          callout={
-            <>
-              ¿Ya tienes cuenta?{" "}
-              <Link href="/iniciar-sesion" className="font-semibold text-[color:var(--accent)]">
-                Inicia sesión aquí.
-              </Link>
-            </>
-          }
-          rightColumnClassName="gap-10 px-8 lg:px-12"
-        >
-          <div className="mx-auto w-full max-w-2xl space-y-8">
-            <RegisterForm containerClassName="mx-auto w-full max-w-[42rem] border-[color:var(--border)] bg-[color:var(--background)]/96 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-
-            <div className="mx-auto w-full space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-xs text-[color:var(--muted-foreground)] md:flex md:items-center md:gap-6 md:space-y-0">
-              <p className="md:max-w-sm">
-                Al registrarte aceptas nuestros{" "}
-                <Link href="#" className="font-semibold text-[color:var(--accent)]">
-                  términos y condiciones
-                </Link>{" "}
-                y{" "}
-                <Link href="#" className="font-semibold text-[color:var(--accent)]">
-                  políticas de privacidad
-                </Link>
-                .
-              </p>
-              <p className="font-semibold text-[color:var(--accent)]">Revisa tu correo para activar la cuenta.</p>
-            </div>
-          </div>
-        </AuthPageLayout>
-      </main>
-    </div>
+    <AuthPageLayout
+      wide
+      badge="Registro gratuito"
+      title="Crea tu cuenta en un par de minutos."
+      description="Registrarte no tiene costo. Solo pagas cuando decides comprar boletos o un plan, y nuestro equipo verifica cada pago."
+      highlights={[
+        "Tu cédula garantiza una cuenta por persona y protege la entrega del premio.",
+        "Cada boleto tiene un número único que verás en tu cuenta.",
+        "Puedes revisar el procedimiento y el resultado de cada sorteo.",
+      ]}
+    >
+      <RegisterForm referralCode={referralCode} redirectTo={safeInternalPath(params?.redirectTo)} />
+    </AuthPageLayout>
   );
 }

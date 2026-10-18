@@ -1,0 +1,494 @@
+// Esquema de la base de datos local de TuSuerte (PostgreSQL).
+// Los nombres de campos se mantienen en snake_case para conservar la misma
+// forma de datos que usaba la interfaz con Supabase.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Autenticación
+// ---------------------------------------------------------------------------
+
+model users {
+  id                   String    @id @default(uuid()) @db.Uuid
+  email                String    @unique
+  password_hash        String
+  email_verified_at    DateTime? @db.Timestamptz(6)
+  terms_accepted_at    DateTime? @db.Timestamptz(6)
+  /// Se incrementa al cambiar contraseña, rol o suspensión: invalida las sesiones abiertas
+  session_version      Int       @default(0)
+  /// Contraseña temporal asignada por un administrador: se pide cambiarla al ingresar
+  must_change_password Boolean   @default(false)
+  suspended_at         DateTime? @db.Timestamptz(6)
+  suspension_reason    String?
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  profile               profiles?
+  password_reset_tokens password_reset_tokens[]
+}
+
+model password_reset_tokens {
+  id         String    @id @default(uuid()) @db.Uuid
+  user_id    String    @db.Uuid
+  token_hash String    @unique
+  expires_at DateTime  @db.Timestamptz(6)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+// ---------------------------------------------------------------------------
+// Perfiles y ubicaciones
+// ---------------------------------------------------------------------------
+
+model profiles {
+  id                       String   @id @db.Uuid
+  full_name                String
+  id_number                String   @unique
+  phone_number             String
+  email                    String
+  previous_email           String?
+  avatar_url               String?
+  city_id                  Int?
+  parish_id                Int?
+  address                  String
+  role                     String   @default("participant")
+  notification_preferences Json?
+  referral_code            String?  @unique
+  referred_by              String?  @db.Uuid
+  created_at               DateTime @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user     users      @relation(fields: [id], references: [id], onDelete: Cascade)
+  cities   cities?    @relation(fields: [city_id], references: [id])
+  parishes parishes?  @relation(fields: [parish_id], references: [id])
+  referrer profiles?  @relation("referrals", fields: [referred_by], references: [id], onDelete: SetNull)
+  referred profiles[] @relation("referrals")
+
+  raffle_favorites       raffle_favorites[]
+  discount_redemptions   discount_redemptions[]
+  owned_discount_codes   discount_codes[]       @relation("discount_code_owner")
+  referral_rewards_given referral_rewards[]     @relation("referral_referrer")
+  referral_reward_origin referral_rewards?      @relation("referral_referred")
+  uploads                uploads[]
+
+  subscriptions         subscriptions[]
+  raffle_entries        raffle_entries[]
+  winners               winners[]
+  notifications         notifications[]
+  payment_transactions  payment_transactions[] @relation("transaction_user")
+  reviewed_transactions payment_transactions[] @relation("transaction_reviewer")
+
+  @@index([role])
+}
+
+model countries {
+  id     Int      @id @default(autoincrement())
+  name   String
+  code   String   @unique
+  cities cities[]
+}
+
+model cities {
+  id         Int    @id @default(autoincrement())
+  name       String
+  country_id Int
+
+  countries countries  @relation(fields: [country_id], references: [id], onDelete: Cascade)
+  parishes  parishes[]
+  profiles  profiles[]
+
+  @@unique([country_id, name])
+}
+
+model parishes {
+  id      Int    @id @default(autoincrement())
+  name    String
+  city_id Int
+
+  cities   cities     @relation(fields: [city_id], references: [id], onDelete: Cascade)
+  profiles profiles[]
+
+  @@unique([city_id, name])
+}
+
+// ---------------------------------------------------------------------------
+// Planes y suscripciones
+// ---------------------------------------------------------------------------
+
+model plans {
+  id                     String   @id @default(uuid()) @db.Uuid
+  name                   String
+  description            String?
+  price                  Float
+  currency               String   @default("USD")
+  interval               String   @default("month")
+  benefits               Json?
+  is_active              Boolean  @default(true)
+  is_featured            Boolean  @default(false)
+  max_concurrent_raffles Int?
+  show_raffles_limit     Boolean  @default(false)
+  raffles_limit_message  String?
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  subscriptions subscriptions[]
+}
+
+model subscriptions {
+  id                   String    @id @default(uuid()) @db.Uuid
+  user_id              String    @db.Uuid
+  plan_id              String?   @db.Uuid
+  status               String    @default("active")
+  current_period_start DateTime? @db.Timestamptz(6)
+  current_period_end   DateTime? @db.Timestamptz(6)
+  cancel_at_period_end Boolean   @default(false)
+  metadata             Json?
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  profiles             profiles               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plans                plans?                 @relation(fields: [plan_id], references: [id])
+  raffle_entries       raffle_entries[]
+  payment_transactions payment_transactions[]
+
+  @@index([user_id, status])
+}
+
+// ---------------------------------------------------------------------------
+// Sorteos
+// ---------------------------------------------------------------------------
+
+model raffles {
+  id                   String    @id @default(uuid()) @db.Uuid
+  title                String
+  description          String?
+  prize_description    String
+  prize_category       String?   @default("other")
+  image_url            String?
+  start_date           DateTime? @db.Timestamptz(6)
+  end_date             DateTime? @db.Timestamptz(6)
+  draw_date            DateTime? @db.Timestamptz(6)
+  status               String    @default("draft")
+  entry_mode           String    @default("hybrid")
+  total_winners        Int       @default(1)
+  max_entries_per_user Int?
+  is_trending          Boolean   @default(false)
+  ticket_price         Float?
+  /// Condiciones adicionales propias del sorteo (se muestran en sus bases)
+  terms                String?
+  /// Semilla revelada al ejecutar el sorteo (antes permanece en raffle_draw_secrets)
+  draw_seed            String?
+  /// SHA-256 de la semilla, publicado al cerrar el sorteo (compromiso previo)
+  draw_commitment      String?
+  /// SHA-256 de la lista ordenada de boletos participantes al cierre
+  entries_hash         String?
+  draw_algorithm       String?
+  closed_at            DateTime? @db.Timestamptz(6)
+  drawn_at             DateTime? @db.Timestamptz(6)
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  raffle_entries       raffle_entries[]
+  winners              winners[]
+  live_events          live_events[]
+  payment_transactions payment_transactions[]
+  draw_secret          raffle_draw_secrets?
+  favorites            raffle_favorites[]
+  discount_codes       discount_codes[]
+
+  @@index([status, draw_date])
+}
+
+model raffle_entries {
+  id                     String   @id @default(uuid()) @db.Uuid
+  raffle_id              String   @db.Uuid
+  user_id                String   @db.Uuid
+  subscription_id        String?  @db.Uuid
+  /// Pago que originó el boleto (compras manuales)
+  payment_transaction_id String?  @db.Uuid
+  ticket_number          String
+  entry_source           String   @default("manual_purchase")
+  is_winner              Boolean  @default(false)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+
+  raffles              raffles               @relation(fields: [raffle_id], references: [id], onDelete: Cascade)
+  profiles             profiles              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subscriptions        subscriptions?        @relation(fields: [subscription_id], references: [id])
+  payment_transactions payment_transactions? @relation(fields: [payment_transaction_id], references: [id], onDelete: SetNull)
+  winners              winners[]
+
+  @@unique([raffle_id, ticket_number])
+  @@index([user_id])
+  @@index([payment_transaction_id])
+}
+
+model winners {
+  id                 String    @id @default(uuid()) @db.Uuid
+  raffle_id          String    @db.Uuid
+  entry_id           String?   @db.Uuid
+  user_id            String    @db.Uuid
+  prize_position     Int?
+  status             String    @default("pending_contact")
+  contact_attempts   Int       @default(0)
+  contacted_at       DateTime? @db.Timestamptz(6)
+  delivered_at       DateTime? @db.Timestamptz(6)
+  delivery_photo_url String?
+  notes              String?
+  testimonial        String?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  raffles        raffles         @relation(fields: [raffle_id], references: [id], onDelete: Cascade)
+  profiles       profiles        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  raffle_entries raffle_entries? @relation(fields: [entry_id], references: [id], onDelete: SetNull)
+
+  @@index([raffle_id])
+  @@index([status])
+}
+
+model live_events {
+  id                 String    @id @default(uuid()) @db.Uuid
+  title              String
+  description        String?
+  raffle_id          String?   @db.Uuid
+  start_at           DateTime  @db.Timestamptz(6)
+  countdown_start_at DateTime? @db.Timestamptz(6)
+  stream_url         String?
+  status             String    @default("scheduled")
+  is_visible         Boolean   @default(true)
+  show_as_alert      Boolean   @default(false)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  raffles raffles? @relation(fields: [raffle_id], references: [id], onDelete: SetNull)
+}
+
+model notifications {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  title      String
+  message    String
+  type       String   @default("info")
+  read       Boolean  @default(false)
+  action_url String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  profiles profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, read])
+}
+
+// ---------------------------------------------------------------------------
+// Pagos
+// ---------------------------------------------------------------------------
+
+model payment_methods {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  type         String
+  description  String?
+  icon         String?
+  is_active    Boolean  @default(true)
+  instructions String?
+  config       Json?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  payment_transactions payment_transactions[]
+}
+
+model payment_transactions {
+  id                String    @id @default(uuid()) @db.Uuid
+  user_id           String    @db.Uuid
+  payment_method_id String    @db.Uuid
+  transaction_type  String
+  amount            Float
+  /// Monto antes del descuento (igual a `amount` si no se usó código)
+  subtotal          Float?
+  discount_amount   Float     @default(0)
+  discount_code_id  String?   @db.Uuid
+  currency          String    @default("USD")
+  raffle_id         String?   @db.Uuid
+  subscription_id   String?   @db.Uuid
+  receipt_reference String?
+  receipt_url       String?
+  status            String    @default("pending")
+  metadata          Json?
+  admin_comment     String?
+  rejection_reason  String?
+  reviewed_at       DateTime? @db.Timestamptz(6)
+  reviewed_by       String?   @db.Uuid
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  profiles            profiles              @relation("transaction_user", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer            profiles?             @relation("transaction_reviewer", fields: [reviewed_by], references: [id])
+  payment_methods     payment_methods       @relation(fields: [payment_method_id], references: [id])
+  raffles             raffles?              @relation(fields: [raffle_id], references: [id], onDelete: SetNull)
+  subscriptions       subscriptions?        @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
+  discount_codes      discount_codes?       @relation(fields: [discount_code_id], references: [id], onDelete: SetNull)
+  raffle_entries      raffle_entries[]
+  discount_redemption discount_redemptions?
+
+  @@index([status])
+  @@index([user_id])
+  @@index([payment_method_id, receipt_reference])
+}
+
+// ---------------------------------------------------------------------------
+// Integridad de sorteos
+// ---------------------------------------------------------------------------
+
+/// Semilla secreta generada al cerrar el sorteo. Solo se revela (en raffles.draw_seed) al ejecutarlo.
+model raffle_draw_secrets {
+  raffle_id  String   @id @db.Uuid
+  seed       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  raffles raffles @relation(fields: [raffle_id], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Auditoría
+// ---------------------------------------------------------------------------
+
+model audit_logs {
+  id          String   @id @default(uuid()) @db.Uuid
+  actor_id    String?  @db.Uuid
+  actor_role  String?
+  action      String
+  entity_type String
+  entity_id   String?
+  data        Json?
+  ip          String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([entity_type, entity_id])
+  @@index([actor_id])
+  @@index([created_at])
+}
+
+// ---------------------------------------------------------------------------
+// Archivos subidos
+// ---------------------------------------------------------------------------
+
+model uploads {
+  id         String   @id @default(uuid()) @db.Uuid
+  owner_id   String   @db.Uuid
+  folder     String
+  file_name  String   @unique
+  mime_type  String
+  size       Int
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  owner profiles @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+
+  @@index([owner_id])
+}
+
+// ---------------------------------------------------------------------------
+// Marketing: favoritos, descuentos y referidos
+// ---------------------------------------------------------------------------
+
+model raffle_favorites {
+  user_id     String    @db.Uuid
+  raffle_id   String    @db.Uuid
+  reminded_at DateTime? @db.Timestamptz(6)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+
+  profiles profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  raffles  raffles  @relation(fields: [raffle_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, raffle_id])
+  @@index([raffle_id])
+}
+
+model discount_codes {
+  id                String    @id @default(uuid()) @db.Uuid
+  code              String    @unique
+  description       String?
+  /// percent | fixed
+  discount_type     String
+  value             Float
+  /// all | raffles | plans
+  applies_to        String    @default("all")
+  /// Si se indica, solo vale para este sorteo
+  raffle_id         String?   @db.Uuid
+  max_uses          Int?
+  max_uses_per_user Int       @default(1)
+  valid_from        DateTime? @db.Timestamptz(6)
+  valid_until       DateTime? @db.Timestamptz(6)
+  is_active         Boolean   @default(true)
+  /// Si se indica, solo este usuario puede usarlo (códigos de referidos)
+  owner_user_id     String?   @db.Uuid
+  /// admin | referral
+  source            String    @default("admin")
+  created_by        String?   @db.Uuid
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  raffles              raffles?               @relation(fields: [raffle_id], references: [id], onDelete: SetNull)
+  owner                profiles?              @relation("discount_code_owner", fields: [owner_user_id], references: [id], onDelete: Cascade)
+  redemptions          discount_redemptions[]
+  payment_transactions payment_transactions[]
+  referral_reward      referral_rewards?
+}
+
+/// Uso de un código: se libera si el pago se rechaza
+model discount_redemptions {
+  id             String   @id @default(uuid()) @db.Uuid
+  code_id        String   @db.Uuid
+  user_id        String   @db.Uuid
+  transaction_id String   @unique @db.Uuid
+  /// pending | confirmed | released
+  status         String   @default("pending")
+  amount         Float
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  discount_codes       discount_codes       @relation(fields: [code_id], references: [id], onDelete: Cascade)
+  profiles             profiles             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  payment_transactions payment_transactions @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+
+  @@index([code_id, status])
+  @@index([user_id])
+}
+
+/// Una recompensa por cada usuario referido (al aprobarse su primer pago)
+model referral_rewards {
+  id               String   @id @default(uuid()) @db.Uuid
+  referrer_id      String   @db.Uuid
+  referred_user_id String   @unique @db.Uuid
+  discount_code_id String?  @unique @db.Uuid
+  transaction_id   String?  @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  referrer       profiles        @relation("referral_referrer", fields: [referrer_id], references: [id], onDelete: Cascade)
+  referred       profiles        @relation("referral_referred", fields: [referred_user_id], references: [id], onDelete: Cascade)
+  discount_codes discount_codes? @relation(fields: [discount_code_id], references: [id], onDelete: SetNull)
+
+  @@index([referrer_id])
+}
+
+// ---------------------------------------------------------------------------
+// Configuración editable desde el panel
+// ---------------------------------------------------------------------------
+
+model app_settings {
+  key        String   @id
+  value      Json
+  updated_by String?  @db.Uuid
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+}

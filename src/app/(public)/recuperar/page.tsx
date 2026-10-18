@@ -1,97 +1,50 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
 
 import { ResetPasswordForm } from "../../../components/auth/reset-password-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
-import { SiteHeader } from "../../../components/layout/site-header";
-import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
+import { Card } from "../../../components/ui/kit";
 import { getCurrentUser } from "../../../lib/auth/get-user";
+import { getRedirectPath } from "../../../lib/auth/roles";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-type RecoverPageProps = {
-  searchParams?: Promise<{
-    error?: string;
-  }>;
+export const metadata: Metadata = {
+  title: "Recuperar contraseña",
+  robots: { index: false },
 };
 
-export default async function RecoverPage({ searchParams }: RecoverPageProps) {
-  // Si el usuario ya está autenticado, redirigir al dashboard
+export default async function RecoverPage() {
   const user = await getCurrentUser();
   if (user) {
-    redirect('/app');
+    redirect(getRedirectPath(user.role));
   }
 
-  const params = await searchParams;
-  const error = params?.error;
   return (
-    <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      <SiteHeader
-        navItems={PUBLIC_NAV_ITEMS}
-        cta={{ href: "/registro", label: "Crear cuenta" }}
-      />
-
-      <main className="relative flex w-full min-h-screen items-center justify-center px-4 pb-12 pt-12 text-base sm:px-6 sm:pb-20 sm:pt-16">
-        <div className="absolute inset-x-0 top-0 -z-10 hidden h-[420px] bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.18)_0%,_transparent_55%)] sm:block" />
-
-        <AuthPageLayout
-          badge="¿Olvidaste tu contraseña?"
-          title="Recupera el acceso a tu cuenta en minutos."
-          description="Enviaremos un enlace seguro para que puedas crear una nueva contraseña. Revisa tu bandeja de entrada y sigue las instrucciones."
-          highlights={[
-            "El enlace tiene una validez limitada por seguridad.",
-            "Si no encuentras el correo, revisa tu carpeta de spam o promociones.",
-            "Recuerda actualizar tu contraseña con una combinación segura.",
-          ]}
-          callout={
-            <>
-              ¿Necesitas asistencia adicional? Escríbenos a{" "}
-              <a href="mailto:soporte@tusuerte.com" className="font-semibold text-[color:var(--accent)]">
-                soporte@tusuerte.com
-              </a>{" "}
-              y nuestro equipo te ayudará a restablecer el acceso.
-            </>
-          }
-          rightColumnClassName="items-center justify-center"
-        >
-          <div className="mx-auto w-full max-w-xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--background)]/96 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] sm:max-w-2xl sm:p-8">
-            <div className="space-y-2 text-center">
-              <h2 className="text-xl font-semibold">Recuperar contraseña</h2>
-              <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
-              </p>
-            </div>
-            {error && (
-              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
-                <p className="font-semibold">⚠ Enlace expirado</p>
-                <p className="mt-1">
-                  {error === 'expired' 
-                    ? 'El enlace que utilizaste ha expirado o ya fue usado. Por seguridad, solicita un nuevo correo de recuperación.'
-                    : decodeURIComponent(error)}
-                </p>
-              </div>
-            )}
-            <div className="mt-6">
-              <ResetPasswordForm />
-            </div>
-            <div className="mt-6 space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-xs text-[color:var(--muted-foreground)] sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
-              <p>
-                ¿Recordaste tu contraseña?{" "}
-                <Link href="/iniciar-sesion" className="font-semibold text-[color:var(--accent)]">
-                  Volver a iniciar sesión
-                </Link>
-              </p>
-              <p>
-                ¿Necesitas una cuenta?{" "}
-                <Link href="/registro" className="font-semibold text-[color:var(--accent)]">
-                  Crea una ahora
-                </Link>
-              </p>
-            </div>
-          </div>
-        </AuthPageLayout>
-      </main>
-    </div>
+    <AuthPageLayout
+      badge="Recuperar acceso"
+      title="Restablece tu contraseña de forma segura."
+      description="Te enviaremos un enlace personal para crear una contraseña nueva."
+      highlights={[
+        "El enlace vence en 1 hora y solo funciona una vez.",
+        "Al cambiar la contraseña se cierran las sesiones abiertas en otros dispositivos.",
+        "Si no solicitaste el cambio, ignora el mensaje: tu cuenta sigue protegida.",
+      ]}
+    >
+      <Card className="p-6 sm:p-8">
+        <h2 className="text-xl font-bold">Recuperar contraseña</h2>
+        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">Escribe el correo con el que te registraste.</p>
+        <div className="mt-6">
+          <ResetPasswordForm />
+        </div>
+        <p className="mt-6 border-t border-[color:var(--border)] pt-5 text-sm text-[color:var(--muted-foreground)]">
+          ¿La recordaste?{" "}
+          <Link href="/iniciar-sesion" className="font-semibold text-[color:var(--accent)] hover:underline">
+            Volver a iniciar sesión
+          </Link>
+        </p>
+      </Card>
+    </AuthPageLayout>
   );
 }

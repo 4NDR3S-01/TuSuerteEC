@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDateTime } from "../../lib/raffle/labels";
+
 import { useEffect, useMemo, useState } from "react";
 
 type LiveEvent = {
@@ -88,14 +90,7 @@ export function LiveCountdown({ event, variant = "default" }: LiveCountdownProps
   const startsAt = useMemo(() => new Date(event.start_at), [event.start_at]);
   const formattedStartDate = useMemo(
     () =>
-      new Intl.DateTimeFormat("es-EC", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "America/Guayaquil",
-      }).format(startsAt),
+      formatDateTime(startsAt),
     [startsAt],
   );
 

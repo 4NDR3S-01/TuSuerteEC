@@ -1,8 +1,14 @@
 'use client';
 
+import { formatDate } from '../../lib/raffle/labels';
+
 import { useEffect, useState } from 'react';
 import { X, Bell, Check, Trash2, ExternalLink, Gift, Trophy, AlertTriangle, Info, CheckCircle2, Loader2 } from 'lucide-react';
-import { getSupabaseBrowserClient } from '../../lib/supabase/client';
+import {
+  deleteNotification as deleteNotificationAction,
+  getMyNotifications,
+  markNotificationsAsRead,
+} from '../../lib/actions/notifications';
 import { useRouter } from 'next/navigation';
 import { useToast } from '../../hooks/use-toast';
 
@@ -30,7 +36,6 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const router = useRouter();
   const { showToast } = useToast();
-  const supabase = getSupabaseBrowserClient();
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -41,24 +46,10 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const data = (await getMyNotifications()) as Notification[];
 
-      if (error) {
-        console.error('Error loading notifications:', error);
-        showToast({
-          type: 'error',
-          description: 'Error al cargar notificaciones',
-        });
-        return;
-      }
-
-      setNotifications(data || []);
-      const unreadCount = data?.filter(n => !n.read).length || 0;
+      setNotifications(data);
+      const unreadCount = data.filter(n => !n.read).length;
       onCountChange(unreadCount);
     } catch (error) {
       console.error('Error:', error);
@@ -77,14 +68,7 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
     setProcessingIds(prev => new Set(prev).add(notificationId));
     
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, updated_at: new Date().toISOString() })
-        .eq('id', notificationId);
-
-      if (error) {
-        throw error;
-      }
+      await markNotificationsAsRead([notificationId]);
 
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
@@ -113,14 +97,7 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
     if (unreadIds.length === 0) return;
 
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, updated_at: new Date().toISOString() })
-        .in('id', unreadIds);
-
-      if (error) {
-        throw error;
-      }
+      await markNotificationsAsRead(unreadIds);
 
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       onCountChange(0);
@@ -144,14 +121,7 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
     setProcessingIds(prev => new Set(prev).add(notificationId));
     
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', notificationId);
-
-      if (error) {
-        throw error;
-      }
+      await deleteNotificationAction(notificationId);
 
       const notification = notifications.find(n => n.id === notificationId);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
@@ -309,12 +279,7 @@ export function NotificationsPanel({ userId, isOpen, onClose, onCountChange }: N
                         
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[9px] sm:text-[10px] text-[color:var(--muted-foreground)]">
-                            {new Date(notification.created_at).toLocaleDateString('es-EC', {
-                              day: 'numeric',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+                            {formatDate(notification.created_at)}
                           </span>
                           
                           <div className="flex gap-0.5 sm:gap-1" onClick={(e) => e.stopPropagation()}>

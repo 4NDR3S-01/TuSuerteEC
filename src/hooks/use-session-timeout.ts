@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSupabaseBrowserClient } from '../lib/supabase/client';
+import { signOut } from 'next-auth/react';
 
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutos en milisegundos
 
@@ -26,8 +26,7 @@ export function useSessionTimeout() {
       // y no estamos ya en una página pública
       if (timeSinceLastActivity >= INACTIVITY_TIMEOUT && !pathname?.includes('/iniciar-sesion')) {
         try {
-          const supabase = getSupabaseBrowserClient();
-          await supabase.auth.signOut();
+          await signOut({ redirect: false });
           
           // Redirigir a login con mensaje
           router.push('/iniciar-sesion?session=expired');

@@ -1,15 +1,13 @@
-export type PaymentMethodType = 'stripe' | 'manual_transfer' | 'qr_code';
+// Tipos de métodos de pago. Por ahora solo pagos manuales (transferencia y QR) aprobados por el admin.
+// Para agregar una pasarela (p. ej. Payphone) se añade un nuevo tipo aquí y su configuración.
+export type PaymentMethodType = 'manual_transfer' | 'qr_code';
 
 export type PaymentScope = 'raffles' | 'plans';
 
 export type PaymentMethodConfig = {
   scopes?: PaymentScope[];
   currency?: string;
-  stripe?: {
-    mode?: 'payment' | 'subscription';
-    successPath?: string;
-    cancelPath?: string;
-  };
+  // Transferencia bancaria: datos completos de la cuenta
   manual?: {
     bankName?: string;
     accountNumber?: string;
@@ -17,15 +15,16 @@ export type PaymentMethodConfig = {
     beneficiary?: string;
     identification?: string;
     instructions?: string;
-    requiresProof?: boolean;
+    requiresProof?: boolean; // Si requiere comprobante de pago
   };
+  // Código QR (Deuna, Binance, etc.)
   qr?: {
     provider?: string;
     qrImageUrl?: string;
     accountId?: string;
     accountName?: string;
     instructions?: string;
-    requiresProof?: boolean;
+    requiresProof?: boolean; // Si requiere comprobante de pago
   };
 };
 
@@ -42,18 +41,4 @@ export type PaymentMethod = {
   updated_at: string | null;
 };
 
-export type PaymentRecord = {
-  id: string;
-  user_id: string;
-  raffle_id: string | null;
-  subscription_id: string | null;
-  amount: number;
-  currency: string;
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
-  payment_method: string | null;
-  payment_method_id: string | null;
-  transaction_id: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-};
-
+export const MANUAL_PAYMENT_TYPES: readonly string[] = ['manual_transfer', 'qr_code'];

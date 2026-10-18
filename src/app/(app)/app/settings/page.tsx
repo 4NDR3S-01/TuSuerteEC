@@ -1,50 +1,27 @@
-import { getSupabaseServerClient } from '../../../../lib/supabase/server';
-import { getCurrentUser } from '../../../../lib/auth/get-user';
-import { redirect } from 'next/navigation';
+import { prisma, toPlain } from '../../../../lib/db';
+import { requirePageUser } from '../../../../lib/auth/get-user';
 import { SettingsPage } from '../../../../components/settings/settings-page';
 
 export const dynamic = 'force-dynamic';
 
-type SettingsPageProps = {
-  searchParams?: Promise<{
-    email_changed?: string;
-  }>;
-};
+type PageProps = { searchParams?: Promise<{ tab?: string }> };
 
-export default async function Settings({ searchParams }: SettingsPageProps) {
-  const user = await getCurrentUser();
-  
-  if (!user) {
-    redirect('/iniciar-sesion');
-  }
+export default async function Settings({ searchParams }: PageProps) {
+  const user = await requirePageUser('/app/settings');
+  const tab = (await searchParams)?.tab;
 
-  const params = await searchParams;
-  const emailChanged = params?.email_changed === 'true';
-
-  const supabase = await getSupabaseServerClient();
-  
-  // Obtener perfil del usuario
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
-
-  // Obtener suscripciones activas no expiradas
-  const now = new Date().toISOString();
-  const { data: subscriptions } = await supabase
-    .from('subscriptions')
-    .select('*, plans(*)')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .gt('current_period_end', now);
+  const subscriptions = await prisma.subscriptions.findMany({
+    where: { user_id: user.id, status: 'active', current_period_end: { gt: new Date() } },
+    select: { id: true, current_period_end: true, plans: { select: { name: true, price: true, interval: true } } },
+  });
 
   return (
     <SettingsPage
-      user={user}
-      profile={profile}
-      subscriptions={subscriptions || []}
-      emailChanged={emailChanged}
+      email={user.email}
+      mustChangePassword={user.mustChangePassword}
+      profile={{ full_name: user.fullName, phone_number: user.phoneNumber, id_number: user.idNumber, address: user.address }}
+      subscriptions={toPlain(subscriptions)}
+      initialTab={tab === 'seguridad' || tab === 'plan' || tab === 'comunicaciones' ? tab : 'perfil'}
     />
   );
 }

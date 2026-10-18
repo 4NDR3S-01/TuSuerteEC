@@ -1,14 +1,23 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist_Mono, Inter, Plus_Jakarta_Sans } from "next/font/google";
 
 import { ThemeProvider } from "../components/theme/theme-provider";
 import { AuthProvider } from "../components/auth/auth-provider";
 import { ToastProvider } from "../components/ui/toast-provider";
+import { SITE } from "../config/site";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -17,102 +26,71 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TuSuerte",
-  description: "Participa por muchos premios",
+  metadataBase: new URL(SITE.url),
+  title: {
+    default: "TuSuerte · Sorteos en línea transparentes",
+    template: "%s · TuSuerte",
+  },
+  description: SITE.description,
+  applicationName: SITE.name,
   icons: {
-    icon: '/favicon.ico',
+    icon: "/favicon.ico",
+  },
+  openGraph: {
+    type: "website",
+    locale: "es_EC",
+    siteName: SITE.name,
+    title: "TuSuerte · Sorteos en línea transparentes",
+    description: SITE.description,
+  },
+  twitter: {
+    card: "summary_large_image",
   },
 };
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f7fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#070b17" },
+  ],
+};
+
+// Aplica el tema guardado antes de pintar la página (evita el parpadeo claro/oscuro)
+const themeScript = `
+  (function () {
+    try {
+      var stored = window.localStorage.getItem('theme-preference');
+      var mode = stored === 'light' || stored === 'dark'
+        ? stored
+        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      var root = document.documentElement;
+      root.dataset.theme = mode;
+      root.dataset.themeMode = mode;
+      root.style.setProperty('color-scheme', mode);
+    } catch (error) {}
+  })();
+`.trim();
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const themeScript = `
-    (function () {
-      try {
-        var storageKey = 'theme-preference';
-        var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        var stored = window.localStorage.getItem(storageKey);
-        var mode = stored === 'light' || stored === 'dark'
-          ? stored
-          : (mediaQuery.matches ? 'dark' : 'light');
-        var root = document.documentElement;
-        root.dataset.theme = mode;
-        root.dataset.themeMode = mode;
-        root.style.setProperty('color-scheme', mode);
-      } catch (error) {
-        // noop
-      }
-    })();
-  `.trim();
-
-  const errorSuppressionScript = `
-    (function () {
-      // Suprimir errores no críticos de cookies y streams
-      if (typeof window !== 'undefined') {
-        // Suprimir errores de cookies de Cloudflare
-        var originalConsoleError = console.error;
-        console.error = function() {
-          var args = Array.prototype.slice.call(arguments);
-          var message = args.join(' ');
-          
-          // Filtrar errores no críticos
-          if (message && (
-            message.includes('__cf_bm') ||
-            (message.includes('Cookie') && message.includes('rejected') && message.includes('domain')) ||
-            message.includes('Error in input stream') ||
-            message.includes('input stream')
-          )) {
-            return; // No mostrar estos errores
-          }
-          originalConsoleError.apply(console, args);
-        };
-
-        // Capturar errores no manejados relacionados con cookies/streams
-        window.addEventListener('error', function(event) {
-          var message = event.message || '';
-          if (message.includes('__cf_bm') || 
-              message.includes('Cookie') && message.includes('rejected') ||
-              message.includes('input stream') ||
-              message.includes('Error in input stream')) {
-            event.preventDefault();
-            event.stopPropagation();
-            return false;
-          }
-        }, true);
-
-        // Capturar promesas rechazadas no manejadas relacionadas con cookies
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event.reason;
-          var message = reason?.message || reason?.toString() || '';
-          if (message.includes('__cf_bm') || 
-              message.includes('Cookie') && message.includes('rejected') ||
-              message.includes('input stream')) {
-            event.preventDefault();
-            return false;
-          }
-        });
-      }
-    })();
-  `.trim();
-
   return (
-    <html lang="es" data-theme="light" data-theme-mode="light" suppressHydrationWarning>
+    <html lang="es-EC" data-theme="light" data-theme-mode="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <script dangerouslySetInnerHTML={{ __html: errorSuppressionScript }} />
       </head>
       <body
-        className={`app-shell ${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`app-shell ${inter.variable} ${jakarta.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        <a href="#contenido" className="skip-link">
+          Saltar al contenido
+        </a>
         <ThemeProvider>
           <ToastProvider>
-            <AuthProvider>
-              {children}
-            </AuthProvider>
+            <AuthProvider>{children}</AuthProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

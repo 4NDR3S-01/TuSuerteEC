@@ -1,6 +1,8 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 type ToastType = 'info' | 'success' | 'error';
 
@@ -24,6 +26,18 @@ type ToastContextValue = {
 const DEFAULT_DURATION = 4000;
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
+
+// Puente para mostrar avisos fuera de componentes con hooks (reemplaza a window.alert)
+let externalShow: ((options: ToastOptions) => string) | null = null;
+
+export function notifyError(description: string) {
+  if (externalShow) externalShow({ type: 'error', description });
+  else console.error(description);
+}
+
+export function notifySuccess(description: string) {
+  externalShow?.({ type: 'success', description });
+}
 
 function generateId() {
   try {
@@ -84,6 +98,13 @@ export function ToastProvider({ children }: ToastProviderProps) {
     [showToast, dismissToast],
   );
 
+  useEffect(() => {
+    externalShow = showToast;
+    return () => {
+      externalShow = null;
+    };
+  }, [showToast]);
+
   return (
     <ToastContext.Provider value={value}>
       {children}
@@ -109,7 +130,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
                 onClick={() => dismissToast(toast.id)}
                 className="rounded-full p-1 text-xs opacity-70 transition-opacity hover:opacity-100"
               >
-                <span aria-hidden="true">✕</span>
+                <X className="size-4" aria-hidden />
                 <span className="sr-only">Cerrar notificación</span>
               </button>
             </div>

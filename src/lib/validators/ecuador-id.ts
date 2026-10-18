@@ -14,9 +14,10 @@ export function validateEcuadorianId(cedula: string): boolean {
   // Extraer los primeros dos dígitos (código de provincia)
   const provinceCode = Number.parseInt(cedula.substring(0, 2), 10);
 
-  // Verificar que el código de provincia sea válido (01-24, excluyendo algunas)
+  // Verificar que el código de provincia sea válido (01-24)
   // Ecuador tiene 24 provincias
-  if (provinceCode < 1 || provinceCode > 24) {
+  // 30 = ecuatorianos registrados en el exterior
+  if ((provinceCode < 1 || provinceCode > 24) && provinceCode !== 30) {
     return false;
   }
 
@@ -74,7 +75,8 @@ export function getEcuadorianIdError(cedula: string): string | null {
   }
 
   const provinceCode = Number.parseInt(cedula.substring(0, 2), 10);
-  if (provinceCode < 1 || provinceCode > 24) {
+  // 30 = ecuatorianos registrados en el exterior
+  if ((provinceCode < 1 || provinceCode > 24) && provinceCode !== 30) {
     return 'El código de provincia de la cédula no es válido.';
   }
 

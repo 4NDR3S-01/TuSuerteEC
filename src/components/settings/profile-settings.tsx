@@ -1,371 +1,88 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Save, Loader2, Mail, Lock } from 'lucide-react';
-import { getSupabaseBrowserClient } from '../../lib/supabase/client';
+import { useSession } from 'next-auth/react';
+import { Loader2, Save } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
-import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
+import { updateMyProfile } from '../../lib/actions/profile';
+import { Button, Field, Input, Notice } from '../ui/kit';
 
-export function ProfileSettings({ user, profile }: any) {
+type Profile = { full_name: string; phone_number: string; id_number: string; address: string };
+
+/** Datos personales. La cédula no se puede cambiar; cambiar el correo exige la contraseña actual. */
+export function ProfileSettings({ email, profile }: { email: string; profile: Profile }) {
   const router = useRouter();
+  const { update: refreshSession } = useSession();
   const { showToast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    email: user?.email || '',
-    full_name: profile?.full_name || '',
-    phone_number: profile?.phone_number || profile?.phone || '',
-    id_number: profile?.id_number || profile?.national_id || '',
-    address: profile?.address || '',
+  const [form, setForm] = useState({
+    email,
+    full_name: profile.full_name,
+    phone_number: profile.phone_number,
+    address: profile.address,
+    current_password: '',
   });
+  const [errors, setErrors] = useState<{ email?: string; currentPassword?: string; form?: string }>({});
+  const [saving, setSaving] = useState(false);
+  const emailChanged = form.email.trim().toLowerCase() !== email.toLowerCase();
 
-  // Validar formato de email
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
-  const [emailCheckTimeout, setEmailCheckTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  const handleEmailChange = async (newEmail: string) => {
-    setFormData({ ...formData, email: newEmail });
-    
-    // Limpiar timeout anterior
-    if (emailCheckTimeout) {
-      clearTimeout(emailCheckTimeout);
-    }
-    
-    // Validar formato de email en tiempo real
-    if (newEmail && !validateEmail(newEmail)) {
-      setEmailError('El formato del correo electrónico no es válido');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setErrors({});
+    const result = await updateMyProfile(form);
+    setSaving(false);
+    if (!result.success) {
+      setErrors(result.field === 'email' ? { email: result.error } : result.field === 'currentPassword' ? { currentPassword: result.error } : { form: result.error });
       return;
     }
-    
-    // Si el email no cambió, no validar
-    if (newEmail === user.email) {
-      setEmailError(null);
-      return;
-    }
-    
-    // Debounce: esperar 500ms antes de verificar
-    const timeout = setTimeout(async () => {
-      if (!newEmail || !validateEmail(newEmail)) {
-        setEmailError(null);
-        return;
-      }
-      
-      setIsCheckingEmail(true);
-      setEmailError(null);
-      
-      try {
-        const supabase = getSupabaseBrowserClient();
-        const { data: exists, error } = await supabase
-          .rpc('check_email_exists', { user_email: newEmail.toLowerCase().trim() });
-        
-        if (error) {
-          console.error('Error checking email:', error);
-          setIsCheckingEmail(false);
-          return;
-        }
-        
-        if (exists) {
-          setEmailError('Este correo electrónico ya está registrado por otro usuario');
-        }
-      } catch (error) {
-        console.error('Error checking email:', error);
-      } finally {
-        setIsCheckingEmail(false);
-      }
-    }, 500);
-    
-    setEmailCheckTimeout(timeout);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setEmailError(null);
-
-    try {
-      const supabase = getSupabaseBrowserClient();
-      
-      // Validaciones
-      if (!formData.full_name.trim()) {
-        showToast({
-          type: 'error',
-          description: 'El nombre completo es requerido',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Validar email si ha cambiado
-      const emailChanged = formData.email !== user.email;
-      if (emailChanged) {
-        if (!formData.email.trim()) {
-          setEmailError('El correo electrónico es requerido');
-          setIsLoading(false);
-          return;
-        }
-
-        if (!validateEmail(formData.email)) {
-          setEmailError('El formato del correo electrónico no es válido');
-          setIsLoading(false);
-          return;
-        }
-
-        // Verificar si el email ya existe antes de intentar cambiarlo
-        const { data: emailExists, error: emailCheckError } = await supabase
-          .rpc('check_email_exists', { user_email: formData.email.toLowerCase().trim() });
-
-        if (emailCheckError) {
-          console.error('Error checking email:', emailCheckError);
-          setEmailError('Error al verificar el correo. Intenta nuevamente.');
-          setIsLoading(false);
-          return;
-        }
-
-        if (emailExists) {
-          setEmailError('Este correo electrónico ya está registrado por otro usuario');
-          setIsLoading(false);
-          return;
-        }
-
-        // Guardar el correo anterior en profiles antes de solicitar el cambio
-        // Esto nos permitirá mostrarlo durante el proceso de confirmación
-        const currentEmail = user.email || profile?.email;
-        if (currentEmail) {
-          const { error: prevEmailError } = await supabase
-            .from('profiles')
-            .update({ previous_email: currentEmail })
-            .eq('id', user.id);
-          
-          if (prevEmailError) {
-            console.warn('[CHANGE EMAIL] Error guardando correo anterior:', prevEmailError);
-          }
-        }
-
-        // SIEMPRE usar la URL de producción para emails, incluso en desarrollo local
-        // Esto asegura que los enlaces en los emails funcionen correctamente
-        const emailRedirectTo = getEmailAuthRedirectUrl('/auth/callback', {
-          type: 'email_change',
-        });
-        
-        console.log('[CHANGE EMAIL] Enviando email con redirectTo:', emailRedirectTo);
-        
-        // Actualizar email en Supabase Auth con URL de callback
-        const { error: emailError } = await supabase.auth.updateUser({
-          email: formData.email.trim(),
-        }, {
-          emailRedirectTo,
-        });
-
-        if (emailError) {
-          if (emailError.message.includes('already registered') || emailError.message.includes('already exists')) {
-            setEmailError('Este correo electrónico ya está en uso');
-          } else {
-            setEmailError('Error al actualizar el correo electrónico. Intenta nuevamente.');
-          }
-          setIsLoading(false);
-          return;
-        }
-
-        showToast({
-          type: 'info',
-          description: 'Se enviaron correos a ambas direcciones. Debes aceptar ambos para completar el cambio. Recomendamos confirmar primero el correo anterior (donde no estás logueado) y luego el nuevo.',
-        });
-      }
-
-      // Actualizar perfil en la tabla profiles
-      // IMPORTANTE: NO actualizar el email aquí si se está cambiando el email
-      // El trigger sync_email_to_profiles_trigger se encargará de sincronizar
-      // el email de auth.users a profiles cuando Supabase complete el cambio
-      const profileUpdateData: any = {
-        full_name: formData.full_name.trim(),
-        phone_number: formData.phone_number.trim() || null,
-        address: formData.address.trim() || null,
-        // Solo actualizar email si NO se está cambiando el email
-        // Si se está cambiando, el trigger lo sincronizará cuando auth.users.email cambie
-        updated_at: new Date().toISOString(),
-      };
-
-      // Solo incluir email en la actualización si NO se está cambiando el email
-      // Si se está cambiando, esperamos a que Supabase complete el cambio en auth.users
-      // y el trigger sincronice automáticamente
-      if (!emailChanged) {
-        profileUpdateData.email = formData.email.trim();
-      }
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(profileUpdateData)
-        .eq('id', user.id);
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      // Actualizar user_metadata también (sin cambiar id_number)
-      const { error: metadataError } = await supabase.auth.updateUser({
-        data: {
-          full_name: formData.full_name.trim(),
-          phone_number: formData.phone_number.trim(),
-          address: formData.address.trim(),
-        },
-      });
-
-      if (metadataError) {
-        console.warn('Error actualizando metadata:', metadataError);
-        // No es crítico si falla metadata, el perfil ya se actualizó
-      }
-
-      showToast({
-        type: 'success',
-        description: emailChanged 
-          ? 'Solicitud de cambio de correo enviada. Debes aceptar los correos en ambas direcciones (actual y nueva) para completar el cambio.'
-          : 'Perfil actualizado correctamente',
-      });
-
-      // Refrescar la página para mostrar los cambios
-      setTimeout(() => {
-        router.refresh();
-      }, 1000);
-    } catch (error: any) {
-      console.error('Error actualizando perfil:', error);
-      showToast({
-        type: 'error',
-        description: error.message || 'Error al actualizar el perfil. Intenta nuevamente.',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    // El servidor vuelve a leer nombre y correo desde la base de datos
+    await refreshSession({});
+    setForm((prev) => ({ ...prev, current_password: '' }));
+    showToast({ type: 'success', description: result.emailChanged ? 'Datos y correo actualizados. Usa el nuevo correo para iniciar sesión.' : 'Datos actualizados.' });
+    router.refresh();
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+    <form onSubmit={submit} className="space-y-5">
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--foreground)] mb-1 sm:mb-2">Información Personal</h2>
-        <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">Actualiza tu información de perfil</p>
+        <h2 className="text-xl font-bold">Datos personales</h2>
+        <p className="text-sm text-[color:var(--muted-foreground)]">Los usamos para contactarte y entregarte un premio si ganas.</p>
       </div>
-      
-      <div className="space-y-3 sm:space-y-4">
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2 flex items-center gap-2">
-            <Mail className="w-4 h-4" />
-            <span>Correo Electrónico <span className="text-red-500">*</span></span>
-          </label>
-          <input 
-            type="email" 
-            value={formData.email}
-            onChange={(e) => handleEmailChange(e.target.value)}
-            required
-            className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[color:var(--background)] border rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 ${
-              emailError 
-                ? 'border-red-500 focus:ring-red-500' 
-                : 'border-[color:var(--border)] focus:ring-[color:var(--accent)]'
-            }`}
-            placeholder="tu@email.com"
-          />
-          {isCheckingEmail && formData.email !== user.email && validateEmail(formData.email) && (
-            <p className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] mt-1 flex items-center gap-1">
-              <span className="animate-spin">⏳</span>
-              <span>Verificando disponibilidad de correo...</span>
-            </p>
-          )}
-          {emailError && (
-            <p className="text-[10px] sm:text-xs text-red-500 dark:text-red-400 mt-1 flex items-center gap-1">
-              <span>⚠</span>
-              <span>{emailError}</span>
-            </p>
-          )}
-          {!emailError && !isCheckingEmail && formData.email !== user.email && validateEmail(formData.email) && (
-            <p className="text-[10px] sm:text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-              <span>✓</span>
-              <span>Correo disponible</span>
-            </p>
-          )}
-          {formData.email !== user.email && !emailError && !isCheckingEmail && validateEmail(formData.email) && (
-            <div className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-1 space-y-1">
-              <p className="font-semibold">⚠️ Importante:</p>
-              <ul className="list-disc list-inside space-y-0.5 ml-1">
-                <li>Se enviará un correo a tu dirección actual ({user.email}) que <strong>debes aceptar</strong></li>
-                <li>Se enviará un correo al nuevo correo ({formData.email}) que <strong>también debes aceptar</strong></li>
-                <li>El cambio solo se completará cuando <strong>aceptes ambos correos</strong></li>
-              </ul>
-            </div>
-          )}
+      {errors.form && <Notice tone="danger">{errors.form}</Notice>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Field label="Nombre completo" htmlFor="pf-name" required>
+            <Input id="pf-name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} maxLength={120} autoComplete="name" />
+          </Field>
         </div>
-        
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">
-            Nombre Completo <span className="text-red-500">*</span>
-          </label>
-          <input 
-            type="text" 
-            value={formData.full_name}
-            onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-            required
-            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-          />
+        <Field label="Cédula" htmlFor="pf-id" hint="Para cambiarla, contáctanos.">
+          <Input id="pf-id" value={profile.id_number} disabled />
+        </Field>
+        <Field label="Teléfono" htmlFor="pf-phone" required>
+          <Input id="pf-phone" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} autoComplete="tel" />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Dirección" htmlFor="pf-address">
+            <Input id="pf-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} maxLength={250} autoComplete="street-address" />
+          </Field>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <div>
-            <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">Teléfono</label>
-            <input 
-              type="tel" 
-              value={formData.phone_number}
-              onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-              placeholder="+593..."
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-            />
+        <div className="sm:col-span-2">
+          <Field label="Correo electrónico" htmlFor="pf-email" error={errors.email} required>
+            <Input id="pf-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" />
+          </Field>
+        </div>
+        {emailChanged && (
+          <div className="sm:col-span-2">
+            <Field label="Confirma tu contraseña para cambiar el correo" htmlFor="pf-password" error={errors.currentPassword} required>
+              <Input id="pf-password" type="password" value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} autoComplete="current-password" />
+            </Field>
           </div>
-          <div>
-            <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2 flex items-center gap-2">
-              <Lock className="w-4 h-4" />
-              <span>Cédula <span className="text-red-500">*</span></span>
-            </label>
-            <input 
-              type="text" 
-              value={formData.id_number}
-              disabled
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[color:var(--muted)] dark:bg-[color:var(--muted)]/50 border border-[color:var(--border)] rounded-lg text-xs sm:text-sm text-[color:var(--muted-foreground)] cursor-not-allowed" 
-            />
-            <p className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] mt-1">La cédula no se puede modificar</p>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">Dirección Completa</label>
-          <input 
-            type="text" 
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            placeholder="Dirección completa"
-            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-          />
-        </div>
-
-        <button 
-          type="submit"
-          disabled={isLoading}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 dark:to-orange-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Guardando...</span>
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              <span>Guardar Cambios</span>
-            </>
-          )}
-        </button>
+        )}
       </div>
+      <Button type="submit" disabled={saving}>
+        {saving ? <Loader2 className="animate-spin" aria-hidden /> : <Save aria-hidden />} Guardar cambios
+      </Button>
     </form>
   );
 }

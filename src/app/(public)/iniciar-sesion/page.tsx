@@ -1,119 +1,84 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { CheckCircle2 } from "lucide-react";
 
 import { LoginForm } from "../../../components/auth/login-form";
 import { AuthPageLayout } from "../../../components/auth/auth-page-layout";
-import { SiteHeader } from "../../../components/layout/site-header";
-import { PUBLIC_NAV_ITEMS } from "../../../config/navigation";
-import { getCurrentUser } from "../../../lib/auth/get-user";
 import { SessionExpiredMessage } from "../../../components/auth/session-expired-message";
+import { Card, Notice } from "../../../components/ui/kit";
+import { getCurrentUser } from "../../../lib/auth/get-user";
+import { getRedirectPath, safeInternalPath } from "../../../lib/auth/roles";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Iniciar sesión",
+  robots: { index: false },
+};
 
 type LoginPageProps = {
-  searchParams?: Promise<{
-    redirectTo?: string;
-    confirmed?: string;
-    error?: string;
-    email_changed?: string;
-  }>;
+  searchParams?: Promise<{ redirectTo?: string; reason?: string }>;
+};
+
+// Solo se muestran mensajes conocidos (nunca texto arbitrario de la URL)
+const REASONS: Record<string, string> = {
+  password_changed: "Cambiaste tu contraseña. Inicia sesión con la nueva.",
+  password_reset: "Tu contraseña se restableció. Ya puedes iniciar sesión.",
+  registered: "Tu cuenta está lista. Inicia sesión para continuar.",
+  email_changed: "Actualizaste tu correo. Inicia sesión con la nueva dirección.",
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  // Si el usuario ya está autenticado, redirigir al dashboard
   const user = await getCurrentUser();
   if (user) {
-    redirect('/app');
+    redirect(getRedirectPath(user.role));
   }
 
   const params = await searchParams;
-  const redirectTo =
-    typeof params?.redirectTo === "string" && params.redirectTo.startsWith("/")
-      ? params.redirectTo
-      : undefined;
-  const confirmed = params?.confirmed === 'true';
-  const emailChanged = params?.email_changed === 'true';
-  const error = params?.error;
-  
+  const redirectTo = safeInternalPath(params?.redirectTo);
+  const reason = params?.reason ? REASONS[params.reason] : undefined;
+
   return (
-    <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      <SiteHeader
-        navItems={PUBLIC_NAV_ITEMS}
-        cta={{ href: "/registro", label: "Crear cuenta" }}
-      />
-
-      <main className="relative flex w-full min-h-screen items-center justify-center px-4 pb-12 pt-12 text-base sm:px-6 sm:pb-20 sm:pt-16">
-        <div className="absolute inset-x-0 top-0 -z-10 hidden h-[420px] bg-[radial-gradient(circle_at_top,_rgba(249,115,22,0.18)_0%,_transparent_55%)] sm:block" />
-
-        <AuthPageLayout
-          badge="Bienvenido de vuelta"
-          title="Ingresa y continúa participando por premios increíbles."
-          description="Recupera el control de tus sorteos, revisa tus boletos activos y consulta los resultados más recientes desde cualquier dispositivo."
-          highlights={[
-            "Accede a tu panel personal y revisa tus participaciones.",
-            "Activa recordatorios para no perderte ningún sorteo.",
-            "Gestiona tus métodos de pago y suscripciones.",
-          ]}
-          callout={
-            <>
-              ¿Necesitas ayuda con tu cuenta? Escríbenos a{" "}
-              <a href="mailto:soporte@tusuerte.com" className="font-semibold text-[color:var(--accent)]">
-                soporte@tusuerte.com
-              </a>{" "}
-              y nuestro equipo te asistirá en minutos.
-            </>
-          }
-          rightColumnClassName="items-center justify-center"
-        >
-          <div className="mx-auto w-full max-w-xl rounded-3xl border border-[color:var(--border)] bg-[color:var(--background)]/96 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] sm:max-w-2xl sm:p-8">
-            <div className="space-y-2 text-center">
-              <h2 className="text-xl font-semibold">Inicia sesión</h2>
-              <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-                Ingresa tus credenciales para continuar con tu experiencia en TuSuerte.
-              </p>
-            </div>
-            <Suspense fallback={null}>
-              <SessionExpiredMessage />
-            </Suspense>
-            {confirmed && (
-              <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-600 dark:text-green-400">
-                <p className="font-semibold">✓ Email confirmado</p>
-                <p className="mt-1">Tu cuenta ha sido verificada exitosamente. Ahora puedes iniciar sesión.</p>
-              </div>
-            )}
-            {emailChanged && (
-              <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-600 dark:text-green-400">
-                <p className="font-semibold">✓ Cambio de correo completado</p>
-                <p className="mt-1">Tu correo electrónico ha sido actualizado. Inicia sesión con tu nuevo correo.</p>
-              </div>
-            )}
-            {error && (
-              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
-                <p className="font-semibold">⚠ Error</p>
-                <p className="mt-1">{decodeURIComponent(error)}</p>
-              </div>
-            )}
-            <div className="mt-6">
-              <LoginForm redirectTo={redirectTo} />
-            </div>
-            <div className="mt-6 space-y-3 rounded-2xl border border-dashed border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] p-5 text-xs text-[color:var(--muted-foreground)] sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
-              <p>
-                ¿Olvidaste tu contraseña?{" "}
-                <Link href="/recuperar" className="font-semibold text-[color:var(--accent)]">
-                  Recuperar acceso
-                </Link>
-              </p>
-              <p>
-                ¿Aún no tienes cuenta?{" "}
-                <Link href="/registro" className="font-semibold text-[color:var(--accent)]">
-                  Regístrate aquí
-                </Link>
-              </p>
-            </div>
-          </div>
-        </AuthPageLayout>
-      </main>
-    </div>
+    <AuthPageLayout
+      badge="Bienvenido de vuelta"
+      title="Ingresa para ver tus boletos y participar."
+      description="Desde tu cuenta revisas tus boletos, el estado de tus pagos y los resultados de cada sorteo."
+      highlights={[
+        "Tus boletos con número único y comprobante de cada pago.",
+        "Avisos cuando verificamos tu pago o publicamos resultados.",
+        "Resultados verificables con el procedimiento completo.",
+      ]}
+    >
+      <Card className="p-6 sm:p-8">
+        <h2 className="text-xl font-bold">Inicia sesión</h2>
+        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">Usa el correo y la contraseña con los que te registraste.</p>
+        <div className="mt-4 space-y-3">
+          <Suspense fallback={null}>
+            <SessionExpiredMessage />
+          </Suspense>
+          {reason && (
+            <Notice tone="success" icon={CheckCircle2}>
+              {reason}
+            </Notice>
+          )}
+        </div>
+        <div className="mt-6">
+          <LoginForm redirectTo={redirectTo} />
+        </div>
+        <div className="mt-6 flex flex-col gap-2 border-t border-[color:var(--border)] pt-5 text-sm text-[color:var(--muted-foreground)] sm:flex-row sm:justify-between">
+          <Link href="/recuperar" className="font-semibold text-[color:var(--accent)] hover:underline">
+            ¿Olvidaste tu contraseña?
+          </Link>
+          <p>
+            ¿No tienes cuenta?{" "}
+            <Link href={redirectTo ? `/registro?redirectTo=${encodeURIComponent(redirectTo)}` : "/registro"} className="font-semibold text-[color:var(--accent)] hover:underline">
+              Regístrate
+            </Link>
+          </p>
+        </div>
+      </Card>
+    </AuthPageLayout>
   );
 }

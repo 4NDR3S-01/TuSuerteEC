@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { LiveCountdown } from "./live-countdown";
 
 type LiveEvent = {
@@ -23,7 +21,7 @@ export function AnnouncementBar({ event }: Readonly<AnnouncementBarProps>) {
   return (
     <div
       data-announcement-bar
-      className="w-full border-b border-[color:var(--border)] bg-[rgba(249,115,22,0.08)] px-4 py-3 text-xs text-[color:var(--foreground)] sm:text-sm"
+      className="w-full border-b border-[color:var(--border)] bg-[color:var(--accent-soft)] px-4 py-3 text-xs text-[color:var(--foreground)] sm:text-sm"
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2 text-[color:var(--muted-foreground)]">
@@ -37,12 +35,14 @@ export function AnnouncementBar({ event }: Readonly<AnnouncementBarProps>) {
         <div className="flex flex-wrap items-center gap-2">
           <LiveCountdown event={event} variant="compact" />
           {event.stream_url ? (
-            <Link
+            <a
               href={event.stream_url}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center justify-center rounded-full bg-[color:var(--accent)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5"
             >
               Ver transmisión
-            </Link>
+            </a>
           ) : null}
         </div>
       </div>

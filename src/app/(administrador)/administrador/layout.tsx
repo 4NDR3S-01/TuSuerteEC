@@ -1,27 +1,13 @@
 import type { ReactNode } from 'react';
-import { AdminSidebar } from '../../../components/admin/admin-sidebar';
-import { AdminHeader } from '../../../components/admin/admin-header';
+import type { Metadata } from 'next';
+import { AdminPanel } from '../../../components/ops/panels';
+import { requirePagePermission } from '../../../lib/auth/get-user';
 
-type AdminLayoutProps = {
-  children: ReactNode;
-};
+export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Administración', robots: { index: false } };
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
-  return (
-    <div className="flex min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
-      {/* Sidebar */}
-      <AdminSidebar />
-
-      {/* Main content */}
-      <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <AdminHeader />
-
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  // Cada página y acción vuelve a verificar su permiso específico
+  const user = await requirePagePermission('admin_panel.access', '/administrador');
+  return <AdminPanel mustChangePassword={user.mustChangePassword}>{children}</AdminPanel>;
 }

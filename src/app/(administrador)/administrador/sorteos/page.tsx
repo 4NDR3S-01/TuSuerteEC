@@ -1,48 +1,23 @@
-import { getSupabaseServerClient } from '../../../../lib/supabase/server';
+import { prisma, toPlain } from '../../../../lib/db';
+import { requirePagePermission } from '../../../../lib/auth/get-user';
+import { RafflesTable } from '../../../../components/admin/raffles-table';
+
 export const dynamic = 'force-dynamic';
 
-import { requireRole } from '../../../../lib/auth/get-user';
-import { RafflesTableWrapper } from '../../../../components/admin/raffles-table-wrapper';
+type PageProps = { searchParams?: Promise<{ crear?: string }> };
 
-export default async function AdminRafflesPage() {
-  await requireRole('admin');
-  
-  const supabase = await getSupabaseServerClient();
-  
-  // Obtener todos los sorteos con contador de participantes
-  const [
-    { data: raffles, error: rafflesError },
-    { count: totalCount }
-  ] = await Promise.all([
-    supabase
-      .from('raffles')
-      .select('*')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('raffles')
-      .select('*', { count: 'exact', head: true })
-  ]);
+export default async function AdminRafflesPage({ searchParams }: PageProps) {
+  await requirePagePermission('raffles.manage', '/administrador/sorteos');
 
-  if (rafflesError) {
-    console.error('Error fetching raffles:', rafflesError);
-  }
+  const raffles = await prisma.raffles.findMany({
+    select: {
+      id: true, title: true, description: true, prize_description: true, prize_category: true, image_url: true,
+      start_date: true, end_date: true, draw_date: true, status: true, entry_mode: true, total_winners: true,
+      max_entries_per_user: true, is_trending: true, ticket_price: true, terms: true, draw_commitment: true, created_at: true,
+      _count: { select: { raffle_entries: true, payment_transactions: { where: { status: 'pending' } } } },
+    },
+    orderBy: { created_at: 'desc' },
+  });
 
-  // Obtener conteo de participantes para cada sorteo
-  const rafflesWithCounts = await Promise.all(
-    (raffles || []).map(async (raffle) => {
-      const { count } = await supabase
-        .from('raffle_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('raffle_id', raffle.id);
-      
-      return {
-        ...raffle,
-        _count: {
-          raffle_entries: count || 0
-        }
-      };
-    })
-  );
-
-  return <RafflesTableWrapper initialRaffles={rafflesWithCounts} totalCount={totalCount || 0} />;
+  return <RafflesTable initialRaffles={toPlain(raffles)} openCreate={(await searchParams)?.crear === 'true'} />;
 }

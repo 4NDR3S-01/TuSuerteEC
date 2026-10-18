@@ -1,10 +1,16 @@
 export const PUBLIC_NAV_ITEMS = [
-  { href: "/#inicio", label: "Inicio" },
-  { href: "/#sorteos", label: "Sorteos" },
+  { href: "/sorteos", label: "Sorteos" },
+  { href: "/resultados", label: "Resultados" },
+  { href: "/#como-funciona", label: "Cómo funciona" },
   { href: "/#planes", label: "Planes" },
-  { href: "/#ganadores", label: "Ganadores" },
   { href: "/ayuda", label: "Ayuda" },
-  { href: "/sobre-nosotros", label: "Sobre nosotros" },
 ] as const;
 
 export type PublicNavItem = (typeof PUBLIC_NAV_ITEMS)[number];
+
+export const LEGAL_NAV_ITEMS = [
+  { href: "/terminos", label: "Términos y condiciones" },
+  { href: "/bases", label: "Bases generales de los sorteos" },
+  { href: "/privacidad", label: "Política de privacidad" },
+  { href: "/reembolsos", label: "Política de reembolsos" },
+] as const;

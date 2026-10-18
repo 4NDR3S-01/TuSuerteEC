@@ -1,960 +1,311 @@
-'use client'
+'use client';
 
-import {useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { CreditCard, ImageUp, Landmark, Loader2, Pencil, Plus, Power, QrCode, Trash2, X } from 'lucide-react';
+import { createPaymentMethod, deletePaymentMethod, setPaymentMethodActive, updatePaymentMethod } from '../../lib/actions/admin';
+import { uploadFile } from '../../lib/upload-client';
+import { useToast } from '../../hooks/use-toast';
+import type { PaymentMethod, PaymentMethodType, PaymentScope } from '../../lib/payments/types';
+import { Badge, Button, Card, EmptyState, Field, Input, Notice, SectionHeader, inputStyles } from '../ui/kit';
+import { cn } from '../../lib/utils';
 
-// Supabase (usa solo un cliente para el navegador)
-import { getSupabaseBrowserClient } from '../../lib/supabase/client'
+type FormState = {
+  name: string;
+  description: string;
+  type: PaymentMethodType;
+  is_active: boolean;
+  scopes: PaymentScope[];
+  manual: { bankName: string; accountType: string; accountNumber: string; beneficiary: string; identification: string; instructions: string; requiresProof: boolean };
+  qr: { provider: string; qrImageUrl: string; accountId: string; accountName: string; instructions: string; requiresProof: boolean };
+};
 
-// Toast
-import { useToast } from '../../hooks/use-toast'
-
-// Tipos actualizados
-import type { 
-  PaymentMethod, 
-  PaymentMethodConfig, 
-  PaymentMethodType, 
-  PaymentScope 
-} from '../../types/supabase'
-
-// ===================== FormState =====================
-interface FormState {
-  id?: string
-  name: string
-  description: string
-  icon: string
-  type: PaymentMethodType
-  is_active: boolean
-  scopes: PaymentScope[]
-  currency: string
-  instructions: string
-  manual: {
-    bankName: string
-    accountNumber: string
-    accountType: string
-    beneficiary: string
-    identification: string
-    instructions: string
-    requiresProof: boolean
-  }
-  qr: {
-    provider: string
-    qrImageUrl: string
-    accountId: string
-    accountName: string
-    instructions: string
-    requiresProof: boolean
-  }
-}
-
-const DEFAULT_FORM_STATE: FormState = {
+const EMPTY: FormState = {
   name: '',
   description: '',
-  icon: '',
-  type: 'stripe',
+  type: 'manual_transfer',
   is_active: true,
-  scopes: ['raffles'],
-  currency: 'USD',
-  instructions: '',
-  manual: {
-    bankName: '',
-    accountNumber: '',
-    accountType: '',
-    beneficiary: '',
-    identification: '',
-    instructions: '',
-    requiresProof: true,
-  },
-  qr: {
-    provider: '',
-    qrImageUrl: '',
-    accountId: '',
-    accountName: '',
-    instructions: '',
-    requiresProof: true,
-  },
+  scopes: ['raffles', 'plans'],
+  manual: { bankName: '', accountType: 'Ahorros', accountNumber: '', beneficiary: '', identification: '', instructions: 'Transfiere el valor exacto y sube la foto del comprobante.', requiresProof: true },
+  qr: { provider: '', qrImageUrl: '', accountId: '', accountName: '', instructions: 'Escanea el código, paga el valor exacto y sube la captura del comprobante.', requiresProof: true },
+};
+
+function toForm(method: PaymentMethod): FormState {
+  const config = method.config ?? {};
+  const manual = config.manual ?? {};
+  const qr = config.qr ?? {};
+  return {
+    name: method.name,
+    description: method.description ?? '',
+    type: method.type,
+    is_active: method.is_active,
+    scopes: config.scopes?.length ? config.scopes : ['raffles'],
+    manual: {
+      bankName: manual.bankName ?? '',
+      accountType: manual.accountType ?? 'Ahorros',
+      accountNumber: manual.accountNumber ?? '',
+      beneficiary: manual.beneficiary ?? '',
+      identification: manual.identification ?? '',
+      instructions: manual.instructions ?? '',
+      requiresProof: manual.requiresProof !== false,
+    },
+    qr: {
+      provider: qr.provider ?? '',
+      qrImageUrl: qr.qrImageUrl ?? '',
+      accountId: qr.accountId ?? '',
+      accountName: qr.accountName ?? '',
+      instructions: qr.instructions ?? '',
+      requiresProof: qr.requiresProof !== false,
+    },
+  };
 }
 
-// ===================== Props =====================
-export type FormMode = 'create' | 'edit'
-export type PaymentMethodsManagementProps = {
-  initialMethods: PaymentMethod[]
-}
+export default function PaymentMethodsManagement({ initialMethods }: { initialMethods: PaymentMethod[] }) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [editing, setEditing] = useState<PaymentMethod | 'new' | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<PaymentMethod | null>(null);
 
-// ===================== Componente =====================
-export default function PaymentMethodsManagement({
-  initialMethods,
-}: PaymentMethodsManagementProps) {
-  const [methods, setMethods] = useState<PaymentMethod[]>(initialMethods)
-  const [formState, setFormState] = useState<FormState>(DEFAULT_FORM_STATE)
-  const [formMode, setFormMode] = useState<FormMode>('create')
-  const [showFormModal, setShowFormModal] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const open = (method: PaymentMethod | 'new') => {
+    setEditing(method);
+    setForm(method === 'new' ? EMPTY : toForm(method));
+    setError(null);
+  };
 
-  const supabase = getSupabaseBrowserClient()
-  const router = useRouter()
-  const { showToast } = useToast()
+  const setManual = (key: keyof FormState['manual'], value: string | boolean) => setForm((prev) => ({ ...prev, manual: { ...prev.manual, [key]: value } }));
+  const setQr = (key: keyof FormState['qr'], value: string | boolean) => setForm((prev) => ({ ...prev, qr: { ...prev.qr, [key]: value } }));
+  const toggleScope = (scope: PaymentScope) =>
+    setForm((prev) => ({ ...prev, scopes: prev.scopes.includes(scope) ? prev.scopes.filter((s) => s !== scope) : [...prev.scopes, scope] }));
 
-  // Derivados
-  const activeMethods = useMemo(
-    () => methods.filter((m) => m.is_active),
-    [methods]
-  )
-
-  // ========= Utilidades de formulario =========
-  const openCreateModal = () => {
-    setFormState(DEFAULT_FORM_STATE)
-    setFormMode('create')
-    setShowFormModal(true)
-  }
-
-  const openEditModal = (method: PaymentMethod) => {
-    const config = (method.config ?? {}) as unknown as PaymentMethodConfig
-    setFormState({
-      id: method.id,
-      name: method.name,
-      description: method.description ?? '',
-      icon: method.icon ?? '',
-      type: method.type as PaymentMethodType,
-      is_active: method.is_active,
-      scopes:
-        Array.isArray(config.scopes) && config.scopes.length > 0
-          ? config.scopes
-          : ['raffles'],
-      currency: config.currency ?? 'USD',
-      instructions: method.instructions ?? '',
-      manual: {
-        bankName: config.manual?.bankName ?? '',
-        accountNumber: config.manual?.accountNumber ?? '',
-        accountType: config.manual?.accountType ?? '',
-        beneficiary: config.manual?.beneficiary ?? '',
-        identification: config.manual?.identification ?? '',
-        instructions: config.manual?.instructions ?? '',
-        requiresProof: config.manual?.requiresProof ?? true,
-      },
-      qr: {
-        provider: config.qr?.provider ?? '',
-        qrImageUrl: config.qr?.qrImageUrl ?? '',
-        accountId: config.qr?.accountId ?? '',
-        accountName: config.qr?.accountName ?? '',
-        instructions: config.qr?.instructions ?? '',
-        requiresProof: config.qr?.requiresProof ?? true,
-      },
-    })
-    setFormMode('edit')
-    setShowFormModal(true)
-  }
-
-  const closeFormModal = () => {
-    setShowFormModal(false)
-    setFormState(DEFAULT_FORM_STATE)
-    setIsSaving(false)
-  }
-
-  const updateFormField = <K extends keyof FormState>(
-    field: K,
-    value: FormState[K]
-  ) => {
-    setFormState((prev) => {
-      const newState = { ...prev, [field]: value }
-      
-      // Si cambia a transferencia manual o QR, solo permitir 'raffles'
-      if (field === 'type' && (value === 'manual_transfer' || value === 'qr_code')) {
-        newState.scopes = ['raffles']
-      }
-      
-      return newState
-    })
-  }
-
-  const toggleScope = (scope: PaymentScope, enabled: boolean) => {
-    setFormState((prev) => {
-      const current = new Set(prev.scopes)
-      enabled ? current.add(scope) : current.delete(scope)
-      const next = Array.from(current) as PaymentScope[]
-      return { ...prev, scopes: next.length > 0 ? next : ['raffles'] }
-    })
-  }
-
-  const mergeConfig = (): PaymentMethodConfig => {
-    const base: PaymentMethodConfig = {
-      scopes: formState.scopes,
-      currency: formState.currency,
-    }
-    if (formState.type === 'stripe') {
-      base.stripe = {
-        mode: 'payment', // Se detecta automáticamente según el contexto
-      }
-    } else if (formState.type === 'manual_transfer') {
-      base.manual = {
-        bankName: formState.manual.bankName,
-        accountNumber: formState.manual.accountNumber,
-        accountType: formState.manual.accountType,
-        beneficiary: formState.manual.beneficiary,
-        identification: formState.manual.identification,
-        instructions: formState.manual.instructions,
-        requiresProof: formState.manual.requiresProof,
-      }
-    } else if (formState.type === 'qr_code') {
-      base.qr = {
-        provider: formState.qr.provider,
-        qrImageUrl: formState.qr.qrImageUrl || undefined,
-        accountId: formState.qr.accountId || undefined,
-        accountName: formState.qr.accountName || undefined,
-        instructions: formState.qr.instructions,
-        requiresProof: formState.qr.requiresProof,
-      }
-    }
-    return base
-  }
-
-  // ========= Acciones =========
-  const upsertPaymentMethod = async () => {
-    setIsSaving(true)
+  const uploadQr = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
     try {
-      let qrImageUrl = formState.qr.qrImageUrl;
-
-      // Si es QR y hay una imagen en base64 (nueva), subirla a Storage
-      if (formState.type === 'qr_code' && qrImageUrl && qrImageUrl.startsWith('data:')) {
-        try {
-          // Convertir base64 a Blob
-          const response = await fetch(qrImageUrl);
-          const blob = await response.blob();
-          
-          // Crear nombre único
-          const timestamp = Date.now();
-          const fileExt = blob.type.split('/')[1] || 'png';
-          const fileName = `${formState.name.toLowerCase().replace(/\s+/g, '-')}-${timestamp}.${fileExt}`;
-
-          // Subir a Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('payment-qr-codes')
-            .upload(fileName, blob, {
-              cacheControl: '3600',
-              upsert: true
-            });
-
-          if (uploadError) {
-            console.error('[PaymentMethods] Error uploading QR:', uploadError);
-            alert('Error al subir el código QR. Intenta nuevamente.');
-            setIsSaving(false);
-            return;
-          }
-
-          // Obtener URL pública
-          const { data: { publicUrl } } = supabase.storage
-            .from('payment-qr-codes')
-            .getPublicUrl(uploadData.path);
-          
-          qrImageUrl = publicUrl;
-        } catch (error) {
-          console.error('[PaymentMethods] Error processing QR image:', error);
-          alert('Error al procesar la imagen del código QR');
-          setIsSaving(false);
-          return;
-        }
-      }
-
-      // Actualizar el config con la URL real
-      const baseConfig = mergeConfig();
-      if (formState.type === 'qr_code' && baseConfig.qr) {
-        baseConfig.qr.qrImageUrl = qrImageUrl || undefined;
-      }
-
-      const payload = {
-        name: formState.name,
-        description: formState.description || null,
-        icon: formState.icon || null,
-        type: formState.type,
-        is_active: formState.is_active,
-        instructions: formState.instructions || null,
-        config: baseConfig,
-      }
-
-      if (formMode === 'create') {
-        const { data, error } = await supabase
-          .from('payment_methods')
-          .insert(payload)
-          .select(
-            'id, name, type, description, icon, is_active, instructions, config, created_at, updated_at'
-          )
-          .single()
-        if (error) throw error
-        setMethods((prev) => [data as PaymentMethod, ...prev])
-        showToast({ type: 'success', description: 'Método de pago creado.' })
-      } else if (formState.id) {
-        const { data, error } = await supabase
-          .from('payment_methods')
-          .update(payload)
-          .eq('id', formState.id)
-          .select(
-            'id, name, type, description, icon, is_active, instructions, config, created_at, updated_at'
-          )
-          .single()
-        if (error) throw error
-        setMethods((prev) =>
-          prev.map((m) => (m.id === data.id ? (data as PaymentMethod) : m))
-        )
-        showToast({ type: 'success', description: 'Método de pago actualizado.' })
-      }
-
-      router.refresh()
-      closeFormModal()
-    } catch (error) {
-      console.error('[admin][payment-methods] upsert error:', error)
-      showToast({
-        type: 'error',
-        description:
-          error instanceof Error ? error.message : 'No se pudo guardar el método de pago.',
-      })
-      setIsSaving(false)
-    }
-  }
-
-  const toggleMethodStatus = async (method: PaymentMethod) => {
-    const nextStatus = !method.is_active
-    // optimista
-    setMethods((prev) =>
-      prev.map((item) => (item.id === method.id ? { ...item, is_active: nextStatus } : item))
-    )
-
-    const { error } = await supabase
-      .from('payment_methods')
-      .update({ is_active: nextStatus })
-      .eq('id', method.id)
-
-    if (error) {
-      console.error('[admin][payment-methods] toggle error:', error)
-      // revertir
-      setMethods((prev) =>
-        prev.map((item) => (item.id === method.id ? { ...item, is_active: method.is_active } : item))
-      )
-      showToast({ type: 'error', description: 'No se pudo actualizar el estado del método.' })
-      return
-    }
-
-    showToast({
-      type: 'success',
-      description: `Método ${nextStatus ? 'activado' : 'desactivado'} correctamente.`,
-    })
-    router.refresh()
-  }
-
-  const deleteMethod = async (method: PaymentMethod) => {
-    if (!confirm(`¿Estás seguro de eliminar "${method.name}"?`)) return
-    setIsDeleting(method.id)
-    try {
-      const { error } = await supabase
-        .from('payment_methods')
-        .delete()
-        .eq('id', method.id)
-      if (error) throw error
-      setMethods((prev) => prev.filter((item) => item.id !== method.id))
-      showToast({ type: 'success', description: 'Método eliminado.' })
-      router.refresh()
-    } catch (error) {
-      console.error('[admin][payment-methods] delete error:', error)
-      showToast({ type: 'error', description: 'No se pudo eliminar el método.' })
+      setQr('qrImageUrl', await uploadFile(file, 'payment-qr-codes'));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'No se pudo subir la imagen.');
     } finally {
-      setIsDeleting(null)
+      setUploading(false);
     }
-  }
+  };
 
-  // ========= Render =========
-  const selectedType = formState.type
+  const save = async () => {
+    if (form.scopes.length === 0) return setError('Elige si el método sirve para boletos, planes o ambos.');
+    setBusy('save');
+    setError(null);
+    const input = {
+      name: form.name,
+      description: form.description || null,
+      icon: null,
+      type: form.type,
+      is_active: form.is_active,
+      instructions: null,
+      config: {
+        scopes: form.scopes,
+        currency: 'USD',
+        ...(form.type === 'manual_transfer' ? { manual: form.manual } : { qr: { ...form.qr, qrImageUrl: form.qr.qrImageUrl || undefined } }),
+      },
+    };
+    const editingMethod = editing && editing !== 'new' ? editing : null;
+    const result = editingMethod ? await updatePaymentMethod(editingMethod.id, input) : await createPaymentMethod(input);
+    setBusy(null);
+    if (result.error) return setError(result.error);
+    showToast({ type: 'success', description: editingMethod ? 'Método actualizado.' : 'Método creado.' });
+    setEditing(null);
+    router.refresh();
+  };
 
-  const getTypeLabel = (type: PaymentMethodType) => {
-    if (type === 'stripe') return 'Stripe'
-    if (type === 'manual_transfer') return 'Transferencia manual'
-    if (type === 'qr_code') return 'Código QR'
-    return type
-  }
+  const run = async (key: string, fn: () => Promise<{ error: string | null }>, message: string) => {
+    setBusy(key);
+    const result = await fn();
+    setBusy(null);
+    if (result.error) {
+      showToast({ type: 'error', description: result.error });
+      return false;
+    }
+    showToast({ type: 'success', description: message });
+    router.refresh();
+    return true;
+  };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[color:var(--foreground)]">Métodos de pago</h1>
-          <p className="text-sm text-[color:var(--muted-foreground)]">
-            Configura los métodos que los participantes verán al momento de pagar.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <SectionHeader
+        as="h1"
+        title="Métodos de pago"
+        description="Cuentas y códigos QR que ven los participantes al pagar. Los cambios quedan en la auditoría."
+        action={<Button onClick={() => open('new')}><Plus aria-hidden /> Nuevo método</Button>}
+      />
 
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-full bg-[color:var(--accent)] px-5 py-2.5 text-sm font-semibold text-[color:var(--accent-foreground)] shadow-lg transition-transform hover:-translate-y-0.5"
-        >
-          <span>＋</span>
-          Nuevo método
-        </button>
-      </div>
-
-      {/* Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {methods.map((method) => {
-          const config = (method.config ?? {}) as unknown as PaymentMethodConfig
-          return (
-            <div
-              key={method.id}
-              className="relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 transition-all hover:shadow-lg"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{method.icon || '💳'}</span>
-                    <h3 className="text-lg font-semibold text-[color:var(--foreground)]">{method.name}</h3>
+      {initialMethods.length === 0 ? (
+        <EmptyState icon={CreditCard} title="No hay métodos de pago" description="Agrega al menos una cuenta bancaria o un código QR para recibir pagos." />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {initialMethods.map((method) => {
+            const config = method.config ?? {};
+            const Icon = method.type === 'qr_code' ? QrCode : Landmark;
+            return (
+              <Card key={method.id} className="flex flex-col p-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[color:var(--accent-soft)] text-[color:var(--accent)]"><Icon className="size-5" aria-hidden /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold">{method.name}</p>
+                      <Badge tone={method.is_active ? 'success' : 'neutral'}>{method.is_active ? 'Activo' : 'Inactivo'}</Badge>
+                    </div>
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      {method.type === 'qr_code' ? 'Código QR' : 'Transferencia'} · {(config.scopes ?? []).map((scope) => (scope === 'plans' ? 'planes' : 'boletos')).join(' y ') || 'sin uso asignado'}
+                    </p>
                   </div>
-                  <span className="mt-1 inline-flex items-center rounded-full bg-[color:var(--muted)]/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    {getTypeLabel(method.type as PaymentMethodType)}
-                  </span>
                 </div>
-
-                <button
-                  onClick={() => toggleMethodStatus(method)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                    method.is_active
-                      ? 'border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400'
-                      : 'border-[color:var(--border)] bg-[color:var(--muted)]/40 text-[color:var(--muted-foreground)]'
-                  }`}
-                >
-                  {method.is_active ? 'Activo' : 'Inactivo'}
-                </button>
-              </div>
-
-              {method.description && (
-                <p className="mt-3 text-xs text-[color:var(--muted-foreground)] line-clamp-3">{method.description}</p>
-              )}
-
-              {/* Meta */}
-              <div className="mt-4 space-y-1 text-[10px] text-[color:var(--muted-foreground)]">
-                <p>
-                  <span className="font-semibold">Ámbitos:</span> {(config.scopes ?? ['raffles']).join(', ')}
-                </p>
-                {config.currency && (
-                  <p>
-                    <span className="font-semibold">Moneda:</span> {config.currency}
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-5 flex items-center justify-between gap-2 text-xs">
-                <button
-                  onClick={() => openEditModal(method)}
-                  className="flex-1 rounded-lg border border-[color:var(--border)] px-3 py-2 font-semibold text-[color:var(--foreground)] transition hover:bg-[color:var(--muted)]/40"
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => deleteMethod(method)}
-                  className="flex-1 rounded-lg border border-red-500/40 px-3 py-2 font-semibold text-red-600 transition hover:bg-red-500/10 disabled:opacity-50"
-                  disabled={isDeleting === method.id}
-                >
-                  {isDeleting === method.id ? 'Eliminando...' : 'Eliminar'}
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {methods.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--muted)]/20 p-10 text-center text-sm text-[color:var(--muted-foreground)]">
-          Aún no has configurado métodos de pago. Crea uno nuevo para que los participantes puedan completar sus compras.
+                <dl className="mt-4 flex-1 space-y-1 text-sm">
+                  {method.type === 'manual_transfer' ? (
+                    <>
+                      <div className="flex justify-between gap-2"><dt className="text-[color:var(--muted-foreground)]">Banco</dt><dd className="text-right font-medium">{config.manual?.bankName || '—'}</dd></div>
+                      <div className="flex justify-between gap-2"><dt className="text-[color:var(--muted-foreground)]">Cuenta</dt><dd className="break-all text-right font-medium">{config.manual?.accountType} {config.manual?.accountNumber || '—'}</dd></div>
+                      <div className="flex justify-between gap-2"><dt className="text-[color:var(--muted-foreground)]">Beneficiario</dt><dd className="text-right font-medium">{config.manual?.beneficiary || '—'}</dd></div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      {config.qr?.qrImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={config.qr.qrImageUrl} alt="Código QR" className="size-20 rounded-lg border border-[color:var(--border)] bg-white object-contain p-1" />
+                      ) : (
+                        <span className="text-[color:var(--warning)]">Falta la imagen del QR</span>
+                      )}
+                      <span className="text-[color:var(--muted-foreground)]">{config.qr?.provider} {config.qr?.accountName}</span>
+                    </div>
+                  )}
+                </dl>
+                <div className="mt-4 flex flex-wrap gap-1 border-t border-[color:var(--border)] pt-3">
+                  <Button size="sm" variant="ghost" onClick={() => open(method)}><Pencil aria-hidden /> Editar</Button>
+                  <Button size="sm" variant="ghost" disabled={busy === method.id} onClick={() => run(method.id, () => setPaymentMethodActive(method.id, !method.is_active), method.is_active ? 'Método desactivado.' : 'Método activado.')}>
+                    <Power aria-hidden /> {method.is_active ? 'Desactivar' : 'Activar'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(method)} aria-label={`Eliminar ${method.name}`}><Trash2 aria-hidden /></Button>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-6">
-        <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Resumen rápido</h2>
-        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
-          Métodos activos: <strong>{activeMethods.length}</strong> &bull; Total configurados:{' '}
-          <strong>{methods.length}</strong>
-        </p>
-      </section>
-
-      {/* Modal */}
-      {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)] shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--background)] px-6 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-[color:var(--foreground)]">
-                  {formMode === 'create' ? 'Nuevo método de pago' : 'Editar método de pago'}
-                </h3>
-                <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Define la configuración que se mostrará a los participantes.
-                </p>
-              </div>
-              <button
-                onClick={closeFormModal}
-                className="rounded-full border border-[color:var(--border)] px-2 py-1 text-xs font-semibold text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid gap-6 px-6 py-6 sm:grid-cols-[1fr_1.15fr]">
-              {/* Columna A */}
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Nombre</label>
-                  <input
-                    type="text"
-                    value={formState.name}
-                    onChange={(e) => updateFormField('name', e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    placeholder="Nombre del método de pago"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Descripción (opcional)</label>
-                  <textarea
-                    value={formState.description}
-                    onChange={(e) => updateFormField('description', e.target.value)}
-                    rows={3}
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Tipo</label>
-                    <select
-                      value={formState.type}
-                      onChange={(e) => updateFormField('type', e.target.value as PaymentMethodType)}
-                      className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    >
-                      <option value="stripe">Stripe</option>
-                      <option value="manual_transfer">Transferencia manual</option>
-                      <option value="qr_code">Código QR</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Icono (emoji/opcional)</label>
-                    <input
-                      type="text"
-                      value={formState.icon}
-                      onChange={(e) => updateFormField('icon', e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                      placeholder="💳"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Ámbitos disponibles</label>
-                  <div className="mt-1 space-y-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-3 text-xs">
-                    <label className="flex items-center justify-between gap-3">
-                      <span>Boletos de sorteos</span>
-                      <input
-                        type="checkbox"
-                        checked={formState.scopes.includes('raffles')}
-                        onChange={(e) => toggleScope('raffles', e.target.checked)}
-                      />
-                    </label>
-                    <label className="flex items-center justify-between gap-3">
-                      <span>Planes / Suscripciones</span>
-                      <input
-                        type="checkbox"
-                        checked={formState.scopes.includes('plans')}
-                        onChange={(e) => toggleScope('plans', e.target.checked)}
-                        disabled={selectedType === 'manual_transfer' || selectedType === 'qr_code'}
-                      />
-                    </label>
-                    {selectedType === 'manual_transfer' && (
-                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                        ⚠️ <strong>Transferencia manual:</strong> Solo disponible para boletos de sorteos.
-                      </p>
-                    )}
-                    {selectedType === 'qr_code' && (
-                      <p className="mt-2 text-xs text-purple-600 dark:text-purple-400">
-                        ⚠️ <strong>Código QR:</strong> Solo disponible para boletos de sorteos.
-                      </p>
-                    )}
-                    {selectedType === 'stripe' && (
-                      <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                        ✓ <strong>Stripe:</strong> Puede usarse para boletos y/o planes.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Moneda</label>
-                  <input
-                    type="text"
-                    value={formState.currency}
-                    onChange={(e) => updateFormField('currency', e.target.value.toUpperCase())}
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    placeholder="USD"
-                  />
-                  <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                    💡 Los precios se configuran directamente en cada sorteo o plan
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Texto auxiliar (opcional)</label>
-                  <textarea
-                    value={formState.instructions}
-                    onChange={(e) => updateFormField('instructions', e.target.value)}
-                    rows={3}
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                    placeholder="Se enviará un correo con los pasos a seguir..."
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    id="is_active"
-                    type="checkbox"
-                    checked={formState.is_active}
-                    onChange={(e) => updateFormField('is_active', e.target.checked)}
-                  />
-                  <label htmlFor="is_active" className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                    Método activo
-                  </label>
-                </div>
-              </div>
-
-              {/* Columna B */}
-              <div className="space-y-4">
-                {selectedType === 'stripe' ? (
-                  <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
-                      💳 Configuración de Stripe
-                    </h4>
-                    
-                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">✅</span>
-                        <div>
-                          <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                            Pasarela personalizada con tu diseño
-                          </p>
-                          <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                            Este método usa la API de Stripe con tu propio diseño y flujo personalizado. 
-                            Funciona tanto para pagos únicos (boletos) como suscripciones (planes).
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <p className="text-xs text-[color:var(--muted-foreground)]">
-                        ℹ️ <strong>Nota:</strong> Stripe detecta automáticamente si es pago único (boletos) o suscripción (planes) según el contexto. Las rutas de redirección y precios se configuran automáticamente.
-                      </p>
-                    </div>
-                  </>
-                ) : selectedType === 'manual_transfer' ? (
-                  <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
-                      🏦 Configuración de Transferencia Bancaria
-                    </h4>
-                    
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-400">
-                      <strong>💰 Cuenta bancaria:</strong> Configura los datos de tu cuenta bancaria para que los usuarios puedan realizar transferencias manuales.
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Banco *</label>
-                        <input
-                          type="text"
-                          value={formState.manual.bankName}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, bankName: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder="Ej: Banco Pichincha"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Número de cuenta *</label>
-                        <input
-                          type="text"
-                          value={formState.manual.accountNumber}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, accountNumber: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder="Ej: 1234567890"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Tipo de cuenta *</label>
-                        <select
-                          value={formState.manual.accountType}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, accountType: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          required
-                        >
-                          <option value="">Seleccionar...</option>
-                          <option value="Ahorros">Ahorros</option>
-                          <option value="Corriente">Corriente</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Beneficiario *</label>
-                        <input
-                          type="text"
-                          value={formState.manual.beneficiary}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, beneficiary: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder="Ej: TuSuerte EC"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Cédula/RUC *</label>
-                        <input
-                          type="text"
-                          value={formState.manual.identification}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              manual: { ...prev.manual, identification: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder="Ej: 1234567890001"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                        Instrucciones para el usuario *
-                      </label>
-                      <textarea
-                        value={formState.manual.instructions}
-                        onChange={(e) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            manual: { ...prev.manual, instructions: e.target.value },
-                          }))
-                        }
-                        rows={5}
-                        className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                        placeholder={`Ejemplo:\n\n1. Realiza la transferencia desde tu banco a la cuenta indicada.\n2. Usa la referencia proporcionada.\n3. Sube el comprobante de pago.\n4. Espera la confirmación del administrador (máx. 24 horas).`}
-                        required
-                      />
-                      <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                        Estas instrucciones se mostrarán al participante después de registrar la solicitud.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-3">
-                      <input
-                        id="manual_requires_proof"
-                        type="checkbox"
-                        checked={formState.manual.requiresProof}
-                        onChange={(e) =>
-                          setFormState((prev) => ({
-                            ...prev,
-                            manual: { ...prev.manual, requiresProof: e.target.checked },
-                          }))
-                        }
-                      />
-                      <label htmlFor="manual_requires_proof" className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                        Requerir comprobante de pago
-                      </label>
-                    </div>
-                  </>
-                ) : selectedType === 'qr_code' ? (
-                  <>
-                    <h4 className="text-sm font-semibold text-[color:var(--foreground)]">
-                      📱 Configuración de Código QR
-                    </h4>
-                    
-                    <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 text-xs text-purple-700 dark:text-purple-400">
-                      <strong>🎯 Pago por QR:</strong> Configura los datos para pagos mediante código QR (Binance, Deuna, etc.). Los usuarios escanearán el código para realizar el pago.
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Proveedor *</label>
-                        <input
-                          type="text"
-                          value={formState.qr.provider}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              qr: { ...prev.qr, provider: e.target.value },
-                            }))
-                          }
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder="Ej: Binance, Deuna - Banco Pichincha, PayPal"
-                          required
-                        />
-                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                          Nombre del servicio o plataforma de pago por QR
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">ID de cuenta (opcional)</label>
-                          <input
-                            type="text"
-                            value={formState.qr.accountId}
-                            onChange={(e) =>
-                              setFormState((prev) => ({
-                                ...prev,
-                                qr: { ...prev.qr, accountId: e.target.value },
-                              }))
-                            }
-                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                            placeholder="Email, teléfono, ID Binance..."
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Nombre del titular (opcional)</label>
-                          <input
-                            type="text"
-                            value={formState.qr.accountName}
-                            onChange={(e) =>
-                              setFormState((prev) => ({
-                                ...prev,
-                                qr: { ...prev.qr, accountName: e.target.value },
-                              }))
-                            }
-                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                            placeholder="Ej: TuSuerte Ecuador"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">Código QR (imagen) *</label>
-                        <div className="mt-1 space-y-2">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0]
-                              if (file) {
-                                // Crear URL temporal para previsualización
-                                const reader = new FileReader()
-                                reader.onloadend = () => {
-                                  setFormState((prev) => ({
-                                    ...prev,
-                                    qr: { ...prev.qr, qrImageUrl: reader.result as string },
-                                  }))
-                                }
-                                reader.readAsDataURL(file)
-                              }
-                            }}
-                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          />
-                          {formState.qr.qrImageUrl && (
-                            <div className="relative inline-block">
-                              <img 
-                                src={formState.qr.qrImageUrl} 
-                                alt="Código QR" 
-                                className="w-32 h-32 object-contain border border-[color:var(--border)] rounded-lg"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setFormState((prev) => ({
-                                  ...prev,
-                                  qr: { ...prev.qr, qrImageUrl: '' },
-                                }))}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                          Sube la imagen del código QR que los usuarios escanearán para pagar
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                          Instrucciones para el usuario *
-                        </label>
-                        <textarea
-                          value={formState.qr.instructions}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              qr: { ...prev.qr, instructions: e.target.value },
-                            }))
-                          }
-                          rows={5}
-                          className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
-                          placeholder={`Ejemplo:\n\n1. Escanea el código QR con tu aplicación ${formState.qr.provider || 'de pago'}.\n2. Completa el pago por el monto exacto mostrado.\n3. Guarda el comprobante de transacción.\n4. Sube una captura de pantalla del comprobante.\n5. Espera la confirmación (máx. 24 horas).`}
-                          required
-                        />
-                        <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                          Estas instrucciones se mostrarán al participante junto con el código QR
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--muted)]/20 p-3">
-                        <input
-                          id="qr_requires_proof"
-                          type="checkbox"
-                          checked={formState.qr.requiresProof}
-                          onChange={(e) =>
-                            setFormState((prev) => ({
-                              ...prev,
-                              qr: { ...prev.qr, requiresProof: e.target.checked },
-                            }))
-                          }
-                        />
-                        <label htmlFor="qr_requires_proof" className="text-xs font-semibold text-[color:var(--muted-foreground)]">
-                          Requerir comprobante de pago
-                        </label>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-[color:var(--border)] bg-[color:var(--background)] px-6 py-4">
-              <button
-                onClick={closeFormModal}
-                className="rounded-lg border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--foreground)] transition hover:bg-[color:var(--muted)]/40"
-                disabled={isSaving}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={upsertPaymentMethod}
-                className="rounded-lg bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-[color:var(--accent-foreground)] shadow hover:opacity-90 disabled:opacity-60"
-                disabled={isSaving}
-              >
-                {isSaving ? 'Guardando...' : 'Guardar cambios'}
-              </button>
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDelete(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="pm-delete-title" className="w-full max-w-md space-y-4 rounded-2xl bg-[color:var(--background)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <h2 id="pm-delete-title" className="text-lg font-bold">Eliminar {confirmDelete.name}</h2>
+            <p className="text-sm text-[color:var(--muted-foreground)]">Solo se eliminan métodos sin pagos registrados. Si ya se usó, desactívalo.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+              <Button variant="danger" disabled={busy === 'delete'} onClick={async () => { if (await run('delete', () => deletePaymentMethod(confirmDelete.id), 'Método eliminado.')) setConfirmDelete(null); }}>
+                {busy === 'delete' && <Loader2 className="animate-spin" aria-hidden />} Eliminar
+              </Button>
             </div>
           </div>
         </div>
       )}
+
+      {editing && (
+        <div className="fixed inset-0 z-[70] flex justify-end bg-black/50" onClick={() => busy !== 'save' && setEditing(null)}>
+          <aside role="dialog" aria-modal="true" aria-labelledby="pm-form-title" className="h-full w-full max-w-xl overflow-y-auto bg-[color:var(--background)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <h2 id="pm-form-title" className="text-xl font-bold">{editing === 'new' ? 'Nuevo método de pago' : 'Editar método de pago'}</h2>
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg p-1.5 hover:bg-[color:var(--muted)]" aria-label="Cerrar"><X className="size-5" aria-hidden /></button>
+            </div>
+            {error && <Notice tone="danger" className="mt-4">{error}</Notice>}
+
+            <div className="mt-5 space-y-5">
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de método">
+                {([['manual_transfer', 'Transferencia', Landmark], ['qr_code', 'Código QR', QrCode]] as const).map(([value, label, Icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.type === value}
+                    onClick={() => setForm({ ...form, type: value })}
+                    className={cn('flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-semibold', form.type === value ? 'border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]' : 'border-[color:var(--border)]')}
+                  >
+                    <Icon className="size-4" aria-hidden /> {label}
+                  </button>
+                ))}
+              </div>
+
+              <Field label="Nombre visible" htmlFor="pm-name" required>
+                <Input id="pm-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ej.: Transferencia Banco Pichincha" maxLength={80} />
+              </Field>
+              <Field label="Descripción" htmlFor="pm-desc">
+                <Input id="pm-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} maxLength={300} />
+              </Field>
+
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-semibold">Se puede usar para</legend>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.scopes.includes('raffles')} onChange={() => toggleScope('raffles')} className="size-4 accent-[color:var(--accent)]" /> Boletos de sorteos</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.scopes.includes('plans')} onChange={() => toggleScope('plans')} className="size-4 accent-[color:var(--accent)]" /> Planes</label>
+                </div>
+              </fieldset>
+
+              {form.type === 'manual_transfer' ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Banco" htmlFor="pm-bank" required><Input id="pm-bank" value={form.manual.bankName} onChange={(e) => setManual('bankName', e.target.value)} /></Field>
+                  <Field label="Tipo de cuenta" htmlFor="pm-acctype">
+                    <select id="pm-acctype" className={inputStyles} value={form.manual.accountType} onChange={(e) => setManual('accountType', e.target.value)}>
+                      <option>Ahorros</option>
+                      <option>Corriente</option>
+                    </select>
+                  </Field>
+                  <Field label="Número de cuenta" htmlFor="pm-accnum" required><Input id="pm-accnum" value={form.manual.accountNumber} onChange={(e) => setManual('accountNumber', e.target.value)} maxLength={40} /></Field>
+                  <Field label="Cédula o RUC del titular" htmlFor="pm-ident"><Input id="pm-ident" value={form.manual.identification} onChange={(e) => setManual('identification', e.target.value)} maxLength={20} /></Field>
+                  <div className="sm:col-span-2"><Field label="Beneficiario" htmlFor="pm-benef" required><Input id="pm-benef" value={form.manual.beneficiary} onChange={(e) => setManual('beneficiary', e.target.value)} /></Field></div>
+                  <div className="sm:col-span-2">
+                    <Field label="Instrucciones para el participante" htmlFor="pm-minst">
+                      <textarea id="pm-minst" rows={3} className={inputStyles} value={form.manual.instructions} onChange={(e) => setManual('instructions', e.target.value)} maxLength={1000} />
+                    </Field>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={form.manual.requiresProof} onChange={(e) => setManual('requiresProof', e.target.checked)} className="size-4 accent-[color:var(--accent)]" /> Exigir foto o PDF del comprobante</label>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Proveedor" htmlFor="pm-provider" hint="Ej.: Deuna, Payphone"><Input id="pm-provider" value={form.qr.provider} onChange={(e) => setQr('provider', e.target.value)} maxLength={60} /></Field>
+                  <Field label="Titular" htmlFor="pm-qrname"><Input id="pm-qrname" value={form.qr.accountName} onChange={(e) => setQr('accountName', e.target.value)} /></Field>
+                  <div className="sm:col-span-2"><Field label="Identificador de la cuenta" htmlFor="pm-qrid" hint="Opcional"><Input id="pm-qrid" value={form.qr.accountId} onChange={(e) => setQr('accountId', e.target.value)} maxLength={80} /></Field></div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <p className="text-sm font-semibold">Imagen del código QR</p>
+                    <div className="flex items-center gap-3">
+                      {form.qr.qrImageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={form.qr.qrImageUrl} alt="Código QR" className="size-24 rounded-lg border border-[color:var(--border)] bg-white object-contain p-1" />
+                      )}
+                      <label className={cn('inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[color:var(--border-strong)] px-4 py-2 text-sm font-semibold', uploading && 'opacity-60')}>
+                        {uploading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ImageUp className="size-4" aria-hidden />}
+                        {form.qr.qrImageUrl ? 'Cambiar imagen' : 'Subir imagen'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploading} onChange={(e) => uploadQr(e.target.files?.[0])} />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Field label="Instrucciones para el participante" htmlFor="pm-qinst">
+                      <textarea id="pm-qinst" rows={3} className={inputStyles} value={form.qr.instructions} onChange={(e) => setQr('instructions', e.target.value)} maxLength={1000} />
+                    </Field>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={form.qr.requiresProof} onChange={(e) => setQr('requiresProof', e.target.checked)} className="size-4 accent-[color:var(--accent)]" /> Exigir captura del comprobante</label>
+                </div>
+              )}
+
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="size-4 accent-[color:var(--accent)]" /> Método activo</label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-[color:var(--border)] pt-4">
+              <Button variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button>
+              <Button onClick={save} disabled={busy === 'save' || uploading}>{busy === 'save' && <Loader2 className="animate-spin" aria-hidden />} Guardar</Button>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
-  )
+  );
 }

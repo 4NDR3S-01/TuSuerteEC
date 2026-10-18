@@ -1,7 +1,9 @@
+
+import { formatDate } from '../../../lib/raffle/labels';
 import type { ReactNode } from "react";
 import { AppShell } from "../../../components/app/app-shell";
 import { getCurrentUser } from "../../../lib/auth/get-user";
-import { getSupabaseServerClient } from "../../../lib/supabase/server";
+import { prisma } from "../../../lib/db";
 
 type DashboardLayoutProps = {
   children: ReactNode;
@@ -13,29 +15,17 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   let subscriptionInfo = null;
   
   if (user) {
-    const supabase = await getSupabaseServerClient();
-    const now = new Date().toISOString();
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('current_period_end, plans(name)')
-      .eq('status', 'active')
-      .eq('user_id', user.id)
-      .gt('current_period_end', now)
-      .order('current_period_end', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const subscription = await prisma.subscriptions.findFirst({
+      where: { status: 'active', user_id: user.id, current_period_end: { gt: new Date() } },
+      select: { current_period_end: true, plans: { select: { name: true } } },
+      orderBy: { current_period_end: 'desc' },
+    });
 
-    if (subscription?.plans && !Array.isArray(subscription.plans) && 'name' in subscription.plans) {
-      const renewalDate = new Date(subscription.current_period_end);
-      const currentYear = new Date().getFullYear();
-      const plan = subscription.plans as { name: string };
+    if (subscription?.plans && subscription.current_period_end) {
+      const renewalDate = subscription.current_period_end;
       subscriptionInfo = {
-        planName: plan.name,
-        renewalDate: renewalDate.toLocaleDateString('es-EC', {
-          day: 'numeric',
-          month: 'short',
-          year: renewalDate.getFullYear() === currentYear ? undefined : 'numeric'
-        })
+        planName: subscription.plans.name,
+        renewalDate: formatDate(renewalDate)
       };
     }
   }

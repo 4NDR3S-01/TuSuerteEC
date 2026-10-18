@@ -1,108 +1,50 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseBrowserClient } from '../../lib/supabase/client';
-import { useToast } from '../../hooks/use-toast';
-import { getEmailAuthRedirectUrl } from '../../lib/utils/get-base-url';
+import { useState, type FormEvent } from 'react';
+import { Loader2, MailCheck } from 'lucide-react';
+import { requestPasswordReset } from '../../lib/actions/auth';
+import { Button, Field, Input, Notice } from '../ui/kit';
 
 export function ResetPasswordForm() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const { showToast } = useToast();
-
-  useEffect(() => {
-    try {
-      const client = getSupabaseBrowserClient();
-      setSupabase(client);
-    } catch (clientError) {
-      const message =
-        clientError instanceof Error ? clientError.message : 'No se pudo inicializar Supabase.';
-      setConfigError(message);
-      showToast({
-        type: 'error',
-        description: message,
-      });
-    }
-  }, [showToast]);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase || configError) {
-      const message = configError ?? 'Servicio de recuperación no disponible en este momento.';
-      showToast({
-        type: 'error',
-        description: message,
-      });
+    setIsLoading(true);
+    setError(null);
+
+    const result = await requestPasswordReset(email).catch(() => ({ success: false, error: 'No pudimos procesar la solicitud. Intenta más tarde.' }));
+    setIsLoading(false);
+
+    if (!result.success) {
+      setError(result.error ?? 'No pudimos procesar la solicitud. Intenta más tarde.');
       return;
     }
-
-    setIsLoading(true);
-
-    try {
-      // Para recovery, apuntar al callback que procesará el código
-      // El callback redirigirá a la página de restablecimiento con el código
-      const redirectTo = getEmailAuthRedirectUrl('/auth/callback', {
-        type: 'recovery',
-      });
-
-      console.log('[RESET PASSWORD] Enviando email con redirectTo:', redirectTo);
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      showToast({
-        type: 'success',
-        description: 'Te enviamos un correo con el enlace para restablecer tu contraseña.',
-      });
-      setEmail('');
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'No pudimos enviar el enlace de recuperación. Intenta más tarde.';
-      showToast({
-        type: 'error',
-        description: message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    setSent(true);
   };
 
+  if (sent) {
+    return (
+      <Notice tone="success" icon={MailCheck} title="Revisa tu correo">
+        Si <strong>{email}</strong> tiene una cuenta, te enviamos un enlace para crear una contraseña nueva. Vence en 1 hora.
+        Si no llega en unos minutos, revisa la carpeta de spam.
+      </Notice>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
-      <div className="space-y-2">
-        <label htmlFor="recovery-email" className="block text-sm font-semibold text-[color:var(--foreground)]">
-          Correo electrónico
-        </label>
-        <input
-          id="recovery-email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="tu@correo.com"
-          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--muted)] px-4 py-3 text-sm outline-none transition-shadow focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
-        />
-      </div>
-
-      <button
-        type="submit"
-        className="mt-2 inline-flex h-12 items-center justify-center rounded-full bg-[color:var(--accent)] px-6 text-sm font-semibold text-[color:var(--accent-foreground)] transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)] disabled:cursor-not-allowed disabled:opacity-70"
-        disabled={isLoading || !supabase || !!configError}
-      >
-        {isLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
-      </button>
-
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <Notice tone="danger">{error}</Notice>}
+      <Field label="Correo electrónico" htmlFor="recovery-email" required>
+        <Input id="recovery-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      </Field>
+      <Button type="submit" size="lg" block disabled={isLoading}>
+        {isLoading && <Loader2 className="animate-spin" aria-hidden />}
+        {isLoading ? 'Enviando…' : 'Enviar enlace'}
+      </Button>
     </form>
   );
 }

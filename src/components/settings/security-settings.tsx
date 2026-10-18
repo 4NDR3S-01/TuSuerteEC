@@ -1,214 +1,65 @@
 'use client';
 
-import { useState } from 'react';
-import { Lock, Loader2, Eye, EyeOff } from 'lucide-react';
-import { getSupabaseBrowserClient } from '../../lib/supabase/client';
-import { useToast } from '../../hooks/use-toast';
+import { useState, type FormEvent } from 'react';
+import { signOut } from 'next-auth/react';
+import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+import { changePassword } from '../../lib/actions/auth';
+import { Button, Field, Input, Notice } from '../ui/kit';
 
-export function SecuritySettings({ user }: any) {
-  const { showToast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false,
-  });
-  const [formData, setFormData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
+/** Cambio de contraseña. Al guardarla se cierran todas las sesiones y se vuelve a iniciar sesión. */
+export function SecuritySettings({ mustChangePassword = false }: { mustChangePassword?: boolean }) {
+  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      // Validaciones
-      if (!formData.currentPassword) {
-        showToast({
-          type: 'error',
-          description: 'Debes ingresar tu contraseña actual',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      if (formData.newPassword.length < 8) {
-        showToast({
-          type: 'error',
-          description: 'La nueva contraseña debe tener al menos 8 caracteres',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      if (formData.newPassword !== formData.confirmPassword) {
-        showToast({
-          type: 'error',
-          description: 'Las contraseñas no coinciden',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      if (formData.currentPassword === formData.newPassword) {
-        showToast({
-          type: 'error',
-          description: 'La nueva contraseña debe ser diferente a la actual',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      const supabase = getSupabaseBrowserClient();
-
-      // Verificar contraseña actual intentando iniciar sesión
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: formData.currentPassword,
-      });
-
-      if (signInError) {
-        showToast({
-          type: 'error',
-          description: 'La contraseña actual es incorrecta',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Actualizar contraseña
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: formData.newPassword,
-      });
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      showToast({
-        type: 'success',
-        description: 'Contraseña actualizada correctamente',
-      });
-
-      // Limpiar formulario
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
-    } catch (error: any) {
-      console.error('Error actualizando contraseña:', error);
-      showToast({
-        type: 'error',
-        description: error.message || 'Error al actualizar la contraseña. Intenta nuevamente.',
-      });
-    } finally {
-      setIsLoading(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    if (!form.current) return setError('Ingresa tu contraseña actual.');
+    if (form.next.length < 8 || !/[A-Za-z]/.test(form.next) || !/\d/.test(form.next)) {
+      return setError('La nueva contraseña debe tener al menos 8 caracteres, con letras y números.');
     }
+    if (form.next !== form.confirm) return setError('Las contraseñas nuevas no coinciden.');
+
+    setSaving(true);
+    const result = await changePassword(form.current, form.next);
+    if (!result.success) {
+      setSaving(false);
+      return setError(result.error ?? 'No se pudo cambiar la contraseña.');
+    }
+    // Por seguridad se cierran todas las sesiones, incluida esta
+    await signOut({ redirectTo: '/iniciar-sesion?reason=password_changed' });
   };
 
+  const type = show ? 'text' : 'password';
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+    <form onSubmit={submit} className="space-y-5">
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--foreground)] mb-1 sm:mb-2">Seguridad</h2>
-        <p className="text-xs sm:text-sm text-[color:var(--muted-foreground)]">Gestiona tu contraseña y configuración de seguridad</p>
+        <h2 className="flex items-center gap-2 text-xl font-bold"><KeyRound className="size-5 text-[color:var(--accent)]" aria-hidden /> Contraseña</h2>
+        <p className="text-sm text-[color:var(--muted-foreground)]">Al menos 8 caracteres con letras y números. Al cambiarla se cerrarán tus sesiones abiertas.</p>
       </div>
-      
-      <div className="space-y-3 sm:space-y-4">
-        <div className="p-3 sm:p-4 bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/30 dark:border-blue-500/50 rounded-lg">
-          <div className="flex items-start gap-2 sm:gap-3">
-            <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm sm:text-base text-blue-600 dark:text-blue-400">Cambiar Contraseña</h3>
-              <p className="text-[10px] sm:text-xs text-[color:var(--muted-foreground)] mt-1">Tu contraseña debe tener al menos 8 caracteres</p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">Contraseña Actual</label>
-          <div className="relative">
-            <input 
-              type={showPasswords.current ? 'text' : 'password'} 
-              value={formData.currentPassword}
-              onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-              required
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-            />
-            <button
-              type="button"
-              onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-            >
-              {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">Nueva Contraseña</label>
-          <div className="relative">
-            <input 
-              type={showPasswords.new ? 'text' : 'password'} 
-              value={formData.newPassword}
-              onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-              required
-              minLength={8}
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-            />
-            <button
-              type="button"
-              onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-            >
-              {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {formData.newPassword && formData.newPassword.length < 8 && (
-            <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">Mínimo 8 caracteres</p>
-          )}
-        </div>
-
-        <div>
-          <label className="text-xs sm:text-sm font-semibold text-[color:var(--foreground)] block mb-1.5 sm:mb-2">Confirmar Nueva Contraseña</label>
-          <div className="relative">
-            <input 
-              type={showPasswords.confirm ? 'text' : 'password'} 
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              required
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 bg-[color:var(--background)] border border-[color:var(--border)] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]" 
-            />
-            <button
-              type="button"
-              onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-            >
-              {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {formData.confirmPassword && formData.newPassword !== formData.confirmPassword && (
-            <p className="text-[10px] text-red-500 dark:text-red-400 mt-1">Las contraseñas no coinciden</p>
-          )}
-        </div>
-
-        <button 
-          type="submit"
-          disabled={isLoading}
-          className="w-full sm:w-auto px-5 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[color:var(--accent)] to-orange-500 dark:to-orange-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Actualizando...</span>
-            </>
-          ) : (
-            'Actualizar Contraseña'
-          )}
+      {mustChangePassword && <Notice tone="warning">Tu cuenta tiene una contraseña temporal asignada por un administrador. Cámbiala ahora.</Notice>}
+      {error && <Notice tone="danger">{error}</Notice>}
+      <div className="grid gap-4 sm:max-w-md">
+        <Field label="Contraseña actual" htmlFor="pwd-current" required>
+          <Input id="pwd-current" type={type} autoComplete="current-password" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} />
+        </Field>
+        <Field label="Nueva contraseña" htmlFor="pwd-new" required>
+          <Input id="pwd-new" type={type} autoComplete="new-password" value={form.next} onChange={(e) => setForm({ ...form, next: e.target.value })} maxLength={128} />
+        </Field>
+        <Field label="Confirmar nueva contraseña" htmlFor="pwd-confirm" required>
+          <Input id="pwd-confirm" type={type} autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
+        </Field>
+        <button type="button" onClick={() => setShow((value) => !value)} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]">
+          {show ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+          {show ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
         </button>
       </div>
+      <Button type="submit" disabled={saving}>
+        {saving && <Loader2 className="animate-spin" aria-hidden />} Cambiar contraseña
+      </Button>
     </form>
   );
 }

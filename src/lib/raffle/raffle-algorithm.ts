@@ -1,4 +1,16 @@
-import { getSupabaseServerClient } from '../supabase/server';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../db';
+import { recordAudit } from '../audit';
+import type { User } from '../auth/get-user';
+import {
+  DRAW_ALGORITHM,
+  computeCommitment,
+  computeEntriesHash,
+  generateSeed,
+  selectWinningTickets,
+} from './draw-algorithm';
+
+type Tx = Prisma.TransactionClient;
 
 export type RaffleDrawResult = {
   winners: Array<{
@@ -13,286 +25,244 @@ export type RaffleDrawResult = {
   totalWinners: number;
 };
 
+type LockedRaffle = {
+  id: string;
+  title: string;
+  status: string;
+  entry_mode: string;
+  total_winners: number;
+  entries_hash: string | null;
+  draw_commitment: string | null;
+};
+
+async function lockRaffle(tx: Tx, raffleId: string): Promise<LockedRaffle> {
+  const [raffle] = await tx.$queryRaw<LockedRaffle[]>`
+    SELECT id, title, status, entry_mode, total_winners, entries_hash, draw_commitment
+    FROM raffles WHERE id = ${raffleId}::uuid FOR UPDATE
+  `;
+  if (!raffle) throw new Error('Sorteo no encontrado');
+  return raffle;
+}
+
 /**
- * Algoritmo de ejecución de sorteos verificable
- * Genera una semilla aleatoria y selecciona ganadores de forma determinística
+ * Participaciones válidas según la modalidad del sorteo.
+ * - subscribers_only: solo participaciones automáticas de suscriptores
+ * - tickets_only: solo boletos comprados
+ * - hybrid: todas
  */
-export async function executeRaffleDraw(raffleId: string): Promise<RaffleDrawResult> {
-  const supabase = await getSupabaseServerClient();
-  
-  // 1. Obtener datos del sorteo
-  const { data: raffle, error: raffleError } = await supabase
-    .from('raffles')
-    .select('*')
-    .eq('id', raffleId)
-    .single();
+export function eligibleEntriesWhere(raffleId: string, entryMode: string): Prisma.raffle_entriesWhereInput {
+  if (entryMode === 'subscribers_only') return { raffle_id: raffleId, entry_source: 'subscription' };
+  if (entryMode === 'tickets_only') return { raffle_id: raffleId, entry_source: 'manual_purchase' };
+  return { raffle_id: raffleId };
+}
 
-  if (raffleError || !raffle) {
-    throw new Error('Sorteo no encontrado');
-  }
+/**
+ * Cierra un sorteo activo: deja de aceptar participaciones, fija la lista de boletos
+ * y publica el compromiso (huella) de la semilla secreta que se usará en el sorteo.
+ */
+export async function closeRaffle(raffleId: string, actor: User) {
+  return prisma.$transaction(async (tx) => {
+    const raffle = await lockRaffle(tx, raffleId);
+    if (raffle.status !== 'active') {
+      throw new Error('Solo se puede cerrar un sorteo activo.');
+    }
 
-  if (raffle.status !== 'closed') {
-    throw new Error('El sorteo debe estar cerrado para ejecutar el sorteo');
-  }
-
-  // 2. Obtener todas las participaciones válidas sin hacer JOIN
-  // (obtendremos los nombres después en una query separada)
-  console.log('🔍 Obteniendo participaciones para raffle_id:', raffleId);
-  
-  const { data: entries, error: entriesError } = await supabase
-    .from('raffle_entries')
-    .select('id, user_id, ticket_number, entry_source')
-    .eq('raffle_id', raffleId)
-    .eq('is_winner', false);
-
-  console.log('📊 Resultado de la consulta:', { 
-    entries: entries?.length || 0, 
-    error: entriesError,
-    data: entries
-  });
-
-  if (entriesError) {
-    console.error('❌ Error detallado al obtener participaciones:', {
-      message: entriesError.message,
-      details: entriesError.details,
-      hint: entriesError.hint,
-      code: entriesError.code
+    const entries = await tx.raffle_entries.findMany({
+      where: eligibleEntriesWhere(raffleId, raffle.entry_mode),
+      select: { ticket_number: true },
     });
-    throw new Error(`Error al obtener participaciones: ${entriesError.message}`);
-  }
 
-  if (!entries || entries.length === 0) {
-    throw new Error('No hay participaciones válidas para el sorteo');
-  }
+    const seed = generateSeed();
+    const [commitment, entriesHash] = await Promise.all([
+      computeCommitment(seed),
+      computeEntriesHash(entries.map((entry) => entry.ticket_number)),
+    ]);
 
-  console.log('✅ Participaciones obtenidas:', entries.length);
+    await tx.raffle_draw_secrets.upsert({
+      where: { raffle_id: raffleId },
+      update: { seed },
+      create: { raffle_id: raffleId, seed },
+    });
 
-  // Obtener los IDs únicos de usuarios
-  const userIds = [...new Set(entries.map(e => e.user_id))];
-  
-  // Obtener los nombres de los usuarios en una consulta separada
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .in('id', userIds);
+    await tx.raffles.update({
+      where: { id: raffleId },
+      data: {
+        status: 'closed',
+        closed_at: new Date(),
+        draw_commitment: commitment,
+        entries_hash: entriesHash,
+        draw_algorithm: DRAW_ALGORITHM,
+      },
+    });
 
-  // Crear un mapa de user_id -> full_name
-  const profilesMap = new Map(
-    (profiles || []).map(p => [p.id, p.full_name])
+    await recordAudit(
+      {
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'raffle.close',
+        entityType: 'raffle',
+        entityId: raffleId,
+        data: { eligible_entries: entries.length, commitment, entries_hash: entriesHash },
+      },
+      tx,
+    );
+
+    return { commitment, entriesHash, eligibleEntries: entries.length };
+  });
+}
+
+/**
+ * Ejecuta el sorteo de un sorteo cerrado: revela la semilla comprometida al cierre,
+ * selecciona a los ganadores con el algoritmo verificable y registra todo en una transacción.
+ */
+export async function executeRaffleDraw(raffleId: string, actor: User): Promise<RaffleDrawResult> {
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // El bloqueo de fila impide ejecutar dos veces el mismo sorteo en paralelo
+      const raffle = await lockRaffle(tx, raffleId);
+
+      if (raffle.status !== 'closed') {
+        throw new Error(
+          raffle.status === 'drawn' || raffle.status === 'completed'
+            ? 'Este sorteo ya fue ejecutado.'
+            : 'El sorteo debe estar cerrado para ejecutarse.',
+        );
+      }
+
+      const secret = await tx.raffle_draw_secrets.findUnique({ where: { raffle_id: raffleId } });
+      if (!secret || !raffle.draw_commitment || !raffle.entries_hash) {
+        throw new Error('El sorteo no tiene un compromiso de semilla registrado. Ciérralo nuevamente desde el panel.');
+      }
+
+      const entries = await tx.raffle_entries.findMany({
+        where: eligibleEntriesWhere(raffleId, raffle.entry_mode),
+        select: { id: true, user_id: true, ticket_number: true, profiles: { select: { full_name: true } } },
+        orderBy: { ticket_number: 'asc' },
+      });
+
+      if (entries.length === 0) {
+        throw new Error('No hay participaciones válidas para este sorteo.');
+      }
+
+      // La lista de boletos debe ser exactamente la que se fijó al cerrar
+      const tickets = entries.map((entry) => entry.ticket_number);
+      const [entriesHash, commitment] = await Promise.all([computeEntriesHash(tickets), computeCommitment(secret.seed)]);
+      if (entriesHash !== raffle.entries_hash || commitment !== raffle.draw_commitment) {
+        await recordAudit({
+          actorId: actor.id,
+          actorRole: actor.role,
+          action: 'raffle.draw_integrity_failed',
+          entityType: 'raffle',
+          entityId: raffleId,
+          data: { expected_entries_hash: raffle.entries_hash, actual_entries_hash: entriesHash },
+        });
+        throw new Error('Las participaciones cambiaron después del cierre. El sorteo se detuvo por seguridad; revisa la auditoría.');
+      }
+
+      const winningTickets = await selectWinningTickets(tickets, raffle.total_winners, secret.seed);
+      const byTicket = new Map(entries.map((entry) => [entry.ticket_number, entry]));
+      const winners = winningTickets.map((ticket, index) => {
+        const entry = byTicket.get(ticket)!;
+        return {
+          entry_id: entry.id,
+          user_id: entry.user_id,
+          ticket_number: ticket,
+          prize_position: index + 1,
+          user_name: entry.profiles?.full_name ?? undefined,
+        };
+      });
+
+      await tx.raffles.update({
+        where: { id: raffleId },
+        data: { status: 'drawn', draw_seed: secret.seed, drawn_at: new Date() },
+      });
+      await tx.raffle_draw_secrets.delete({ where: { raffle_id: raffleId } });
+
+      await tx.raffle_entries.updateMany({
+        where: { id: { in: winners.map((winner) => winner.entry_id) } },
+        data: { is_winner: true },
+      });
+
+      await tx.winners.createMany({
+        data: winners.map((winner) => ({
+          raffle_id: raffleId,
+          entry_id: winner.entry_id,
+          user_id: winner.user_id,
+          prize_position: winner.prize_position,
+          status: 'pending_contact',
+          contact_attempts: 0,
+        })),
+      });
+
+      await tx.notifications.createMany({
+        data: winners.map((winner) => ({
+          user_id: winner.user_id,
+          title: '¡Ganaste un sorteo!',
+          message: `Tu boleto ${winner.ticket_number} resultó ganador del sorteo "${raffle.title}". Nuestro equipo te contactará para coordinar la entrega del premio.`,
+          type: 'prize',
+          action_url: '/app/boletos',
+        })),
+      });
+
+      await recordAudit(
+        {
+          actorId: actor.id,
+          actorRole: actor.role,
+          action: 'raffle.draw',
+          entityType: 'raffle',
+          entityId: raffleId,
+          data: { seed: secret.seed, winning_tickets: winningTickets, eligible_entries: entries.length },
+        },
+        tx,
+      );
+
+      return { winners, drawSeed: secret.seed, totalParticipants: entries.length };
+    },
+    { timeout: 30_000 },
   );
 
-  // Transformar los datos para asegurar el tipo correcto
-  const typedEntries = entries.map(entry => ({
-    id: entry.id,
-    user_id: entry.user_id,
-    ticket_number: entry.ticket_number,
-    entry_source: entry.entry_source,
-    profiles: profilesMap.has(entry.user_id) 
-      ? { full_name: profilesMap.get(entry.user_id)! }
-      : null
-  }));
-  
-  console.log('🔄 Entradas transformadas:', typedEntries.length);
-
-  // 3. Filtrar participaciones según la modalidad del sorteo
-  let validEntries = typedEntries;
-  
-  if (raffle.entry_mode === 'subscribers_only') {
-    // Solo suscriptores
-    validEntries = typedEntries.filter(e => e.entry_source === 'subscription');
-    
-    if (validEntries.length === 0) {
-      throw new Error('No hay participaciones de suscriptores válidas. Este sorteo es solo para suscriptores.');
-    }
-  } else if (raffle.entry_mode === 'tickets_only') {
-    // Solo compra de boletos
-    validEntries = typedEntries.filter(e => e.entry_source === 'manual_purchase');
-    
-    if (validEntries.length === 0) {
-      throw new Error('No hay participaciones por compra de boletos válidas. Este sorteo es solo para compradores de boletos.');
-    }
-  }
-  // Si es 'hybrid', se aceptan todas las participaciones (no se filtra)
-
-  // 4. Generar semilla aleatoria verificable
-  const drawSeed = generateVerifiableSeed();
-  
-  // 5. Seleccionar ganadores usando algoritmo determinístico
-  const winners = selectWinners(validEntries, raffle.total_winners, drawSeed);
-  
-  // 6. Actualizar participaciones como ganadoras
-  const winnerIds = winners.map(w => w.entry_id);
-  const { error: updateError } = await supabase
-    .from('raffle_entries')
-    .update({ is_winner: true })
-    .in('id', winnerIds);
-
-  if (updateError) {
-    throw new Error('Error al actualizar ganadores');
-  }
-
-  // 7. Crear registros de ganadores
-  const winnerRecords = winners.map(winner => ({
-    raffle_id: raffleId,
-    entry_id: winner.entry_id,
-    user_id: winner.user_id,
-    prize_position: winner.prize_position,
-    status: 'pending_contact' as const,
-    contact_attempts: 0
-  }));
-
-  const { error: winnersError } = await supabase
-    .from('winners')
-    .insert(winnerRecords);
-
-  if (winnersError) {
-    throw new Error('Error al crear registros de ganadores');
-  }
-
-  // 8. Actualizar estado del sorteo
-  const { error: raffleUpdateError } = await supabase
-    .from('raffles')
-    .update({ 
-      status: 'drawn',
-      draw_seed: drawSeed,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', raffleId);
-
-  if (raffleUpdateError) {
-    throw new Error('Error al actualizar estado del sorteo');
-  }
-
-  return {
-    winners,
-    drawSeed,
-    totalParticipants: entries.length,
-    totalWinners: winners.length
-  };
-}
-
-/**
- * Genera una semilla verificable combinando timestamp y datos del sorteo
- */
-function generateVerifiableSeed(): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2);
-  const seed = `${timestamp}-${random}`;
-  
-  // Crear hash de la semilla para verificación
-  return btoa(seed).replace(/[^a-zA-Z0-9]/g, '');
-}
-
-/**
- * Selecciona ganadores usando algoritmo determinístico basado en la semilla
- */
-function selectWinners(
-  entries: Array<{ id: string; user_id: string; ticket_number: string; entry_source: string; profiles?: { full_name: string } | null }>,
-  totalWinners: number,
-  seed: string
-): Array<{ entry_id: string; user_id: string; ticket_number: string; prize_position: number; user_name?: string }> {
-  if (entries.length === 0 || totalWinners <= 0) {
-    return [];
-  }
-
-  // Crear una copia de las participaciones para no modificar el original
-  const availableEntries = [...entries];
-  const winners: Array<{ entry_id: string; user_id: string; ticket_number: string; prize_position: number; user_name?: string }> = [];
-  
-  // Usar la semilla para generar números "aleatorios" determinísticos
-  let seedNumber = 0;
-  for (let i = 0; i < seed.length; i++) {
-    seedNumber += seed.charCodeAt(i);
-  }
-
-  for (let position = 1; position <= Math.min(totalWinners, availableEntries.length); position++) {
-    // Generar índice "aleatorio" determinístico
-    seedNumber = (seedNumber * 9301 + 49297) % 233280;
-    const randomIndex = seedNumber % availableEntries.length;
-    
-    const selectedEntry = availableEntries[randomIndex];
-    winners.push({
-      entry_id: selectedEntry.id,
-      user_id: selectedEntry.user_id,
-      ticket_number: selectedEntry.ticket_number,
-      prize_position: position,
-      user_name: selectedEntry.profiles?.full_name || undefined
+  // Aviso a los demás participantes: el resultado ya se puede consultar
+  const participants = await prisma.raffle_entries.findMany({
+    where: { raffle_id: raffleId, is_winner: false },
+    distinct: ['user_id'],
+    select: { user_id: true },
+  });
+  const winnerIds = new Set(result.winners.map((winner) => winner.user_id));
+  const others = participants.filter((participant) => !winnerIds.has(participant.user_id));
+  if (others.length > 0) {
+    await prisma.notifications.createMany({
+      data: others.map((participant) => ({
+        user_id: participant.user_id,
+        title: 'Resultados publicados',
+        message: 'Ya se realizó un sorteo en el que participabas. Consulta los resultados y verifica el procedimiento.',
+        type: 'info',
+        action_url: `/resultados/${raffleId}`,
+      })),
     });
-    
-    // Remover la entrada seleccionada para evitar duplicados
-    availableEntries.splice(randomIndex, 1);
   }
 
-  return winners;
-}
-
-/**
- * Verifica la validez de un sorteo ejecutado
- */
-export function verifyRaffleDraw(
-  entries: Array<{ id: string; user_id: string; ticket_number: string; entry_source: string }>,
-  winners: Array<{ entry_id: string; user_id: string; ticket_number: string; prize_position: number }>,
-  seed: string
-): boolean {
-  // Verificar que todos los ganadores sean participaciones válidas
-  const entryIds = new Set(entries.map(e => e.id));
-  const winnerIds = winners.map(w => w.entry_id);
-  
-  if (!winnerIds.every(id => entryIds.has(id))) {
-    return false;
-  }
-
-  // Verificar que no hay duplicados en los ganadores
-  const uniqueWinnerIds = new Set(winnerIds);
-  if (uniqueWinnerIds.size !== winnerIds.length) {
-    return false;
-  }
-
-  // Verificar que las posiciones de premio sean secuenciales
-  const positions = winners.map(w => w.prize_position).sort((a, b) => a - b);
-  for (let i = 0; i < positions.length; i++) {
-    if (positions[i] !== i + 1) {
-      return false;
-    }
-  }
-
-  // Re-ejecutar el algoritmo con la misma semilla para verificar
-  const recreatedWinners = selectWinners(entries, winners.length, seed);
-  const recreatedWinnerIds = recreatedWinners.map(w => w.entry_id).sort();
-  const originalWinnerIds = winnerIds.sort();
-  
-  return JSON.stringify(recreatedWinnerIds) === JSON.stringify(originalWinnerIds);
+  return { ...result, totalWinners: result.winners.length };
 }
 
 /**
  * Obtiene estadísticas de un sorteo
  */
 export async function getRaffleStats(raffleId: string) {
-  const supabase = await getSupabaseServerClient();
-  
-  const [
-    { count: totalEntries },
-    { count: totalWinners },
-    { data: entriesBySource }
-  ] = await Promise.all([
-    supabase.from('raffle_entries').select('*', { count: 'exact', head: true }).eq('raffle_id', raffleId),
-    supabase.from('winners').select('*', { count: 'exact', head: true }).eq('raffle_id', raffleId),
-    supabase.from('raffle_entries').select('entry_source').eq('raffle_id', raffleId)
+  const [totalEntries, totalWinners, entriesBySource] = await Promise.all([
+    prisma.raffle_entries.count({ where: { raffle_id: raffleId } }),
+    prisma.winners.count({ where: { raffle_id: raffleId } }),
+    prisma.raffle_entries.groupBy({ by: ['entry_source'], where: { raffle_id: raffleId }, _count: true }),
   ]);
 
-  // Contar por fuente de participación
-  const sourceCounts = entriesBySource?.reduce((acc, entry) => {
-    acc[entry.entry_source] = (acc[entry.entry_source] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>) || {};
+  const sourceCounts = Object.fromEntries(entriesBySource.map((row) => [row.entry_source, row._count])) as Record<string, number>;
 
   return {
-    totalEntries: totalEntries || 0,
-    totalWinners: totalWinners || 0,
+    totalEntries,
+    totalWinners,
     entriesBySource: {
       subscription: sourceCounts.subscription || 0,
-      manual_purchase: sourceCounts.manual_purchase || 0
+      manual_purchase: sourceCounts.manual_purchase || 0,
     },
-    winRate: totalEntries ? ((totalWinners || 0) / totalEntries * 100).toFixed(2) : '0'
+    winRate: totalEntries ? ((totalWinners / totalEntries) * 100).toFixed(2) : '0',
   };
 }

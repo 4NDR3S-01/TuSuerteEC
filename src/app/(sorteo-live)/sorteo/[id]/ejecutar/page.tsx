@@ -1,7 +1,8 @@
-import { getSupabaseServerClient } from '../../../../../lib/supabase/server';
+import { prisma, toPlain } from '../../../../../lib/db';
 export const dynamic = 'force-dynamic';
 
-import { requireRole } from '../../../../../lib/auth/get-user';
+import { requirePagePermission } from '../../../../../lib/auth/get-user';
+import { eligibleEntriesWhere } from '../../../../../lib/raffle/raffle-algorithm';
 import { RaffleExecution } from '../../../../../components/admin/raffle-execution';
 
 type PageProps = {
@@ -11,34 +12,35 @@ type PageProps = {
 };
 
 export default async function ExecuteRafflePage({ params }: PageProps) {
-  await requireRole('admin');
+  await requirePagePermission('raffles.draw', '/administrador/sorteos');
   
   const { id } = await params;
-  const supabase = await getSupabaseServerClient();
-  
-  // Obtener datos del sorteo con campos específicos
-  const { data: raffle, error } = await supabase
-    .from('raffles')
-    .select(`
-      id,
-      title,
-      description,
-      prize_description,
-      prize_category,
-      image_url,
-      status,
-      total_winners,
-      draw_date,
-      entry_mode,
-      draw_seed,
-      created_at
-    `)
-    .eq('id', id)
-    .single();
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const raffle = UUID_PATTERN.test(id)
+    ? await prisma.raffles.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          prize_description: true,
+          prize_category: true,
+          image_url: true,
+          status: true,
+          total_winners: true,
+          draw_date: true,
+          entry_mode: true,
+          draw_seed: true,
+          draw_commitment: true,
+          entries_hash: true,
+          created_at: true,
+        },
+      })
+    : null;
 
-  if (error || !raffle) {
+  if (!raffle) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
+      <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--hero-gradient)' }}>
         <div className="text-center">
           <h1 className="text-4xl font-bold text-white mb-4">Sorteo no encontrado</h1>
           <p className="text-xl text-white/80">
@@ -50,44 +52,35 @@ export default async function ExecuteRafflePage({ params }: PageProps) {
   }
 
   // Obtener estadísticas del sorteo y ganadores si ya existe
-  const [
-    { count: totalEntries },
-    { count: totalWinners },
-    { data: recentEntries },
-    { data: existingWinners }
-  ] = await Promise.all([
-    supabase.from('raffle_entries').select('*', { count: 'exact', head: true }).eq('raffle_id', id),
-    supabase.from('winners').select('*', { count: 'exact', head: true }).eq('raffle_id', id),
-    supabase.from('raffle_entries').select('*, profiles(full_name)').eq('raffle_id', id).order('created_at', { ascending: false }).limit(10),
-    supabase
-      .from('winners')
-      .select(`
-        *,
-        raffle_entries(
-          ticket_number,
-          profiles(full_name)
-        )
-      `)
-      .eq('raffle_id', id)
-      .order('prize_position', { ascending: true })
+  // Solo cuentan los boletos válidos según la modalidad (p. ej., en "solo suscriptores" no cuentan los comprados)
+  const [totalEntries, totalWinners, existingWinners] = await Promise.all([
+    prisma.raffle_entries.count({ where: eligibleEntriesWhere(id, raffle.entry_mode) }),
+    prisma.winners.count({ where: { raffle_id: id } }),
+    prisma.winners.findMany({
+      where: { raffle_id: id },
+      include: {
+        raffle_entries: { select: { ticket_number: true } },
+        profiles: { select: { full_name: true } },
+      },
+      orderBy: { prize_position: 'asc' },
+    }),
   ]);
 
   // Transformar los ganadores existentes al formato esperado
-  const formattedWinners = existingWinners?.map(winner => ({
-    entry_id: winner.entry_id,
+  const formattedWinners = existingWinners.map(winner => ({
+    entry_id: winner.entry_id ?? '',
     user_id: winner.user_id,
     ticket_number: winner.raffle_entries?.ticket_number || '',
-    prize_position: winner.prize_position,
-    user_name: winner.raffle_entries?.profiles?.full_name || 'Participante'
-  })) || [];
+    prize_position: winner.prize_position ?? 0,
+    user_name: winner.profiles?.full_name || 'Participante'
+  }));
 
   return (
     <RaffleExecution
-      raffle={raffle}
+      raffle={toPlain(raffle) as any}
       stats={{
-        totalEntries: totalEntries || 0,
-        totalWinners: totalWinners || 0,
-        recentEntries: recentEntries || [],
+        totalEntries,
+        totalWinners,
       }}
       existingWinners={formattedWinners}
     />

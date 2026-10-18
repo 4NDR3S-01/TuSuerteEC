@@ -1,86 +1,42 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-
-type Entry = {
-  id: string;
-  question: string;
-  answer: string;
-};
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import { FaqAccordion } from "../home/faq-accordion";
+import { inputStyles } from "../ui/kit";
 
 type Props = {
-  entries: ReadonlyArray<Entry>;
+  entries: ReadonlyArray<{ question: string; answer: string }>;
 };
+
+const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export default function FaqSearch({ entries }: Readonly<Props>) {
   const [query, setQuery] = useState("");
 
-  const normalized = (s: string) => s.toLowerCase();
-
   const filtered = useMemo(() => {
-    const q = normalized(query).trim();
+    const q = normalize(query).trim();
     if (!q) return entries;
-    return entries.filter((e) => {
-      return (
-        normalized(e.question).includes(q) ||
-        normalized(e.answer).includes(q)
-      );
-    });
+    return entries.filter((entry) => normalize(entry.question).includes(q) || normalize(entry.answer).includes(q));
   }, [entries, query]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <label className="relative block">
+        <span className="sr-only">Buscar en las preguntas frecuentes</span>
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" aria-hidden />
         <input
+          type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Busca en preguntas frecuentes..."
-          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-4 py-2 text-sm outline-none transition-colors focus:border-[color:var(--accent)]"
-          aria-label="Buscar en preguntas frecuentes"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Busca por ejemplo: pago, ganador, contraseña"
+          className={`${inputStyles} pl-10`}
         />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            className="text-sm text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
-          >
-            Limpiar
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4 text-sm text-[color:var(--muted-foreground)]">
-            No se encontraron resultados para «{query}». Intenta con otras palabras.
-          </div>
-        ) : (
-          filtered.map((item) => (
-            <details
-              key={item.id}
-              id={item.id}
-              className="group rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-4"
-              aria-labelledby={`${item.id}-label`}
-            >
-              <summary
-                id={`${item.id}-label`}
-                className="flex cursor-pointer items-center justify-between gap-4 text-base font-semibold transition-colors group-open:text-[color:var(--accent)]"
-              >
-                <span>{item.question}</span>
-                <span
-                  className="ml-auto text-xl text-[color:var(--muted-foreground)] transition-transform group-open:rotate-180"
-                  aria-hidden
-                >
-                  ▼
-                </span>
-              </summary>
-              <div className="mt-3 border-t border-[color:var(--border)] pt-3 text-sm text-[color:var(--muted-foreground)]">
-                {item.answer}
-              </div>
-            </details>
-          ))
-        )}
-      </div>
+      </label>
+      <p className="text-sm text-[color:var(--muted-foreground)]" aria-live="polite">
+        {filtered.length === 0 ? "No encontramos preguntas con esas palabras." : `${filtered.length} pregunta(s)`}
+      </p>
+      {filtered.length > 0 && <FaqAccordion items={filtered} />}
     </div>
   );
 }

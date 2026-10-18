@@ -1,4 +1,4 @@
-import { requireRole } from '../../lib/auth/get-user';
+import { requirePagePermission } from '../../lib/auth/get-user';
 
 export default async function SorteoLiveLayout({
   children,
@@ -6,7 +6,7 @@ export default async function SorteoLiveLayout({
   children: React.ReactNode;
 }) {
   // Verificar que el usuario es admin
-  await requireRole('admin');
+  await requirePagePermission('raffles.draw', '/administrador/sorteos');
 
   // Layout limpio sin navegación para transmisión en vivo
   return (

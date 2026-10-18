@@ -1,61 +1,44 @@
-import Image from 'next/image';
 import Link from 'next/link';
+import { Clover } from 'lucide-react';
 
 type LogoProps = {
-  href?: string;
+  href?: string | null;
   size?: 'sm' | 'md' | 'lg';
   showText?: boolean;
   className?: string;
+  /** Texto claro para fondos oscuros */
+  inverted?: boolean;
 };
 
 const sizes = {
-  sm: {
-    icon: 24,
-    text: 'text-base',
-  },
-  md: {
-    icon: 32,
-    text: 'text-lg',
-  },
-  lg: {
-    icon: 40,
-    text: 'text-xl',
-  },
+  sm: { box: 'size-7', icon: 'size-4', text: 'text-base' },
+  md: { box: 'size-9', icon: 'size-5', text: 'text-lg' },
+  lg: { box: 'size-11', icon: 'size-6', text: 'text-xl' },
 };
 
-export function Logo({ href = '/', size = 'md', showText = true, className = '' }: LogoProps) {
+export function Logo({ href = '/', size = 'md', showText = true, className = '', inverted = false }: LogoProps) {
   const sizeConfig = sizes[size];
-  
-  const logoContent = (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative flex-shrink-0">
-        <Image
-          src="/favicon.ico"
-          alt="TuSuerte"
-          width={sizeConfig.icon}
-          height={sizeConfig.icon}
-          className="rounded-lg"
-          priority
-        />
-      </div>
+
+  const content = (
+    <span className={`flex items-center gap-2.5 ${className}`}>
+      <span className={`flex ${sizeConfig.box} items-center justify-center rounded-xl bg-[color:var(--accent)] text-[color:var(--accent-foreground)] shadow-[0_6px_16px_-6px_rgba(249,115,22,0.7)]`}>
+        <Clover className={sizeConfig.icon} strokeWidth={2.4} aria-hidden />
+      </span>
       {showText && (
-        <span className={`font-bold tracking-tight ${sizeConfig.text}`}>
-          {/* <span className="bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent dark:from-orange-400 dark:to-orange-500">
-            Tu
-          </span> */}
-          <span className="text-[color:var(--foreground)]">TuSuerte</span>
+        <span className={`font-display font-extrabold tracking-tight ${sizeConfig.text} ${inverted ? 'text-white' : 'text-[color:var(--foreground)]'}`}>
+          Tu<span className="text-[color:var(--accent)]">Suerte</span>
         </span>
       )}
-    </div>
+    </span>
   );
 
   if (href) {
     return (
-      <Link href={href} className="inline-flex transition-opacity hover:opacity-80">
-        {logoContent}
+      <Link href={href} aria-label="TuSuerte, ir al inicio" className="inline-flex rounded-xl transition-opacity hover:opacity-85">
+        {content}
       </Link>
     );
   }
 
-  return logoContent;
+  return content;
 }
